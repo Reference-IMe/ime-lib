@@ -3,6 +3,7 @@
 #include <string.h>
 #include <time.h>
 #include "../../../helpers/selfie.h"
+#include "../../../helpers/matrix.h"
 
 int main(int argc, char **argv)
 {

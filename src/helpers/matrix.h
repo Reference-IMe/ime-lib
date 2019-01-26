@@ -14,9 +14,12 @@
 #define NONCONTIGUOUS 0
 #define CONTIGUOUS 1
 
+#ifndef __MATRIX_H__
+#define __MATRIX_H__
+
 //// 2D matrices
 
-double** AllocateMatrix(cui rows, cui cols, cui allocation_type)
+double** AllocateMatrix2D(cui rows, cui cols, cui allocation_type)
 {
 	double** mat;
 	ui r;
@@ -36,7 +39,7 @@ double** AllocateMatrix(cui rows, cui cols, cui allocation_type)
 	return(mat);
 }
 
-void DeallocateMatrix(double** mat, cui rows, cui allocation_type)
+void DeallocateMatrix2D(double** mat, cui rows, cui allocation_type)
 {
 	ui r;
 	if (allocation_type==NONCONTIGUOUS)
@@ -53,7 +56,7 @@ void DeallocateMatrix(double** mat, cui rows, cui allocation_type)
 
 }
 
-void PrintMatrix(double** const mat, cui rows, cui cols)
+void PrintMatrix2D(double** const mat, cui rows, cui cols)
 {
 	ui r,c;
 	for(r=0;r<rows;r++)
@@ -64,10 +67,10 @@ void PrintMatrix(double** const mat, cui rows, cui cols)
 			}
 			printf("\n");
 		}
-	printf("\n");
+	//printf("\n");
 }
 
-void FillMatrix(double** mat, cui rows, cui cols)
+void FillMatrix2D(double** mat, cui rows, cui cols)
 {
 	ui r,c;
 	for(r=0;r<rows;r++)
@@ -88,17 +91,17 @@ void FillMatrix(double** mat, cui rows, cui cols)
 
 //// 1D matrices
 
-double* Allocate1DMatrix(cui rows, cui cols)
+double* AllocateMatrix1D(cui rows, cui cols)
 {
 	return(malloc(rows*cols*sizeof(double)));
 }
 
-void Deallocate1DMatrix(double* mat)
+void DeallocateMatrix1D(double* mat)
 {
 	free(mat);
 }
 
-void Print1DMatrix(double* const mat, cui rows, cui cols)
+void PrintMatrix1D(double* const mat, cui rows, cui cols)
 {
 	ui r,c;
 	for(r=0;r<rows;r++)
@@ -109,10 +112,10 @@ void Print1DMatrix(double* const mat, cui rows, cui cols)
 			}
 			printf("\n");
 		}
-	printf("\n");
+	//printf("\n");
 }
 
-void Fill1DMatrix(double* mat, cui rows, cui cols)
+void FillMatrix1D(double* mat, cui rows, cui cols)
 {
 	ui r,c;
 	for(r=0;r<rows;r++)
@@ -133,7 +136,7 @@ void Fill1DMatrix(double* mat, cui rows, cui cols)
 	mat[0+cols-1]=-1.;
 }
 
-void Fill1DMatrixT(double* mat, cui rows, cui cols)
+void FillMatrixT1D(double* mat, cui rows, cui cols) // Transposed
 {
 	ui r,c;
 		for(c=0;c<cols;c++)
@@ -151,3 +154,5 @@ void Fill1DMatrixT(double* mat, cui rows, cui cols)
 		}
 		mat[0+rows*(cols-1)]=-1.;
 }
+
+#endif
