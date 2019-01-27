@@ -14,4 +14,4 @@ SLGEWOS-compare:
 	cd $(SRC_DIR)/testers && $(MAKE) SLGEWOS-compare
 
 clean:
-	rm ./bin/*
+	rm -rf ./bin/*
