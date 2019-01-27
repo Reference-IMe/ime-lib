@@ -73,6 +73,73 @@ void SLGEWOS_calc(double** A, double* b, double* s, int n, double** K, double* H
 	}
 }
 
+void SLGEWOS_calc_unwind(double** A, double* b, double* s, int n, double** K, double* H, double* F)
+{
+    int i,j,l;
+    int rows=n;
+    int cols=n;
+    double** X=A;
+    double tmpAdiag;
+
+	for (i=0;i<rows;i++)
+	{
+		tmpAdiag=1/A[i][i];
+		for (j=0;j<cols;j++)
+		{
+			if (i==j)
+			{
+				X[i][j]=tmpAdiag;
+				K[i][j]=1;
+			}
+			else
+			{
+				K[i][j]=A[j][i]*tmpAdiag;
+
+				// ATTENTION : transposed
+				X[j][i]=0.0;
+
+			}
+		}
+		F[i]=b[i];
+		s[i]=0.0;
+	}
+
+	for (l=rows-1; l>0; l--)
+	{
+		for (i=0; i<l; i++)
+		{
+			H[i]=1/(1-K[i][l]*K[l][i]);
+			for (j=0; j<cols; j++)
+			{
+				X[i][j]=H[i]*(X[i][j]-K[i][l]*X[l][j]);
+			}
+		}
+		for (i=0; i<l; i++)
+		{
+			for (j=0; j<l; j++)
+			{
+				K[i][j]=H[i]*(K[i][j]-K[i][l]*K[l][j]);
+			}
+		}
+	}
+
+	for (i=rows-2; i>=0; i--)
+	{
+		for (l=i+1; l<rows; l++)
+		{
+			F[i]=F[i]-F[l]*K[l][i];
+		}
+	}
+
+	for (j=0; j<cols; j++)
+	{
+		for (l=0; l<rows; l++)
+		{
+			s[j]=F[l]*X[l][j]+s[j];
+		}
+	}
+}
+
 void SLGEWOS_calc_allocX(double** A, double* b, double* s, int n, double** X, double** K, double* H, double* F)
 {
     int i,j,l;
