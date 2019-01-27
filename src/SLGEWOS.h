@@ -81,10 +81,10 @@ void SLGEWOS_calc_unwind(double** A, double* b, double* s, int n, double** K, do
     double** X=A;
     double tmpAdiag;
 
-	for (i=0;i<rows;i++)
+	for (i=0; i<rows; i++)
 	{
 		tmpAdiag=1/A[i][i];
-		for (j=0;j<cols;j++)
+		for (j=0; j<cols; j++)
 		{
 			if (i==j)
 			{
@@ -109,10 +109,12 @@ void SLGEWOS_calc_unwind(double** A, double* b, double* s, int n, double** K, do
 		for (i=0; i<l; i++)
 		{
 			H[i]=1/(1-K[i][l]*K[l][i]);
-			for (j=0; j<cols; j++)
+			X[i][i]=H[i]*(X[i][i]);
+			for (j=l; j<cols; j++)
 			{
 				X[i][j]=H[i]*(X[i][j]-K[i][l]*X[l][j]);
 			}
+
 		}
 		for (i=0; i<l; i++)
 		{
