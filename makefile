@@ -5,13 +5,13 @@ NO_WARN_UNUSED = -Wno-unused-but-set-variable -Wno-unused-result -Wno-unused-var
 
 export
 
-all: folders SLGEWOS-compare
+all: folders testers
 
 folders:
 	mkdir -p ./bin
 	
-SLGEWOS-compare: 
-	cd $(SRC_DIR)/testers && $(MAKE) SLGEWOS-compare
+testers: 
+	cd $(SRC_DIR)/testers && $(MAKE) testers
 
 clean:
 	rm -rf ./bin/*
