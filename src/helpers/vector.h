@@ -1,5 +1,5 @@
 /*
- * vector.c
+ * vector.h
  *
  *  Created on: Aug 27, 2015
  *      Author: marcello

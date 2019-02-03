@@ -1,5 +1,5 @@
 /*
- * matrix.c
+ * matrix.h
  *
  *  Created on: Aug 27, 2015
  *      Author: marcello
