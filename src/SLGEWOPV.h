@@ -7,6 +7,124 @@
 #include "helpers/vector.h"
 #include <mpi.h>
 
+void SLGEWOPV_calc_sendopt(double** A, double* b, double* s, int n, double** K, double* H, int rank, int nprocs)
+{
+    int i,j,l;
+    int rows=n;
+    int cols=n;
+    double** X=A;
+    double*  F=b;
+    double tmpAdiag;
+    int* map;
+    map=malloc(n*sizeof(int));
+
+    MPI_Bcast (&A[0][0],n*n,MPI_DOUBLE,0,MPI_COMM_WORLD);
+	//MPI_Bcast (b,n,MPI_DOUBLE,0,MPI_COMM_WORLD);
+
+	for(i=0; i<n; i++)
+	{
+		map[i]= i % nprocs;
+	}
+
+	for (i=0;i<rows;i++)
+	{
+		tmpAdiag=1/A[i][i];
+		for (j=0;j<cols;j++)
+		{
+			if (i==j)
+			{
+				X[i][j]=tmpAdiag;
+				K[i][j]=1;
+			}
+			else
+			{
+				K[i][j]=A[j][i]*tmpAdiag;
+
+				// ATTENTION : transposed
+				X[j][i]=0.0;
+
+			}
+		}
+		s[i]=0.0;
+	}
+
+	MPI_Datatype single_column;
+	MPI_Type_vector (n , 1, n , MPI_DOUBLE , & single_column );
+	MPI_Type_commit (& single_column);
+
+	MPI_Datatype interleaved_row;
+	MPI_Type_vector (n/nprocs , 1, nprocs , MPI_DOUBLE , & interleaved_row );
+	MPI_Type_commit (& interleaved_row);
+
+	for (l=rows-1; l>0; l--)
+	{
+		//MPI_Barrier(MPI_COMM_WORLD);
+
+		for (i=0; i<l; i++)
+		{
+			H[i]=1/(1-K[i][l]*K[l][i]);
+		}
+		for (j=rank; j<l; j+=nprocs)
+		{
+			X[j][j]=H[j]*(X[j][j]-K[j][l]*X[l][j]);
+		}
+		for (i=0; i<l; i++)
+		{
+
+			for (j=cols-(nprocs-rank-1)-1; j>=l; j-=nprocs)
+			{
+				X[i][j]=H[i]*(X[i][j]-K[i][l]*X[l][j]);
+			}
+			for (j=rank; j<l; j+=nprocs)
+			{
+				K[i][j]=H[i]*(K[i][j]-K[i][l]*K[l][j]);
+			}
+		}
+		if(rank!=map[l-1])
+		{
+			MPI_Send (&K[l-1][rank],1,interleaved_row, map[l-1],rank, MPI_COMM_WORLD);
+		}
+		else
+		{
+			for(j=0;j<nprocs;j++)
+			{
+				if(j!=rank)
+				{
+					MPI_Recv (&K[l-1][j],1,interleaved_row, j,j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				}
+			}
+		}
+
+		MPI_Bcast (&K[0][l-1],1,single_column,map[l-1],MPI_COMM_WORLD);
+		MPI_Bcast (&K[l-1][0],cols,MPI_DOUBLE,map[l-1],MPI_COMM_WORLD);
+	}
+
+    if(rank==0)
+    {
+		for (i=rows-2; i>=0; i--)
+		{
+			for (l=i+1; l<rows; l++)
+			{
+				F[i]=F[i]-F[l]*K[l][i];
+			}
+		}
+    }
+
+	MPI_Bcast (F,n,MPI_DOUBLE,0,MPI_COMM_WORLD);
+
+	for (j=rank; j<cols; j+=nprocs)
+	{
+		for (l=0; l<rows; l++)
+		{
+			s[j]=F[l]*X[l][j]+s[j];
+		}
+	}
+	for (j=0; j<nprocs; j++)
+	{
+		MPI_Bcast (&s[j],1,interleaved_row,j,MPI_COMM_WORLD);
+	}
+}
+
 void SLGEWOPV_calc_unswitch(double** A, double* b, double* s, int n, double** K, double* H, int rank, int nprocs)
 {
     int i,j,l;
