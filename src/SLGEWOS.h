@@ -6,6 +6,55 @@
 #include "helpers/matrix.h"
 #include "helpers/vector.h"
 
+void SLGEWOS_calc_dani(double** A, double* b, double** T, double* x, int n, double* H)
+{
+    int i,j,l;
+    int rows=n;
+    int cols=n;
+
+	for (i=0;i<rows;i++)
+	{
+		for (j=0;j<cols;j++)
+		{
+			if (i==j)
+			{
+				T[i][j]=1/A[i][j];
+				T[i][j+n]=1;
+			}
+			else
+			{
+				T[i][j]=0;
+				T[i][j+n]=A[j][i]/A[i][i];
+			}
+		}
+		x[i]=0.0;
+	}
+
+	for (l=n-1; l>=0; l--)
+	{
+		for (i=l; i<=n-1; i++)
+		{
+			x[i]=x[i]+T[l][i]*b[l];
+		}
+		for (i=0; i<=l-1; i++)
+		{
+			H[i]=1/(1-T[i][l+n]*T[l][i+n]);
+			b[i]=b[i]-T[l][i+n]*b[l];
+			for (j=0; j<=n-1; j++)
+			{
+				if (j<l && j!=i)
+				{
+					T[i][j+n]=(T[i][j+n]-T[l][j+n]*T[i][n+l])*H[i];
+				}
+				else
+				{
+					T[i][j]=(T[i][j]-T[l][j]*T[i][n+l])*H[i];
+				}
+			}
+		}
+	}
+}
+
 void SLGEWOS_calc(double** A, double* b, double* s, int n, double** K, double* H, double* F)
 {
     int i,j,l;
