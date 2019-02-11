@@ -6,7 +6,101 @@
 #include "helpers/matrix.h"
 #include "helpers/vector.h"
 
-void SLGEWOS_calc_dani(double** A, double* b, double** T, double* x, int n, double* H)
+void SLGEWOS_calc_last(double** A, double* b, double** T, double* x, int n, double* h, double* hh)
+{
+    int i,j,l;
+    //int rows=n;
+    //int cols=n;
+
+    //double h,hh;
+
+	for (i=0;i<n;i++)
+	{
+		for (j=0;j<n;j++)
+		{
+			T[i][j+n]=A[j][i]/A[i][i];
+			T[i][j]=0;
+		}
+		T[i][i]=1/A[i][i];
+		x[i]=0.0;
+	}
+
+	for (l=n-1; l>=0; l--)
+	{
+		for (i=l; i<=n-1; i++)
+		{
+			x[i]=x[i]+T[l][i]*b[l];
+		}
+		for (i=0; i<=l-1; i++)
+		{
+			b[i]=b[i]-T[l][n+i]*b[l];
+			*h   =1/(1-T[i][n+l]*T[l][n+i]);
+			*hh  =T[i][n+l]*(*h);
+			T[i][i]=T[i][i]*(*h);
+			//printf("%d,%d\t",i,i);
+			//T[i][l]= -T[l][l]*T[i][n+l]*H[i];
+			T[i][l]= -T[l][l]*(*hh);
+			for (j=l+1; j<=n+l-1; j++)
+			{
+				//printf("%d,%d\t",i,j);
+				//T[i][j]=(T[i][j]-T[l][j]*T[i][n+l])*H[i];
+				T[i][j]=T[i][j]*(*h)-T[l][j]*(*hh);
+			}
+			//printf("\n");
+		}
+	}
+}
+
+/*
+void SLGEWOS_calc_last(double** A, double* b, double** T, double* x, int n, double* H)
+{
+    int i,j,l;
+    int rows=n;
+    int cols=n;
+
+	for (i=0;i<rows;i++)
+	{
+		for (j=0;j<cols;j++)
+		{
+			if (i==j)
+			{
+				T[i][j]=1/A[i][j];
+				T[i][j+n]=1;
+			}
+			else
+			{
+				T[i][j]=0;
+				T[i][j+n]=A[j][i]/A[i][i];
+			}
+		}
+		x[i]=0.0;
+	}
+
+	for (l=n-1; l>=0; l--)
+	{
+		for (i=l; i<=n-1; i++)
+		{
+			x[i]=x[i]+T[l][i]*b[l];
+		}
+		for (i=0; i<=l-1; i++)
+		{
+			b[i]=b[i]-T[l][n+i]*b[l];
+			H[i]=1/(1-T[i][n+l]*T[l][n+i]);
+			T[i][i]=T[i][i]*H[i];
+			//printf("%d,%d\t",i,i);
+			T[i][l]= -T[l][l]*T[i][n+l]*H[i];
+			for (j=l+1; j<=n+l-1; j++)
+			{
+				//printf("%d,%d\t",i,j);
+				T[i][j]=(T[i][j]-T[l][j]*T[i][n+l])*H[i];
+			}
+			//printf("\n");
+		}
+	}
+}
+*/
+
+void SLGEWOS_calc_paper(double** A, double* b, double** T, double* x, int n, double* H)
 {
     int i,j,l;
     int rows=n;
