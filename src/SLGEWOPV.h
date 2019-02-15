@@ -7,6 +7,13 @@
 #include "helpers/vector.h"
 #include <mpi.h>
 
+/*
+ * IF in init not removed
+ * IF in calc removed
+ * send chunks of last row to last node
+ * broadcast last row and last col
+ * master calcs and broadcasts auxiliary causes
+ */
 void SLGEWOPV_calc_sendopt(double** A, double* b, double* s, int n, double** K, double* H, int rank, int nprocs)
 {
     int i,j,l;
@@ -19,7 +26,6 @@ void SLGEWOPV_calc_sendopt(double** A, double* b, double* s, int n, double** K, 
     map=malloc(n*sizeof(int));
 
     MPI_Bcast (&A[0][0],n*n,MPI_DOUBLE,0,MPI_COMM_WORLD);
-	//MPI_Bcast (b,n,MPI_DOUBLE,0,MPI_COMM_WORLD);
 
 	for(i=0; i<n; i++)
 	{
@@ -58,8 +64,6 @@ void SLGEWOPV_calc_sendopt(double** A, double* b, double* s, int n, double** K, 
 
 	for (l=rows-1; l>0; l--)
 	{
-		//MPI_Barrier(MPI_COMM_WORLD);
-
 		for (i=0; i<l; i++)
 		{
 			H[i]=1/(1-K[i][l]*K[l][i]);
@@ -121,10 +125,18 @@ void SLGEWOPV_calc_sendopt(double** A, double* b, double* s, int n, double** K, 
 	}
 	for (j=0; j<nprocs; j++)
 	{
-		MPI_Bcast (&s[j],1,interleaved_row,j,MPI_COMM_WORLD);
+		MPI_Bcast (&s[j],1,interleaved_row,j,MPI_COMM_WORLD); // too much! avoid broadcast! a send is enough
 	}
 }
 
+
+/*
+ * IF in init not removed
+ * IF in calc removed
+ * every node broadcasts chunks of last row
+ * last node broadcast last col
+ * master calcs and broadcasts auxiliary causes
+ */
 void SLGEWOPV_calc_unswitch(double** A, double* b, double* s, int n, double** K, double* H, int rank, int nprocs)
 {
     int i,j,l;
@@ -137,7 +149,6 @@ void SLGEWOPV_calc_unswitch(double** A, double* b, double* s, int n, double** K,
     map=malloc(n*sizeof(int));
 
     MPI_Bcast (&A[0][0],n*n,MPI_DOUBLE,0,MPI_COMM_WORLD);
-	//MPI_Bcast (b,n,MPI_DOUBLE,0,MPI_COMM_WORLD);
 
 	for(i=0; i<n; i++)
 	{
@@ -176,8 +187,6 @@ void SLGEWOPV_calc_unswitch(double** A, double* b, double* s, int n, double** K,
 
 	for (l=rows-1; l>0; l--)
 	{
-		//MPI_Barrier(MPI_COMM_WORLD);
-
 		for (i=0; i<l; i++)
 		{
 			H[i]=1/(1-K[i][l]*K[l][i]);
@@ -233,6 +242,15 @@ void SLGEWOPV_calc_unswitch(double** A, double* b, double* s, int n, double** K,
 	}
 }
 
+
+/*
+ * IF in init not removed
+ * IF in calc not removed
+ * send chunks of last row to last node
+ * broadcast last row and last col
+ * every node calcs auxiliary causes
+ * calc and broadcast solution
+ */
 void SLGEWOPV_calc(double** A, double* b, double* s, int n, double** K, double* H, int rank, int nprocs)
 {
     int i,j,l;
@@ -245,7 +263,6 @@ void SLGEWOPV_calc(double** A, double* b, double* s, int n, double** K, double* 
     map=malloc(n*sizeof(int));
 
     MPI_Bcast (&A[0][0],n*n,MPI_DOUBLE,0,MPI_COMM_WORLD);
-	//MPI_Bcast (b,n,MPI_DOUBLE,0,MPI_COMM_WORLD);
 
 	for(i=0; i<n; i++)
 	{
@@ -284,8 +301,6 @@ void SLGEWOPV_calc(double** A, double* b, double* s, int n, double** K, double* 
 
 	for (l=rows-1; l>0; l--)
 	{
-		//MPI_Barrier(MPI_COMM_WORLD);
-
 		for (i=0; i<l; i++)
 		{
 			H[i]=1/(1-K[i][l]*K[l][i]);
@@ -347,7 +362,7 @@ void SLGEWOPV_calc(double** A, double* b, double* s, int n, double** K, double* 
 	}
 	for (j=0; j<nprocs; j++)
 	{
-		MPI_Bcast (&s[j],1,interleaved_row,j,MPI_COMM_WORLD);
+		MPI_Bcast (&s[j],1,interleaved_row,j,MPI_COMM_WORLD); // too much! avoid broadcast! a send is enough
 	}
 }
 
@@ -363,7 +378,6 @@ void SLGEWOPV_calc_F(double** A, double* b, double* s, int n, double** K, double
     map=malloc(n*sizeof(int));
 
     MPI_Bcast (&A[0][0],n*n,MPI_DOUBLE,0,MPI_COMM_WORLD);
-	//MPI_Bcast (b,n,MPI_DOUBLE,0,MPI_COMM_WORLD);
 
 	for(i=0; i<n; i++)
 	{
@@ -402,8 +416,6 @@ void SLGEWOPV_calc_F(double** A, double* b, double* s, int n, double** K, double
 
 	for (l=rows-1; l>0; l--)
 	{
-		//MPI_Barrier(MPI_COMM_WORLD);
-
 		for (i=0; i<l; i++)
 		{
 			H[i]=1/(1-K[i][l]*K[l][i]);
@@ -475,7 +487,6 @@ void SLGEWOPV_calc_naif(double** A, double* b, double* s, int n, double** K, dou
     map=malloc(n*sizeof(int));
 
     MPI_Bcast (&A[0][0],n*n,MPI_DOUBLE,0,MPI_COMM_WORLD);
-	//MPI_Bcast (b,n,MPI_DOUBLE,0,MPI_COMM_WORLD);
 
 	for(i=0; i<n; i++)
 	{
