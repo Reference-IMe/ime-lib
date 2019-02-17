@@ -7,6 +7,94 @@
 #include "helpers/vector.h"
 #include <mpi.h>
 
+void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, double* h, double* hh, int rank, int nprocs)
+//SLGEWOS_calc_last(double** A, double* b, double** T, double* x, int n, double* h, double* hh)
+{
+    int i,j,l;
+    //int rows=n;
+    //int cols=n;
+
+    //double h,hh;
+    int* map;
+    map=malloc(n*sizeof(int));
+
+    MPI_Bcast (&A[0][0],n*n,MPI_DOUBLE,0,MPI_COMM_WORLD);
+
+	MPI_Datatype single_column;
+	MPI_Type_vector (n , 1, n , MPI_DOUBLE , & single_column );
+	MPI_Type_commit (& single_column);
+
+	MPI_Datatype interleaved_row;
+	MPI_Type_vector (n/nprocs , 1, nprocs , MPI_DOUBLE , & interleaved_row );
+	MPI_Type_commit (& interleaved_row);
+
+	for(i=0; i<n; i++)
+	{
+		map[i]= i % nprocs;
+	}
+
+	for (i=0;i<n;i++)
+	{
+		for (j=0;j<n;j++)
+		{
+			T[i][j+n]=A[j][i]/A[i][i];
+			T[i][j]=0;
+		}
+		T[i][i]=1/A[i][i];
+		x[i]=0.0;
+	}
+
+	for (l=n-1; l>=0; l--)
+	{
+		printf("\n%d\n",l);
+		for (i=l; i<=n-1; i++)
+		{
+			if(map[i]==rank)
+			{
+				x[i]=x[i]+T[l][i]*b[l];
+			}
+		}
+		for (i=0; i<=l-1; i++)
+		{
+
+			b[i]=b[i]-T[l][n+i]*b[l];
+			*h   =1/(1-T[i][n+l]*T[l][n+i]);
+			*hh  =T[i][n+l]*(*h);
+			T[i][i]=T[i][i]*(*h);
+			//printf("%d,%d\t",i,i);
+			//T[i][l]= -T[l][l]*T[i][n+l]*H[i];
+			T[i][l]= -T[l][l]*(*hh);
+			for (j=l+1; j<=n+l-1; j++)
+			{
+				//printf("%d,%d\t",i,j);
+				//T[i][j]=(T[i][j]-T[l][j]*T[i][n+l])*H[i];
+				T[i][j]=T[i][j]*(*h)-T[l][j]*(*hh);
+			}
+			//printf("\n");
+		}
+
+		if(rank!=map[l-1])
+		{
+			printf("send");
+			MPI_Send (&T[l-1][n+rank],1,interleaved_row, map[l-1],rank, MPI_COMM_WORLD);
+			printf("sent");
+		}
+		else
+		{
+			for(j=0;j<nprocs;j++)
+			{
+				if(j!=rank)
+				{
+					MPI_Recv (&T[l-1][n+j],1,interleaved_row, j,j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				}
+			}
+		}
+		MPI_Bcast (&T[0][n+l-1],1,single_column,map[l-1],MPI_COMM_WORLD);
+		MPI_Bcast (&T[l-1][n],n,MPI_DOUBLE,map[l-1],MPI_COMM_WORLD);
+	}
+}
+
+
 /*
  * IF in init not removed
  * IF in calc removed
