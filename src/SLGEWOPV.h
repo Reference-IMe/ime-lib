@@ -8,7 +8,114 @@
 #include <mpi.h>
 
 void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, double* h, double* hh, int rank, int nprocs)
-//SLGEWOS_calc_last(double** A, double* b, double** T, double* x, int n, double* h, double* hh)
+{
+    int i,j,l;
+
+    int* map;
+    map=malloc(n*sizeof(int));
+
+    MPI_Bcast (&A[0][0],n*n,MPI_DOUBLE,0,MPI_COMM_WORLD);
+    MPI_Bcast (&b[0],n,MPI_DOUBLE,0,MPI_COMM_WORLD);
+
+	MPI_Datatype single_column;
+	MPI_Type_vector (n , 1, n , MPI_DOUBLE , & single_column );
+	MPI_Type_commit (& single_column);
+
+	MPI_Datatype interleaved_row;
+	MPI_Type_vector (n/nprocs , 1, nprocs , MPI_DOUBLE , & interleaved_row );
+	MPI_Type_commit (& interleaved_row);
+
+	for(i=0; i<n; i++)
+	{
+		map[i]= i % nprocs;
+	}
+
+	for (i=0;i<n;i++)
+	{
+		for (j=0;j<n;j++)
+		{
+			T[i][j+n]=A[j][i]/A[i][i];
+			T[i][j]=0;
+		}
+		T[i][i]=1/A[i][i];
+		x[i]=0.0;
+	}
+
+	// all levels but last (l=0)
+	for (l=n-1; l>0; l--)
+	{
+		for (i=l; i<=n-1; i++)
+		{
+			if(map[i]==rank)
+			{
+				x[i]=x[i]+T[l][i]*b[l];
+			}
+		}
+		for (i=0; i<=l-1; i++)
+		{
+
+			b[i]=b[i]-T[l][n+i]*b[l];
+			*h   =1/(1-T[i][n+l]*T[l][n+i]);
+			*hh  =T[i][n+l]*(*h);
+			T[i][i]=T[i][i]*(*h);
+			//T[i][l]= -T[l][l]*T[i][n+l]*H[i];
+			T[i][l]= -T[l][l]*(*hh);
+			for (j=l+1; j<=n+l-1; j++)
+			{
+				//T[i][j]=(T[i][j]-T[l][j]*T[i][n+l])*H[i];
+				T[i][j]=T[i][j]*(*h)-T[l][j]*(*hh);
+			}
+		}
+
+		if(rank!=map[l-1])
+		{
+			MPI_Send (&T[l-1][n+rank],1,interleaved_row, map[l-1],rank, MPI_COMM_WORLD);
+		}
+		else
+		{
+			for(j=0;j<nprocs;j++)
+			{
+				if(j!=rank)
+				{
+					MPI_Recv (&T[l-1][n+j],1,interleaved_row, j,j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				}
+			}
+		}
+		MPI_Bcast (&T[0][n+l-1],1,single_column,map[l-1],MPI_COMM_WORLD);
+		MPI_Bcast (&T[l-1][n],n,MPI_DOUBLE,map[l-1],MPI_COMM_WORLD);
+	}
+
+	// last level (l=0)
+	for (i=0; i<=n-1; i++)
+	{
+		if(map[i]==rank)
+		{
+			x[i]=x[i]+T[0][i]*b[0];
+		}
+	}
+
+	if (rank!=0)
+	{
+		MPI_Send (&x[rank],1,interleaved_row, 0, rank, MPI_COMM_WORLD);
+	}
+	else
+	{
+		for(j=1;j<nprocs;j++)
+		{
+			MPI_Recv (&x[j],1,interleaved_row, j,j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+		}
+	}
+}
+
+
+/*
+ * IF in init removed
+ * IF in calc not completely removed
+ * send chunks of last row to last node
+ * broadcast last row and last col
+ * inefficiently broadcast each x[i]
+ */
+void SLGEWOPV_calc_last_unopt(double** A, double* b, double** T, double* x, int n, double* h, double* hh, int rank, int nprocs)
 {
     int i,j,l;
     //int rows=n;
@@ -19,6 +126,7 @@ void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, dou
     map=malloc(n*sizeof(int));
 
     MPI_Bcast (&A[0][0],n*n,MPI_DOUBLE,0,MPI_COMM_WORLD);
+    MPI_Bcast (&b[0],n,MPI_DOUBLE,0,MPI_COMM_WORLD);
 
 	MPI_Datatype single_column;
 	MPI_Type_vector (n , 1, n , MPI_DOUBLE , & single_column );
@@ -46,7 +154,6 @@ void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, dou
 
 	for (l=n-1; l>=0; l--)
 	{
-		printf("\n%d\n",l);
 		for (i=l; i<=n-1; i++)
 		{
 			if(map[i]==rank)
@@ -61,23 +168,18 @@ void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, dou
 			*h   =1/(1-T[i][n+l]*T[l][n+i]);
 			*hh  =T[i][n+l]*(*h);
 			T[i][i]=T[i][i]*(*h);
-			//printf("%d,%d\t",i,i);
 			//T[i][l]= -T[l][l]*T[i][n+l]*H[i];
 			T[i][l]= -T[l][l]*(*hh);
 			for (j=l+1; j<=n+l-1; j++)
 			{
-				//printf("%d,%d\t",i,j);
 				//T[i][j]=(T[i][j]-T[l][j]*T[i][n+l])*H[i];
 				T[i][j]=T[i][j]*(*h)-T[l][j]*(*hh);
 			}
-			//printf("\n");
 		}
 
 		if(rank!=map[l-1])
 		{
-			printf("send");
-			MPI_Send (&T[l-1][n+rank],1,interleaved_row, map[l-1],rank, MPI_COMM_WORLD);
-			printf("sent");
+			if(l>0) MPI_Send (&T[l-1][n+rank],1,interleaved_row, map[l-1],rank, MPI_COMM_WORLD);
 		}
 		else
 		{
@@ -85,12 +187,22 @@ void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, dou
 			{
 				if(j!=rank)
 				{
-					MPI_Recv (&T[l-1][n+j],1,interleaved_row, j,j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+					if(l>0) MPI_Recv (&T[l-1][n+j],1,interleaved_row, j,j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 				}
 			}
 		}
-		MPI_Bcast (&T[0][n+l-1],1,single_column,map[l-1],MPI_COMM_WORLD);
-		MPI_Bcast (&T[l-1][n],n,MPI_DOUBLE,map[l-1],MPI_COMM_WORLD);
+		if(l>0)
+		{
+			MPI_Bcast (&T[0][n+l-1],1,single_column,map[l-1],MPI_COMM_WORLD);
+			MPI_Bcast (&T[l-1][n],n,MPI_DOUBLE,map[l-1],MPI_COMM_WORLD);
+		}
+		else
+		{
+			for (i=0;i<n;i++)
+				{
+					MPI_Bcast (&x[i],1,MPI_DOUBLE,map[i],MPI_COMM_WORLD);
+				}
+		}
 	}
 }
 
@@ -114,6 +226,7 @@ void SLGEWOPV_calc_sendopt(double** A, double* b, double* s, int n, double** K, 
     map=malloc(n*sizeof(int));
 
     MPI_Bcast (&A[0][0],n*n,MPI_DOUBLE,0,MPI_COMM_WORLD);
+    MPI_Bcast (&b[0],n,MPI_DOUBLE,0,MPI_COMM_WORLD);
 
 	for(i=0; i<n; i++)
 	{
@@ -237,6 +350,7 @@ void SLGEWOPV_calc_unswitch(double** A, double* b, double* s, int n, double** K,
     map=malloc(n*sizeof(int));
 
     MPI_Bcast (&A[0][0],n*n,MPI_DOUBLE,0,MPI_COMM_WORLD);
+    MPI_Bcast (&b[0],n,MPI_DOUBLE,0,MPI_COMM_WORLD);
 
 	for(i=0; i<n; i++)
 	{
@@ -351,6 +465,7 @@ void SLGEWOPV_calc(double** A, double* b, double* s, int n, double** K, double* 
     map=malloc(n*sizeof(int));
 
     MPI_Bcast (&A[0][0],n*n,MPI_DOUBLE,0,MPI_COMM_WORLD);
+    MPI_Bcast (&b[0],n,MPI_DOUBLE,0,MPI_COMM_WORLD);
 
 	for(i=0; i<n; i++)
 	{
