@@ -14,11 +14,11 @@ void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, dou
     int* map;
     map=malloc(n*sizeof(int));
 
-    MPI_Bcast (&A[0][0],n*n,MPI_DOUBLE,0,MPI_COMM_WORLD);
+    //MPI_Bcast (&A[0][0],n*n,MPI_DOUBLE,0,MPI_COMM_WORLD);
     MPI_Bcast (&b[0],n,MPI_DOUBLE,0,MPI_COMM_WORLD);
 
 	MPI_Datatype single_column;
-	MPI_Type_vector (n , 1, n , MPI_DOUBLE , & single_column );
+	MPI_Type_vector (n , 1, n*2 , MPI_DOUBLE , & single_column );
 	MPI_Type_commit (& single_column);
 
 	MPI_Datatype interleaved_row;
@@ -30,16 +30,39 @@ void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, dou
 		map[i]= i % nprocs;
 	}
 
-	for (i=0;i<n;i++)
+	for (j=0;j<n;j++)
 	{
-		for (j=0;j<n;j++)
+		if (rank==0)
 		{
-			T[i][j+n]=A[j][i]/A[i][i];
-			T[i][j]=0;
+			for (i=0;i<n;i++)
+			{
+				T[i][j+n]=A[j][i]/A[i][i];
+				T[i][j]=0;
+			}
+			T[j][j]=1/A[j][j];
+			if (map[j]!=0)
+			{
+				MPI_Send (&T[0][j+n],1,single_column, map[j],j+n, MPI_COMM_WORLD);
+				MPI_Send (&T[0][j],1,single_column, map[j],j, MPI_COMM_WORLD);
+				printf("sent %d and %d\n",j+n,j);
+			}
 		}
-		T[i][i]=1/A[i][i];
-		x[i]=0.0;
+		else
+		{
+			if (rank==map[j])
+			{
+				MPI_Recv (&T[0][j+n],1,single_column, 0,j+n, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				MPI_Recv (&T[0][j],1,single_column, 0,j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				printf("received %d and %d\n",j+n,j);
+			}
+		}
+		x[j]=0.0;
 	}
+
+	MPI_Barrier(MPI_COMM_WORLD);
+	MPI_Bcast (&T[0][n*2-1],1,single_column,0,MPI_COMM_WORLD);
+	MPI_Barrier(MPI_COMM_WORLD);
+	printf("broadcast %d\n",n*2-1);
 
 	// all levels but last (l=0)
 	for (l=n-1; l>0; l--)
@@ -53,7 +76,6 @@ void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, dou
 		}
 		for (i=0; i<=l-1; i++)
 		{
-
 			b[i]=b[i]-T[l][n+i]*b[l];
 			*h   =1/(1-T[i][n+l]*T[l][n+i]);
 			*hh  =T[i][n+l]*(*h);
@@ -225,35 +247,7 @@ void SLGEWOPV_calc_sendopt(double** A, double* b, double* s, int n, double** K, 
     int* map;
     map=malloc(n*sizeof(int));
 
-    MPI_Bcast (&A[0][0],n*n,MPI_DOUBLE,0,MPI_COMM_WORLD);
     MPI_Bcast (&b[0],n,MPI_DOUBLE,0,MPI_COMM_WORLD);
-
-	for(i=0; i<n; i++)
-	{
-		map[i]= i % nprocs;
-	}
-
-	for (i=0;i<rows;i++)
-	{
-		tmpAdiag=1/A[i][i];
-		for (j=0;j<cols;j++)
-		{
-			if (i==j)
-			{
-				X[i][j]=tmpAdiag;
-				K[i][j]=1;
-			}
-			else
-			{
-				K[i][j]=A[j][i]*tmpAdiag;
-
-				// ATTENTION : transposed
-				X[j][i]=0.0;
-
-			}
-		}
-		s[i]=0.0;
-	}
 
 	MPI_Datatype single_column;
 	MPI_Type_vector (n , 1, n , MPI_DOUBLE , & single_column );
@@ -263,6 +257,87 @@ void SLGEWOPV_calc_sendopt(double** A, double* b, double* s, int n, double** K, 
 	MPI_Type_vector (n/nprocs , 1, nprocs , MPI_DOUBLE , & interleaved_row );
 	MPI_Type_commit (& interleaved_row);
 
+
+	for(i=0; i<n; i++)
+	{
+		map[i]= i % nprocs;
+		s[i]=0.0;
+	}
+
+	//init inhibition table
+	if (rank==0)
+	{
+		for (j=0;j<cols;j++)
+		{
+
+			// init col of K
+			for (i=0;i<rows;i++)
+			{
+				if (i==j)
+				{
+					K[i][j]=1;
+				}
+				else
+				{
+					K[i][j]=A[j][i]/A[i][i];
+				}
+			}
+			// send columns (all but last one) to single nodes (other than root)
+			//last one of K is broadcasted to all nodes later
+			if (map[j]!=0 && j<cols-1)
+			{
+				MPI_Send (&K[0][j],1,single_column, map[j],j+n, MPI_COMM_WORLD);
+			}
+		}
+		for (j=0;j<cols;j++)
+		{
+			// init col of X
+			for (i=0;i<rows;i++)
+			{
+				if (i==j)
+				{
+					X[i][i]=1/A[i][i];
+				}
+				else
+				{
+					X[i][j]=0.0;
+				}
+			}
+			// send col of X to non-root nodes
+			if (map[j]!=0)
+			{
+				MPI_Send (&X[0][j],1,single_column, map[j],j, MPI_COMM_WORLD);
+			}
+
+		}
+	}
+	else // non root
+	{
+		for (j=0;j<cols-1;j++)
+		{
+			// receive
+			if (rank==map[j])
+			{
+				MPI_Recv (&X[0][j],1,single_column, 0,j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				MPI_Recv (&K[0][j],1,single_column, 0,j+n, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			}
+		}
+		if (rank==map[cols-1])
+		{
+			MPI_Recv (&X[0][cols-1],1,single_column, 0,cols-1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+		}
+	}
+
+	// broadcast last column of K
+	MPI_Bcast (&K[0][n-1],1,single_column,0,MPI_COMM_WORLD);
+
+	// every node broadcasts its chunks of the last row of K
+	for (j=0; j<nprocs; j++)
+	{
+		MPI_Bcast (&K[n-1][j],1,interleaved_row,j,MPI_COMM_WORLD);
+	}
+
+	//calc inhibition sequence
 	for (l=rows-1; l>0; l--)
 	{
 		for (i=0; i<l; i++)
@@ -349,35 +424,7 @@ void SLGEWOPV_calc_unswitch(double** A, double* b, double* s, int n, double** K,
     int* map;
     map=malloc(n*sizeof(int));
 
-    MPI_Bcast (&A[0][0],n*n,MPI_DOUBLE,0,MPI_COMM_WORLD);
     MPI_Bcast (&b[0],n,MPI_DOUBLE,0,MPI_COMM_WORLD);
-
-	for(i=0; i<n; i++)
-	{
-		map[i]= i % nprocs;
-	}
-
-	for (i=0;i<rows;i++)
-	{
-		tmpAdiag=1/A[i][i];
-		for (j=0;j<cols;j++)
-		{
-			if (i==j)
-			{
-				X[i][j]=tmpAdiag;
-				K[i][j]=1;
-			}
-			else
-			{
-				K[i][j]=A[j][i]*tmpAdiag;
-
-				// ATTENTION : transposed
-				X[j][i]=0.0;
-
-			}
-		}
-		s[i]=0.0;
-	}
 
 	MPI_Datatype single_column;
 	MPI_Type_vector (n , 1, n , MPI_DOUBLE , & single_column );
@@ -387,6 +434,79 @@ void SLGEWOPV_calc_unswitch(double** A, double* b, double* s, int n, double** K,
 	MPI_Type_vector (n/nprocs , 1, nprocs , MPI_DOUBLE , & interleaved_row );
 	MPI_Type_commit (& interleaved_row);
 
+
+	for(i=0; i<n; i++)
+	{
+		map[i]= i % nprocs;
+		s[i]=0.0;
+	}
+
+	//init inhibition table
+	if (rank==0)
+	{
+		for (i=0;i<rows;i++)
+		{
+			tmpAdiag=1/A[i][i];
+			for (j=0;j<cols;j++)
+			{
+				if (i==j)
+				{
+					X[i][j]=tmpAdiag;
+					K[i][j]=1;
+				}
+				else
+				{
+					K[i][j]=A[j][i]*tmpAdiag;
+
+					// ATTENTION : transposed
+					X[j][i]=0.0;
+				}
+			}
+		}
+	}
+
+	// spread inhibition table
+	if (rank==0)
+	{
+		for (j=0;j<cols-1;j++) // to last but one
+		{
+			// send columns to single nodes
+			if (map[j]!=0)
+			{
+				MPI_Send (&X[0][j],1,single_column, map[j],j, MPI_COMM_WORLD);
+				MPI_Send (&K[0][j],1,single_column, map[j],j+n, MPI_COMM_WORLD);
+			}
+		}
+		// last one of K is broadcasted to all nodes later
+		MPI_Send (&X[0][cols-1],1,single_column, map[cols-1],j, MPI_COMM_WORLD);
+	}
+	else
+	{
+		for (j=0;j<cols-1;j++)
+		{
+			// receive
+			if (rank==map[j])
+			{
+				MPI_Recv (&X[0][j],1,single_column, 0,j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				MPI_Recv (&K[0][j],1,single_column, 0,j+n, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			}
+		}
+		if (rank==map[cols-1])
+			{
+			MPI_Recv (&X[0][cols-1],1,single_column, 0,j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			}
+	}
+
+	// broadcast last column of K
+	MPI_Bcast (&K[0][n-1],1,single_column,0,MPI_COMM_WORLD);
+
+	// every node broadcasts its chunks of the last row of K
+	for (j=0; j<nprocs; j++)
+	{
+		MPI_Bcast (&K[n-1][j],1,interleaved_row,j,MPI_COMM_WORLD);
+	}
+
+	//calc inhibition sequence
 	for (l=rows-1; l>0; l--)
 	{
 		for (i=0; i<l; i++)
@@ -410,14 +530,17 @@ void SLGEWOPV_calc_unswitch(double** A, double* b, double* s, int n, double** K,
 			}
 		}
 
+		// every node broadcasts its chunks of the last row of K
 		for (j=0; j<nprocs; j++)
 		{
 			MPI_Bcast (&K[l-1][j],1,interleaved_row,j,MPI_COMM_WORLD);
 		}
 
+		// broadcast last column of K
 		MPI_Bcast (&K[0][l-1],1,single_column,map[l-1],MPI_COMM_WORLD);
 	}
 
+	// calc auxiliary causes on root and then broadcast
     if(rank==0)
     {
 		for (i=rows-2; i>=0; i--)
@@ -428,9 +551,9 @@ void SLGEWOPV_calc_unswitch(double** A, double* b, double* s, int n, double** K,
 			}
 		}
     }
-
 	MPI_Bcast (F,n,MPI_DOUBLE,0,MPI_COMM_WORLD);
 
+	// final solution
 	for (j=rank; j<cols; j+=nprocs)
 	{
 		for (l=0; l<rows; l++)
@@ -440,7 +563,7 @@ void SLGEWOPV_calc_unswitch(double** A, double* b, double* s, int n, double** K,
 	}
 	for (j=0; j<nprocs; j++)
 	{
-		MPI_Bcast (&s[j],1,interleaved_row,j,MPI_COMM_WORLD);
+		MPI_Bcast (&s[j],1,interleaved_row,j,MPI_COMM_WORLD); // too much! avoid broadcasts! a send is enough
 	}
 }
 
@@ -453,7 +576,7 @@ void SLGEWOPV_calc_unswitch(double** A, double* b, double* s, int n, double** K,
  * every node calcs auxiliary causes
  * calc and broadcast solution
  */
-void SLGEWOPV_calc(double** A, double* b, double* s, int n, double** K, double* H, int rank, int nprocs)
+void SLGEWOPV_calc_base(double** A, double* b, double* s, int n, double** K, double* H, int rank, int nprocs)
 {
     int i,j,l;
     int rows=n;
@@ -464,35 +587,7 @@ void SLGEWOPV_calc(double** A, double* b, double* s, int n, double** K, double* 
     int* map;
     map=malloc(n*sizeof(int));
 
-    MPI_Bcast (&A[0][0],n*n,MPI_DOUBLE,0,MPI_COMM_WORLD);
     MPI_Bcast (&b[0],n,MPI_DOUBLE,0,MPI_COMM_WORLD);
-
-	for(i=0; i<n; i++)
-	{
-		map[i]= i % nprocs;
-	}
-
-	for (i=0;i<rows;i++)
-	{
-		tmpAdiag=1/A[i][i];
-		for (j=0;j<cols;j++)
-		{
-			if (i==j)
-			{
-				X[i][j]=tmpAdiag;
-				K[i][j]=1;
-			}
-			else
-			{
-				K[i][j]=A[j][i]*tmpAdiag;
-
-				// ATTENTION : transposed
-				X[j][i]=0.0;
-
-			}
-		}
-		s[i]=0.0;
-	}
 
 	MPI_Datatype single_column;
 	MPI_Type_vector (n , 1, n , MPI_DOUBLE , & single_column );
@@ -502,6 +597,79 @@ void SLGEWOPV_calc(double** A, double* b, double* s, int n, double** K, double* 
 	MPI_Type_vector (n/nprocs , 1, nprocs , MPI_DOUBLE , & interleaved_row );
 	MPI_Type_commit (& interleaved_row);
 
+	for(i=0; i<n; i++)
+	{
+		map[i]= i % nprocs;
+		s[i]=0.0;
+	}
+
+	//init inhibition table
+	if (rank==0)
+	{
+		for (i=0;i<rows;i++)
+		{
+			tmpAdiag=1/A[i][i];
+			for (j=0;j<cols;j++)
+			{
+				if (i==j)
+				{
+					X[i][j]=tmpAdiag;
+					K[i][j]=1;
+				}
+				else
+				{
+					K[i][j]=A[j][i]*tmpAdiag;
+
+					// ATTENTION : transposed
+					X[j][i]=0.0;
+
+				}
+			}
+		}
+	}
+
+	// spread inhibition table
+	if (rank==0)
+	{
+		for (j=0;j<cols-1;j++) // to last but one
+		{
+			// send columns to single nodes
+			if (map[j]!=0)
+			{
+				MPI_Send (&X[0][j],1,single_column, map[j],j, MPI_COMM_WORLD);
+				MPI_Send (&K[0][j],1,single_column, map[j],j+n, MPI_COMM_WORLD);
+			}
+		}
+		// last one of K is broadcasted to all nodes later
+		MPI_Send (&X[0][cols-1],1,single_column, map[cols-1],j, MPI_COMM_WORLD);
+	}
+	else
+	{
+		for (j=0;j<cols-1;j++)
+		{
+			// receive
+			if (rank==map[j])
+			{
+				MPI_Recv (&X[0][j],1,single_column, 0,j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				MPI_Recv (&K[0][j],1,single_column, 0,j+n, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			}
+		}
+		if (rank==map[cols-1])
+			{
+			MPI_Recv (&X[0][cols-1],1,single_column, 0,j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			}
+	}
+
+	// broadcast last column of K
+	MPI_Bcast (&K[0][n-1],1,single_column,0,MPI_COMM_WORLD);
+
+	// every node broadcasts its chunks of the last row of K
+	for (j=0; j<nprocs; j++)
+	{
+		MPI_Bcast (&K[n-1][j],1,interleaved_row,j,MPI_COMM_WORLD);
+	}
+
+	//calc inhibition sequence
 	for (l=rows-1; l>0; l--)
 	{
 		for (i=0; i<l; i++)
@@ -527,32 +695,23 @@ void SLGEWOPV_calc(double** A, double* b, double* s, int n, double** K, double* 
 			}
 		}
 
+		// every node broadcasts its chunks of the last row of K
 		for (j=0; j<nprocs; j++)
 		{
 			MPI_Bcast (&K[l-1][j],1,interleaved_row,j,MPI_COMM_WORLD);
 		}
 
+		// broadcast last column of K
 		MPI_Bcast (&K[0][l-1],1,single_column,map[l-1],MPI_COMM_WORLD);
 
+		// calc auxiliary causes on every node
 		for (i=l-1; i>=0; i--)
 		{
 				F[i]=F[i]-F[l]*K[l][i];
 		}
 	}
-/*
-    if(rank==0)
-    {
-		for (i=rows-2; i>=0; i--)
-		{
-			for (l=i+1; l<rows; l++)
-			{
-				F[i]=F[i]-F[l]*K[l][i];
-			}
-		}
-    }
 
-	MPI_Bcast (F,n,MPI_DOUBLE,0,MPI_COMM_WORLD);
-*/
+	// final solution
 	for (j=0; j<cols; j++)
 	{
 		if (map[j]==rank)
@@ -565,9 +724,16 @@ void SLGEWOPV_calc(double** A, double* b, double* s, int n, double** K, double* 
 	}
 	for (j=0; j<nprocs; j++)
 	{
-		MPI_Bcast (&s[j],1,interleaved_row,j,MPI_COMM_WORLD); // too much! avoid broadcast! a send is enough
+		MPI_Bcast (&s[j],1,interleaved_row,j,MPI_COMM_WORLD); // too much! avoid broadcasts! a send is enough
 	}
 }
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// very old versions below!
+// don't use: may be buggy
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void SLGEWOPV_calc_F(double** A, double* b, double* s, int n, double** K, double* H, int rank, int nprocs)
 {
