@@ -658,7 +658,7 @@ void SLGEWOPV_calc_base(double** A, double* b, double* s, int n, double** K, dou
 	}
 
 	// final solution
-	for (j=1; j<cols; j++)
+	for (j=0; j<cols; j++)
 	{
 		if (map[j]==rank)
 		{
