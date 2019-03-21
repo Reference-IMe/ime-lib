@@ -6,6 +6,14 @@
 #include "helpers/vector.h"
 #include <mpi.h>
 
+/*
+ *
+ * 	MPI_Type_vector (n * numcols, 1, n , MPI_DOUBLE , & multiple_column );
+	MPI_Type_commit (& multiple_column);
+	MPI_Type_create_resized(multiple_column, 0, 1*sizeof(double), &multiple_column_type);
+	MPI_Type_commit (& multiple_column_type);
+ */
+
 void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, double* h, double* hh, int rank, int nprocs)
 {
     int i,j,l;
