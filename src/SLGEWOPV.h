@@ -6,10 +6,14 @@
 #include "helpers/vector.h"
 #include <mpi.h>
 
+#include <unistd.h>
+
 /*
- * IF removed from init
- * IF _not_ removed from calc
- * collectives instead of p2p
+ * transition version:
+ * from fully allocate matrix to partially allocated
+ * - local <-> global indexes defined
+ * - loops boundary defined for each node
+ *
  */
 
 void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, double* h, double* hh, int rank, int nprocs)
@@ -17,17 +21,45 @@ void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, dou
 	// indexes
     int i,j,l;
 
+    // num of cols per process
+    int mycols;
+    mycols=2*n/nprocs;
+    int myend=mycols/2;
+    int mystart;
+
+
+    // local storage for a part of the input matrix (continuous columns, not interleaved)
+    double** Tlocal;
+    Tlocal=AllocateMatrix2D(n, mycols, CONTIGUOUS);
+
+    int* local;
+    local=malloc(2*n*sizeof(int));
+
     // map columns to process
     int* map;
     map=malloc(2*n*sizeof(int));
 	for (i=0; i<2*n; i++)
 	{
-		map[i]= i % nprocs;
+		map[i]= i % nprocs;			// who has the col i
+		local[i]=floor(i/nprocs);	// position of the column i(global) in the local matrix
 	}
 
-    // num of cols per process
-    int numcols;
-    numcols=2*n/nprocs;
+    int* global;
+    global=malloc(mycols*sizeof(int));
+    for(i=0; i<mycols; i++)
+	{
+    	global[i]= i * nprocs + rank; // position of the column i(local) in the global matrix
+	}
+
+    /*
+    if (rank==1)
+    {
+    	for (i=0; i<2*n; i++)
+    	{
+		printf("%d\t%d\t%d\n",local[i],i,global[local[i]]);
+    	}
+    }
+    */
 
     // MPI derived types
 	MPI_Datatype single_column;
@@ -43,7 +75,7 @@ void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, dou
 	MPI_Type_commit (& interleaved_row_type);
 
 	MPI_Datatype multiple_column;
-	MPI_Type_vector (n * numcols, 1, nprocs , MPI_DOUBLE, & multiple_column );
+	MPI_Type_vector (n * mycols, 1, nprocs , MPI_DOUBLE, & multiple_column );
 	MPI_Type_commit (& multiple_column);
 
 	MPI_Datatype multiple_column_type;
@@ -92,42 +124,53 @@ void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, dou
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
 	{
-		for (i=l; i<=n-1; i++)
+		// to avoid IFs: each process loops on its own set of cols, with indirect addressing
+
+		mystart=local[l];
+		if (rank<map[l])
 		{
-			if(map[i]==rank)
-			{
-				x[i]=x[i]+T[l][i]*b[l];
-			}
+			mystart++;
+		}
+		for (i=mystart; i<=local[n-1]; i++)
+		{
+			x[global[i]]=x[global[i]]+T[l][global[i]]*b[l];
+		}
+
+		myend=local[n+l-1];
+		if (rank>map[n+l-1])
+		{
+			myend--;
+		}
+		mystart=local[l+1];
+		if (rank<map[l+1])
+		{
+			mystart++;
 		}
 		for (i=0; i<=l-1; i++)
 		{
-			b[i]=b[i]-T[l][n+i]*b[l];
+			// every process
 			*h   =1/(1-T[i][n+l]*T[l][n+i]);
-			*hh  =T[i][n+l]*(*h);
+			b[i]=b[i]-T[l][n+i]*b[l];
 
-			/*
+			// processes with diagonal elements not null
 			if (rank==map[i])
 			{
 				T[i][i]=T[i][i]*(*h);
 			}
+
+			// process with full not null column (column l)
 			if (rank==map[l])
 			{
+				*hh  =T[i][n+l]*(*h);
 				T[i][l]= -T[l][l]*(*hh);
 			}
-			*/
 
-			// at every node: better calc than putting an IF ?
-			T[i][i]=T[i][i]*(*h);
-			T[i][l]= -T[l][l]*(*hh);
-			//
-
-			for (j=l+1; j<=n+l-1; j++)
-			{
-				if (rank==map[j])
+			// all other processes
+			for (j=mystart; j<=myend; j++)
 				{
-					T[i][j]=T[i][j]*(*h)-T[l][j]*(*hh);
+						*hh  =T[i][n+l]*(*h);
+						T[i][global[j]]=T[i][global[j]]*(*h)-T[l][global[j]]*(*hh);
 				}
-			}
 		}
 
 		// collect chunks of K to "future" last node
@@ -152,6 +195,10 @@ void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, dou
 
 	// collect solution
 	MPI_Gather (&x[rank], 1, interleaved_row_type, &x[0], 1, interleaved_row_type, 0, MPI_COMM_WORLD);
+
+	free(local);
+	free(global);
+	DeallocateMatrix2D(Tlocal,n,CONTIGUOUS);
 }
 
 
