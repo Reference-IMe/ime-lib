@@ -8,44 +8,68 @@
 
 #include <unistd.h>
 
-void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, double* h, double* hh, int rank, int nprocs)
+void SLGEWOPV_calc_last(double** A, double* b, double* x, int n, int rank, int nprocs)
 {
 	// indexes
     int i,j,l;
 
-    // num of cols per process
-    int mycols;
-    mycols=2*n/nprocs;
-    int myend=mycols/2;
-    int mystart;
+    int Tcols=2*n;
 
+    // num of cols per process
+    int myTcols;
+    myTcols=Tcols/nprocs;
+
+    int myend=myTcols/2;
+    int mystart;
 
     // local storage for a part of the input matrix (continuous columns, not interleaved)
     double** Tlocal;
-    Tlocal=AllocateMatrix2D(n, mycols, CONTIGUOUS);
+    Tlocal=AllocateMatrix2D(n, myTcols, CONTIGUOUS);
+
+    double** T;
+    if (rank==0)
+    {
+    	T=AllocateMatrix2D(n,Tcols,CONTIGUOUS);
+    }
+	else
+	{
+		T=Tlocal;	//dummy assignment to avoid segfault (i.e. in in next scatter)
+	}
+
+    double* TlastKc;
+    TlastKc=AllocateVector(n);
+
+    double* TlastKr;
+    TlastKr=AllocateVector(n);
+
+    double* h;
+    h=AllocateVector(n);
+
+    double* hh;
+	hh=AllocateVector(n);
 
     int* local;
-    local=malloc(2*n*sizeof(int));
+    local=malloc(Tcols*sizeof(int));
 
     // map columns to process
     int* map;
-    map=malloc(2*n*sizeof(int));
-	for (i=0; i<2*n; i++)
+    map=malloc(Tcols*sizeof(int));
+	for (i=0; i<Tcols; i++)
 	{
 		map[i]= i % nprocs;			// who has the col i
 		local[i]=floor(i/nprocs);	// position of the column i(global) in the local matrix
 	}
 
     int* global;
-    global=malloc(mycols*sizeof(int));
-    for(i=0; i<mycols; i++)
+    global=malloc(myTcols*sizeof(int));
+    for(i=0; i<myTcols; i++)
 	{
     	global[i]= i * nprocs + rank; // position of the column i(local) in the global matrix
 	}
 
     // MPI derived types
 	MPI_Datatype single_column;
-	MPI_Type_vector (n, 1, 2*n, MPI_DOUBLE, & single_column );
+	MPI_Type_vector (n, 1, Tcols, MPI_DOUBLE, & single_column );
 	MPI_Type_commit (& single_column);
 
 	MPI_Datatype interleaved_row;
@@ -57,14 +81,12 @@ void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, dou
 	MPI_Type_commit (& interleaved_row_type);
 
 	MPI_Datatype multiple_column;
-	MPI_Type_vector (n * mycols, 1, nprocs , MPI_DOUBLE, & multiple_column );
+	MPI_Type_vector (n * myTcols, 1, nprocs , MPI_DOUBLE, & multiple_column );
 	MPI_Type_commit (& multiple_column);
 
-	/*
 	MPI_Datatype multiple_column_contiguous;
-	MPI_Type_vector (n * mycols, mycols, mycols , MPI_DOUBLE, & multiple_column_contiguous );
+	MPI_Type_vector (n, myTcols, myTcols , MPI_DOUBLE, & multiple_column_contiguous );
 	MPI_Type_commit (& multiple_column_contiguous);
-	*/
 
 	MPI_Datatype multiple_column_type;
 	MPI_Type_create_resized (multiple_column, 0, 1*sizeof(double), & multiple_column_type);
@@ -84,25 +106,33 @@ void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, dou
 
 	if (rank==0)
 	{
-		for (j=0;j<n;j++)
+		for (j=0; j<n; j++)
 		{
-			for (i=0;i<n;i++)
+			for (i=0; i<n; i++)
 			{
 				T[i][j+n]=A[j][i]/A[i][i];
 				T[i][j]=0;
 			}
 			T[j][j]=1/A[j][j];
 		}
+
+		// copy data into local buffer before broadcast
+		for (i=0; i<n; i++)
+		{
+			TlastKc[i]=T[i][n*2-1];
+			TlastKr[i]=T[n-1][n+i];
+		}
 	}
 
+
 	// scatter columns to nodes
-	MPI_Scatter (&T[0][0], 1, multiple_column_type, &T[0][rank], 1, multiple_column_type, 0, MPI_COMM_WORLD);
+	MPI_Scatter (&T[0][0], 1, multiple_column_type, &Tlocal[0][0], 1, multiple_column_contiguous, 0, MPI_COMM_WORLD);
 
 	// broadcast of the last col of T (K part)
-	MPI_Bcast (&T[0][n*2-1], 1, single_column, 0, MPI_COMM_WORLD);
+	MPI_Bcast (&TlastKc[0], n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
 	// broadcast of the last row of T (K part)
-	MPI_Bcast (&T[n-1][n], n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+	MPI_Bcast (&TlastKr[0], n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
 	//TODO: combine previous broadcasts in a single one
 
@@ -122,16 +152,16 @@ void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, dou
 		}
 		for (i=mystart; i<=local[n-1]; i++)
 		{
-			x[global[i]]=x[global[i]]+T[l][global[i]]*b[l];
+			x[global[i]]=x[global[i]]+Tlocal[l][i]*b[l];
 		}
 
 		// update helpers
 		// every process
 		for (i=0; i<=l-1; i++)
 		{
-			h[i]   = 1/(1-T[i][n+l]*T[l][n+i]);
-			hh[i]  = T[i][n+l]*h[i];
-			b[i]   = b[i]-T[l][n+i]*b[l];
+			h[i]   = 1/(1-TlastKc[i]*TlastKr[i]);
+			hh[i]  = TlastKc[i]*h[i];
+			b[i]   = b[i]-TlastKr[i]*b[l];
 		}
 
 		// update T
@@ -147,7 +177,7 @@ void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, dou
 		}
 		for (i=mystart; i<=myend; i++)
 		{
-			T[global[i]][global[i]]=T[global[i]][global[i]]*h[global[i]];
+			Tlocal[global[i]][i]=Tlocal[global[i]][i]*h[global[i]];
 		}
 
 		// l
@@ -156,8 +186,7 @@ void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, dou
 		{
 			for (i=0; i<=l-1; i++)
 			{
-				//*hh  =T[i][n+l]*h[i];
-				T[i][l]= -T[l][l]*hh[i];
+				Tlocal[i][local[l]]= -Tlocal[l][local[l]]*hh[i];
 			}
 		}
 
@@ -177,29 +206,33 @@ void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, dou
 		{
 			for (i=0; i<=l-1; i++)
 			{
-				//*hh  =T[i][n+l]*h[i];
-				T[i][global[j]]=T[i][global[j]]*h[i]-T[l][global[j]]*hh[i];
+				Tlocal[i][j]=Tlocal[i][j]*h[i]-Tlocal[l][j]*hh[i];
 			}
 		}
 
 		// collect chunks of K to "future" last node
-		MPI_Gather (&T[l-1][n+rank], 1, interleaved_row_type, &T[l-1][n], 1, interleaved_row_type, map[l-1], MPI_COMM_WORLD);
+		MPI_Gather (&Tlocal[l-1][local[n]], myTcols/2, MPI_DOUBLE, &TlastKr[0], 1, interleaved_row_type, map[l-1], MPI_COMM_WORLD);
 
 		//future last node broadcasts last row and col of K
-		MPI_Bcast (&T[0][n+l-1], 1, single_column, map[l-1], MPI_COMM_WORLD);
-		MPI_Bcast (&T[l-1][n], n, MPI_DOUBLE, map[l-1], MPI_COMM_WORLD);
+		if (rank==map[l-1])
+		{
+			// copy data into local buffer before broadcast
+			for (i=0; i<n; i++)
+			{
+				TlastKc[i]=Tlocal[i][local[n+l-1]];
+			}
+		}
+		MPI_Bcast (&TlastKc[0], n, MPI_DOUBLE, map[l-1], MPI_COMM_WORLD);
+		MPI_Bcast (&TlastKr[0], n, MPI_DOUBLE, map[l-1], MPI_COMM_WORLD);
 
 		//TODO: substitute Gather with an All-to-All
 		//TODO: or combine broadcasts in a single one
 	}
 
 	// last level (l=0)
-	for (i=0; i<=n-1; i++)
+	for (i=0; i<myTcols/2; i++)
 	{
-		if (map[i]==rank)
-		{
-			x[i]=x[i]+T[0][i]*b[0];
-		}
+		x[global[i]]=x[global[i]]+Tlocal[0][i]*b[0];
 	}
 
 	// collect solution
@@ -207,7 +240,15 @@ void SLGEWOPV_calc_last(double** A, double* b, double** T, double* x, int n, dou
 
 	free(local);
 	free(global);
+	DeallocateVector(TlastKc);
+	DeallocateVector(TlastKr);
+	DeallocateVector(h);
+	DeallocateVector(hh);
 	DeallocateMatrix2D(Tlocal,n,CONTIGUOUS);
+    if (rank==0)
+    {
+    	DeallocateMatrix2D(T,n,CONTIGUOUS);
+    }
 }
 
 /*

@@ -26,7 +26,7 @@ void PrintVector(double* const vec, cui rows)
 {
 	ui r;
 	for(r=0;r<rows;r++)
-		printf("%g\n",vec[r]);
+		printf("%.3g\n",vec[r]);
 	//printf("\n");
 }
 
