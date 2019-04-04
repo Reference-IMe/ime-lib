@@ -10,64 +10,62 @@
 
 void SLGEWOPV_calc_last(double** A, double* b, double* x, int n, int rank, int nprocs)
 {
-	// indexes
-    int i,j,l;
-
-    int Tcols=2*n;
-
-    // num of cols per process
-    int myTcols;
-    myTcols=Tcols/nprocs;
-
-    int myend=myTcols/2;
+	int i,j,l;						// indexes
+    int Tcols=2*n;					// total num of cols (X + K)
+    int myTcols;					// num of cols per process
+    	myTcols=Tcols/nprocs;
+    int myend;						// loop boundaries on local cols =myTcols/2;
     int mystart;
 
-    // local storage for a part of the input matrix (continuous columns, not interleaved)
+    /*
+     * local storage for a part of the input matrix (continuous columns, not interleaved)
+     */
     double** Tlocal;
     Tlocal=AllocateMatrix2D(n, myTcols, CONTIGUOUS);
 
     double** T;
-    if (rank==0)
-    {
-    	T=AllocateMatrix2D(n,Tcols,CONTIGUOUS);
-    }
-	else
-	{
-		T=Tlocal;	//dummy assignment to avoid segfault (i.e. in in next scatter)
-	}
+			if (rank==0)
+			{
+				T=AllocateMatrix2D(n,Tcols,CONTIGUOUS);
+			}
+			else
+			{
+				T=Tlocal;				// dummy assignment to avoid segfault (i.e. in  next scatter)
+			}
 
-    double* TlastKc;
-    TlastKc=AllocateVector(n);
-
-    double* TlastKr;
-    TlastKr=AllocateVector(n);
-
-    double* h;
-    h=AllocateVector(n);
-
+    double* TlastKc;					// last col of T (K)
+    		TlastKc=AllocateVector(n);
+    double* TlastKr;					// last row of T (K part)
+    		TlastKr=AllocateVector(n);
+    double* h;							// helper vectors
+    		h=AllocateVector(n);
     double* hh;
-	hh=AllocateVector(n);
+			hh=AllocateVector(n);
 
-    int* local;
-    local=malloc(Tcols*sizeof(int));
+	/*
+	 * map columns to process
+	 */
 
-    // map columns to process
-    int* map;
-    map=malloc(Tcols*sizeof(int));
-	for (i=0; i<Tcols; i++)
-	{
-		map[i]= i % nprocs;			// who has the col i
-		local[i]=floor(i/nprocs);	// position of the column i(global) in the local matrix
-	}
+	int*	local;
+    		local=malloc(Tcols*sizeof(int));
+    int*	map;
+    		map=malloc(Tcols*sizeof(int));
+			for (i=0; i<Tcols; i++)
+			{
+				map[i]= i % nprocs;			// who has the col i
+				local[i]=floor(i/nprocs);	// position of the column i(global) in the local matrix
+			}
+    int*	global;
+    		global=malloc(myTcols*sizeof(int));
+			for(i=0; i<myTcols; i++)
+			{
+				global[i]= i * nprocs + rank; // position of the column i(local) in the global matrix
+			}
 
-    int* global;
-    global=malloc(myTcols*sizeof(int));
-    for(i=0; i<myTcols; i++)
-	{
-    	global[i]= i * nprocs + rank; // position of the column i(local) in the global matrix
-	}
+    /*
+     * MPI derived types
+     */
 
-    // MPI derived types
 	MPI_Datatype single_column;
 	MPI_Type_vector (n, 1, Tcols, MPI_DOUBLE, & single_column );
 	MPI_Type_commit (& single_column);
@@ -76,9 +74,9 @@ void SLGEWOPV_calc_last(double** A, double* b, double* x, int n, int rank, int n
 	MPI_Type_vector (n/nprocs, 1, nprocs, MPI_DOUBLE, & interleaved_row );
 	MPI_Type_commit (& interleaved_row);
 
-	MPI_Datatype interleaved_row_type;
-	MPI_Type_create_resized (interleaved_row, 0, 1*sizeof(double), & interleaved_row_type);
-	MPI_Type_commit (& interleaved_row_type);
+	MPI_Datatype interleaved_row_resized;
+	MPI_Type_create_resized (interleaved_row, 0, 1*sizeof(double), & interleaved_row_resized);
+	MPI_Type_commit (& interleaved_row_resized);
 
 	MPI_Datatype multiple_column;
 	MPI_Type_vector (n * myTcols, 1, nprocs , MPI_DOUBLE, & multiple_column );
@@ -88,9 +86,9 @@ void SLGEWOPV_calc_last(double** A, double* b, double* x, int n, int rank, int n
 	MPI_Type_vector (n, myTcols, myTcols , MPI_DOUBLE, & multiple_column_contiguous );
 	MPI_Type_commit (& multiple_column_contiguous);
 
-	MPI_Datatype multiple_column_type;
-	MPI_Type_create_resized (multiple_column, 0, 1*sizeof(double), & multiple_column_type);
-	MPI_Type_commit (& multiple_column_type);
+	MPI_Datatype multiple_column_resized;
+	MPI_Type_create_resized (multiple_column, 0, 1*sizeof(double), & multiple_column_resized);
+	MPI_Type_commit (& multiple_column_resized);
 
 
 	/*
@@ -115,7 +113,6 @@ void SLGEWOPV_calc_last(double** A, double* b, double* x, int n, int rank, int n
 			}
 			T[j][j]=1/A[j][j];
 		}
-
 		// copy data into local buffer before broadcast
 		for (i=0; i<n; i++)
 		{
@@ -124,16 +121,12 @@ void SLGEWOPV_calc_last(double** A, double* b, double* x, int n, int rank, int n
 		}
 	}
 
-
 	// scatter columns to nodes
-	MPI_Scatter (&T[0][0], 1, multiple_column_type, &Tlocal[0][0], 1, multiple_column_contiguous, 0, MPI_COMM_WORLD);
+	MPI_Scatter (&T[0][0], 1, multiple_column_resized, &Tlocal[0][0], 1, multiple_column_contiguous, 0, MPI_COMM_WORLD);
 
-	// broadcast of the last col of T (K part)
+	// broadcast of the last col and the last row of T (K part)
 	MPI_Bcast (&TlastKc[0], n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
-	// broadcast of the last row of T (K part)
 	MPI_Bcast (&TlastKr[0], n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
 	//TODO: combine previous broadcasts in a single one
 
 	/*
@@ -210,8 +203,8 @@ void SLGEWOPV_calc_last(double** A, double* b, double* x, int n, int rank, int n
 			}
 		}
 
-		// collect chunks of K to "future" last node
-		MPI_Gather (&Tlocal[l-1][local[n]], myTcols/2, MPI_DOUBLE, &TlastKr[0], 1, interleaved_row_type, map[l-1], MPI_COMM_WORLD);
+		// collect chunks of last row of K to "future" last node
+		MPI_Gather (&Tlocal[l-1][local[n]], myTcols/2, MPI_DOUBLE, &TlastKr[0], 1, interleaved_row_resized, map[l-1], MPI_COMM_WORLD);
 
 		//future last node broadcasts last row and col of K
 		if (rank==map[l-1])
@@ -224,7 +217,6 @@ void SLGEWOPV_calc_last(double** A, double* b, double* x, int n, int rank, int n
 		}
 		MPI_Bcast (&TlastKc[0], n, MPI_DOUBLE, map[l-1], MPI_COMM_WORLD);
 		MPI_Bcast (&TlastKr[0], n, MPI_DOUBLE, map[l-1], MPI_COMM_WORLD);
-
 		//TODO: substitute Gather with an All-to-All
 		//TODO: or combine broadcasts in a single one
 	}
@@ -236,10 +228,12 @@ void SLGEWOPV_calc_last(double** A, double* b, double* x, int n, int rank, int n
 	}
 
 	// collect solution
-	MPI_Gather (&x[rank], 1, interleaved_row_type, &x[0], 1, interleaved_row_type, 0, MPI_COMM_WORLD);
+	MPI_Gather (&x[rank], 1, interleaved_row_resized, &x[0], 1, interleaved_row_resized, 0, MPI_COMM_WORLD);
 
+	// cleanup
 	free(local);
 	free(global);
+	free(map);
 	DeallocateVector(TlastKc);
 	DeallocateVector(TlastKr);
 	DeallocateVector(h);
@@ -261,7 +255,7 @@ void SLGEWOPV_calc_last(double** A, double* b, double* x, int n, int rank, int n
  *
  */
 
-void SLGEWOPV_calc_transition(double** A, double* b, double** T, double* x, int n, double* h, double* hh, int rank, int nprocs)
+void SLGEWOPV_calc_last_transition(double** A, double* b, double** T, double* x, int n, double* h, double* hh, int rank, int nprocs)
 {
 	// indexes
     int i,j,l;
@@ -443,52 +437,98 @@ void SLGEWOPV_calc_transition(double** A, double* b, double** T, double* x, int 
 
 	free(local);
 	free(global);
+	free(map);
 	DeallocateMatrix2D(Tlocal,n,CONTIGUOUS);
 }
 
 
 /*
- * IF _not_ removed from init
- * IF _not_ removed from calc
+ * IF removed from init
+ * IF removed from calc
  * init with p2p
  * calc with collectives
- * master calcs and broadcasts auxiliary causes
  */
 void SLGEWOPV_calc_sendopt(double** A, double* b, double* s, int n, double** K, double* H, int rank, int nprocs)
 {
-    double** X=A;
+	int i,j,l;				// indexes
+    int mycols;				// num of cols per process
+    	mycols=n/nprocs;
+    int myend;				// loop boundaries on local cols =mycols;
+    int mystart;
+
+	double** X=A;			// aliases
     double*  F=b;
-    double tmpAdiag;
 
-	// indexes
-    int i,j,l;
+    /*
+     * local storage for a part of the input matrix (continuous columns, not interleaved)
+     */
 
-    // map columns to process
-    int* map;
-    map=malloc(n*sizeof(int));
-	for (i=0; i<n; i++)
-	{
-		map[i]= i % nprocs;
-		s[i]=0.0;			// and init solution vector
-	}
+    double**	localK;
+    			localK=AllocateMatrix2D(n,mycols,CONTIGUOUS);
+    double**	localX;
+    			localX=AllocateMatrix2D(n,mycols,CONTIGUOUS);
 
-    // MPI derived types
+    double* 	lastKc;						// last col of K
+    			lastKc=AllocateVector(n);
+    double*		lastKr;						// last row of K
+				lastKr=AllocateVector(n);
+	double		tmpDiag;					// to hold a diagonal element during init
+
+	/*
+	 *  map columns to process
+	 */
+
+    int*	local;
+    		local=malloc(n*sizeof(int));
+	int*	map;
+    		map=malloc(n*sizeof(int));
+			for (i=0; i<n; i++)
+			{
+				map[i]= i % nprocs;			// who has the col i
+				local[i]=floor(i/nprocs);	// position of the column i(global) in the local matrix
+
+				s[i]=0.0;					// and init solution vector
+			}
+	int* 	global;
+    		global=malloc(n*sizeof(int));
+			for(i=0; i<mycols; i++)
+			{
+				global[i]= i * nprocs + rank; // position of the column i(local) in the global matrix
+			}
+
+	/*
+	 * MPI derived types
+	 */
+
 	MPI_Datatype single_column;
 	MPI_Type_vector (n, 1, n, MPI_DOUBLE, & single_column );
 	MPI_Type_commit (& single_column);
+
+	MPI_Datatype local_single_column;
+	MPI_Type_vector (n, 1, mycols, MPI_DOUBLE, & local_single_column );
+	MPI_Type_commit (& local_single_column);
+
+	MPI_Datatype multiple_column;
+	MPI_Type_vector (n * mycols, 1, nprocs , MPI_DOUBLE, & multiple_column );
+	MPI_Type_commit (& multiple_column);
+
+	MPI_Datatype multiple_column_resized;
+	MPI_Type_create_resized (multiple_column, 0, 1*sizeof(double), & multiple_column_resized);
+	MPI_Type_commit (& multiple_column_resized);
 
 	MPI_Datatype interleaved_row;
 	MPI_Type_vector (n/nprocs, 1, nprocs, MPI_DOUBLE, & interleaved_row );
 	MPI_Type_commit (& interleaved_row);
 
-	MPI_Datatype interleaved_row_type;
-	MPI_Type_create_resized (interleaved_row, 0, 1*sizeof(double), & interleaved_row_type);
-	MPI_Type_commit (& interleaved_row_type);
+	MPI_Datatype interleaved_row_resized;
+	MPI_Type_create_resized (interleaved_row, 0, 1*sizeof(double), & interleaved_row_resized);
+	MPI_Type_commit (& interleaved_row_resized);
 
 
 	/*
 	 * init inhibition table
 	 */
+
     MPI_Bcast (&b[0], n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
 	//send and recv inside loops, trying to overlap with calculations
@@ -496,148 +536,112 @@ void SLGEWOPV_calc_sendopt(double** A, double* b, double* s, int n, double** K, 
 	{
 		for (j=0; j<n; j++)
 		{
-
 			// init col of K
 			for (i=0; i<n; i++)
 			{
-				if (i==j)
-				{
-					K[i][j]=1;
-				}
-				else
-				{
-					K[i][j]=A[j][i]/A[i][i];
-				}
+				K[i][j]=A[j][i]/A[i][i];
+				// when i==j -> K[i][j]=1
 			}
-			// send columns (all but last one) to single nodes (other than root)
-			//last one of K is broadcasted to all nodes later
-			if (map[j]!=0 && j<n-1)
-			{
-				MPI_Send (&K[0][j], 1, single_column, map[j], j+n, MPI_COMM_WORLD);
-			}
+
+			MPI_Send (&K[0][j], 1, single_column, map[j], j+n, MPI_COMM_WORLD);
 		}
 		for (j=0; j<n; j++)
 		{
 			// init col of X
+			tmpDiag=1/A[j][j];
 			for (i=0; i<n; i++)
 			{
-				if (i==j)
-				{
-					X[i][i]=1/A[i][i];
-				}
-				else
-				{
-					X[i][j]=0.0;
-				}
+				X[i][j]=0.0;
 			}
-			// send col of X to non-root nodes
-			if (map[j]!=0)
-			{
-				MPI_Send (&X[0][j], 1, single_column, map[j], j, MPI_COMM_WORLD);
-			}
+			X[j][j]=tmpDiag;
 
+			MPI_Send (&X[0][j], 1, single_column, map[j], j, MPI_COMM_WORLD);
+		}
+		// copy data into local buffer before broadcast
+		for (i=0; i<n; i++)
+		{
+			lastKc[i]=K[i][n-1];
+			lastKr[i]=K[n-1][i];
 		}
 	}
-	else // non root
+
+	// receive
+	for (j=0; j<mycols; j++)
 	{
-		for (j=0; j<n-1; j++)
-		{
-			// receive
-			if (rank==map[j])
-			{
-				MPI_Recv (&X[0][j], 1, single_column, 0, j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-				MPI_Recv (&K[0][j], 1, single_column, 0, j+n, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-			}
-		}
-		if (rank==map[n-1])
-		{
-			MPI_Recv (&X[0][n-1], 1, single_column, 0, n-1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-		}
+		MPI_Recv (&localX[0][j], 1, local_single_column, 0, global[j], MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+		MPI_Recv (&localK[0][j], 1, local_single_column, 0, global[j]+n, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 	}
 
-	// broadcast last column of K
-	MPI_Bcast (&K[0][n-1], 1, single_column, 0, MPI_COMM_WORLD);
-
-	// broadcast of the last row of K
-	MPI_Bcast (&K[n-1][0], n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
+	// broadcast last column and last row of K
+	MPI_Bcast (&lastKc[0], n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+	MPI_Bcast (&lastKr[0], n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	//TODO: combine previous broadcasts in a single one
 
 	/*
 	 *  calc inhibition sequence
 	 */
+
 	for (l=n-1; l>0; l--)
 	{
+
 		for (i=0; i<l; i++)
 		{
-			H[i]=1/(1-K[i][l]*K[l][i]);
+			H[i]=1/(1-lastKr[i]*lastKc[i]);
+			F[i]=F[i]-F[l]*lastKr[i];
 		}
 		for (j=rank; j<l; j+=nprocs)
 		{
-			X[j][j]=H[j]*(X[j][j]-K[j][l]*X[l][j]);
+			localX[j][local[j]]=H[j]*(localX[j][local[j]]-lastKc[j]*localX[l][local[j]]);
 		}
 		for (i=0; i<l; i++)
 		{
-
 			for (j=n-(nprocs-rank-1)-1; j>=l; j-=nprocs)
 			{
-				X[i][j]=H[i]*(X[i][j]-K[i][l]*X[l][j]);
+				localX[i][local[j]]=H[i]*(localX[i][local[j]]-lastKc[i]*localX[l][local[j]]);
 			}
 			for (j=rank; j<l; j+=nprocs)
 			{
-				K[i][j]=H[i]*(K[i][j]-K[i][l]*K[l][j]);
+				localK[i][local[j]]=H[i]*(localK[i][local[j]]-lastKc[i]*localK[l][local[j]]);
 			}
 		}
-		/*
-		if(rank!=map[l-1])
-		{
-			MPI_Send (&K[l-1][rank],1,interleaved_row, map[l-1],rank, MPI_COMM_WORLD);
-		}
-		else
-		{
-			for(j=0;j<nprocs;j++)
-			{
-				if(j!=rank)
-				{
-					MPI_Recv (&K[l-1][j],1,interleaved_row, j,j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-				}
-			}
-		}
-		*/
-		// collect chunks of K to "future" last node
-		MPI_Gather (&K[l-1][rank], 1, interleaved_row_type, &K[l-1][0], 1, interleaved_row_type, map[l-1], MPI_COMM_WORLD);
+
+		// collect chunks of last row of K to "future" last node
+		MPI_Gather (&localK[l-1][0], mycols, MPI_DOUBLE, &lastKr[0], 1, interleaved_row_resized, map[l-1], MPI_COMM_WORLD);
 
 		//future last node broadcasts last row and col of K
-		MPI_Bcast (&K[0][l-1], 1, single_column, map[l-1], MPI_COMM_WORLD);
-		MPI_Bcast (&K[l-1][0], n, MPI_DOUBLE, map[l-1], MPI_COMM_WORLD);
-
-		//TODO: combine previous broadcasts in a single one
-	}
-
-	// master calcs and broadcasts auxiliary causes
-    if (rank==0)
-    {
-		for (i=n-2; i>=0; i--)
+		if (rank==map[l-1])
 		{
-			for (l=i+1; l<n; l++)
+			// copy data into local buffer before broadcast
+			for (i=0; i<n; i++)
 			{
-				F[i]=F[i]-F[l]*K[l][i];
+				lastKc[i]=localK[i][local[l-1]];
 			}
 		}
-    }
-	MPI_Bcast (F, n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+		MPI_Bcast (&lastKc[0], n, MPI_DOUBLE, map[l-1], MPI_COMM_WORLD);
+		MPI_Bcast (&lastKr[0], n, MPI_DOUBLE, map[l-1], MPI_COMM_WORLD);
+		//TODO: combine previous broadcasts in a single one
+	}
 
 	// calc solution on nodes
 	for (j=rank; j<n; j+=nprocs)
 	{
 		for (l=0; l<n; l++)
 		{
-			s[j]=F[l]*X[l][j]+s[j];
+			s[j]=F[l]*localX[l][local[j]]+s[j];
 		}
 	}
 
 	// collect solution
-	MPI_Gather (&s[rank], 1, interleaved_row_type, &s[0], 1, interleaved_row_type, 0, MPI_COMM_WORLD);
+	MPI_Gather (&s[rank], 1, interleaved_row, &s[0], 1, interleaved_row_resized, 0, MPI_COMM_WORLD);
+
+	// cleanup
+	free(local);
+	free(global);
+	free(map);
+	DeallocateMatrix2D(localK,n,CONTIGUOUS);
+	DeallocateMatrix2D(localX,n,CONTIGUOUS);
+	DeallocateVector(lastKr);
+	DeallocateVector(lastKc);
 }
 
 
