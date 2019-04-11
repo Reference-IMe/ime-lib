@@ -21,7 +21,7 @@ void SLGEWOPV_calc_last(double** A, double* b, double* x, int n, int rank, int n
      * local storage for a part of the input matrix (continuous columns, not interleaved)
      */
     double** Tlocal;
-    		Tlocal=AllocateMatrix2D(n, myTcols, CONTIGUOUS);
+    		 Tlocal=AllocateMatrix2D(n, myTcols, CONTIGUOUS);
 
     double** T;
 			if (rank==0)
