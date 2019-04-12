@@ -39,6 +39,7 @@ double** AllocateMatrix2D(cui rows, cui cols, cui allocation_type)
 	return(mat);
 }
 
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 void DeallocateMatrix2D(double** mat, cui rows, cui allocation_type)
 {
 	ui r;
