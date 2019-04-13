@@ -8,7 +8,8 @@
 
 #include <unistd.h>
 
-void SLGEWOPV_calc_last_cs(double** A, double* b, double* x, int n, int rank, int cprocs, int sprocs, double** T, double** Tlocal, double* TlastKc, double* TlastKr, double* h, double* hh)
+//void SLGEWOPV_calc_last_cs(double** A, double* b, double* x, int n, int rank, int cprocs, int sprocs, double** T, double** Tlocal, double* TlastKc, double* TlastKr, double* h, double* hh)
+void SLGEWOPV_calc_last_cs(double** A, double* b, double* x, int n, int rank, int cprocs, int sprocs)
 {
 	int i,j,l;						// indexes
 	int XKcols=2*n;					// num of cols X + K
@@ -25,7 +26,7 @@ void SLGEWOPV_calc_last_cs(double** A, double* b, double* x, int n, int rank, in
      * local storage for a part of the input matrix (continuous columns, not interleaved)
      */
 
-    /*
+
     double** Tlocal;
     Tlocal=AllocateMatrix2D(n, myTcols, CONTIGUOUS);
 
@@ -40,15 +41,23 @@ void SLGEWOPV_calc_last_cs(double** A, double* b, double* x, int n, int rank, in
 				T=Tlocal;				// dummy assignment to avoid segfault (i.e. in  next scatter)
 			}
 
+	/*
     double* TlastKc;					// last col of T (K)
     		TlastKc=AllocateVector(n);
     double* TlastKr;					// last row of T (K part)
     		TlastKr=AllocateVector(n);
+    */
+
+	double** TlastK;
+			TlastK=AllocateMatrix2D(2,n, CONTIGUOUS); // last col [0] and row [1] of T (K part)
+	double* TlastKc=&TlastK[0][0];
+	double* TlastKr=&TlastK[1][0];
+
     double* h;							// helper vectors
     		h=AllocateVector(n);
     double* hh;
 			hh=AllocateVector(n);
-*/
+
 	/*
 	 * map columns to process
 	 */
@@ -182,10 +191,12 @@ void SLGEWOPV_calc_last_cs(double** A, double* b, double* x, int n, int rank, in
 	}
 
 	// broadcast of the last col and the last row of T (K part)
+	/*
 	MPI_Bcast (&TlastKc[0], n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	MPI_Bcast (&TlastKr[0], n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 	//TODO: combine previous broadcasts in a single one
-
+	*/
+	MPI_Bcast (&TlastK[0][0], 2*n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
 	/*
 	 *  calc inhibition sequence
@@ -333,11 +344,13 @@ void SLGEWOPV_calc_last_cs(double** A, double* b, double* x, int n, int rank, in
 				TlastKc[i]=Tlocal[i][local[Scols+n+l-1]];
 			}
 		}
+		/*
 		MPI_Bcast (&TlastKc[0], n, MPI_DOUBLE, map[Scols+n+l-1], MPI_COMM_WORLD);
 		MPI_Bcast (&TlastKr[0], n, MPI_DOUBLE, map[Scols+n+l-1], MPI_COMM_WORLD);
 		//TODO: substitute Gather with an All-to-All
 		//TODO: or combine broadcasts in a single one
-
+		*/
+		MPI_Bcast (&TlastK[0][0], 2*n, MPI_DOUBLE, map[Scols+n+l-1], MPI_COMM_WORLD);
 	}
 
 	// only to debug
@@ -396,6 +409,8 @@ void SLGEWOPV_calc_last_cs(double** A, double* b, double* x, int n, int rank, in
 	/*
 	DeallocateVector(TlastKc);
 	DeallocateVector(TlastKr);
+	*/
+	DeallocateMatrix2D(TlastK,2*n,CONTIGUOUS);
 	DeallocateVector(h);
 	DeallocateVector(hh);
 	DeallocateMatrix2D(Tlocal,n,CONTIGUOUS);
@@ -403,5 +418,5 @@ void SLGEWOPV_calc_last_cs(double** A, double* b, double* x, int n, int rank, in
     {
     	DeallocateMatrix2D(T,n,CONTIGUOUS);
     }
-	*/
+
 }
