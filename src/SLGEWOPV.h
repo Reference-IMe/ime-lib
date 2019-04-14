@@ -267,6 +267,10 @@ void SLGEWOPV_calc_last(double** A, double* b, double* x, int n, int rank, int c
  * IF removed from calc
  * init with p2p
  * calc with collectives
+ *
+ * ATTENTION: too many send-recv filling the queue
+ * TODO: replace with non-blocking comm.
+ *
  */
 void SLGEWOPV_calc_sendopt(double** A, double* b, double* s, int n, int rank, int cprocs)
 {
@@ -284,7 +288,6 @@ void SLGEWOPV_calc_sendopt(double** A, double* b, double* s, int n, int rank, in
 				{
 					K=AllocateMatrix2D(n,n,CONTIGUOUS);
 				}
-
 
     /*
      * local storage for a part of the input matrix (continuous columns, not interleaved)
