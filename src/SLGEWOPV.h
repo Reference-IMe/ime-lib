@@ -191,11 +191,11 @@ void SLGEWOPV_calc_last(double** A, double* b, double* x, int n, int rank, int c
 			{
 				Tlocal[i][local[l]]= -Tlocal[l][local[l]]*hh[i];
 			}
-		}
+		}// TODO: incorporate with next block to form l .. n+l-1
 
 		// l+1 .. n+l-1
 		// all other cases
-		mystart=local[l+1];
+		mystart=local[l+1]; // TODO: incorporate l
 		if (rank<map[l+1])
 		{
 			mystart++;
@@ -205,7 +205,7 @@ void SLGEWOPV_calc_last(double** A, double* b, double* x, int n, int rank, int c
 		{
 			myend--;
 		}
-		for (j=mystart; j<=myend; j++)
+		for (j=mystart; j<=myend; j++) // TODO: swap loops
 		{
 			for (i=0; i<=l-1; i++)
 			{
