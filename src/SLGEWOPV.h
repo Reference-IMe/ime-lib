@@ -241,7 +241,15 @@ void SLGEWOPV_calc_last(double** A, double* b, double* x, int n, int rank, int c
 	}
 
 	// collect solution
-	MPI_Gather (&x[rank], 1, interleaved_row_resized, &x[0], 1, interleaved_row_resized, 0, MPI_COMM_WORLD);
+	// MPI_IN_PLACE required for MPICH based versions
+	if (rank==0)
+	{
+		MPI_Gather (MPI_IN_PLACE, 1, interleaved_row_resized, &x[0], 1, interleaved_row_resized, 0, MPI_COMM_WORLD);
+	}
+	else
+	{
+		MPI_Gather (&x[rank], 1, interleaved_row_resized, &x[0], 1, interleaved_row_resized, 0, MPI_COMM_WORLD);
+	}
 
 	// cleanup
 	free(local);
