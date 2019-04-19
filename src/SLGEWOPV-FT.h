@@ -400,8 +400,18 @@ void SLGEWOPV_calc_last_cs(double** A, double* b, double* x, int n, int rank, in
 		{
 			x[global[i]]=x[global[i]]+Tlocal[0][i]*b[0];
 		}
+
 		// collect solution
-		MPI_Gather (&x[rank], 1, interleaved_row_resized, &x[0], 1, interleaved_row_resized, 0, comm_calc);
+		//MPI_Gather (&x[rank], 1, interleaved_row_resized, &x[0], 1, interleaved_row_resized, 0, comm_calc);
+		// MPI_IN_PLACE required for MPICH based versions
+		if (rank==0)
+		{
+			MPI_Gather (MPI_IN_PLACE, 1, interleaved_row_resized, &x[0], 1, interleaved_row_resized, 0, comm_calc);
+		}
+		else
+		{
+			MPI_Gather (&x[rank], 1, interleaved_row_resized, &x[0], 1, interleaved_row_resized, 0, comm_calc);
+		}
 	}
 
 
