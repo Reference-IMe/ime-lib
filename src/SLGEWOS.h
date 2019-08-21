@@ -6,7 +6,105 @@
 #include "helpers/matrix.h"
 #include "helpers/vector.h"
 
-void SLGEWOS_calc_last(double** A, double* b, double** T, double* x, int n, double* h, double* hh)
+// optimized initialization, 1D version
+void SLGEWOS_calc_last(double* A, double* b, double* T, double* x, int n, double* h, double* hh)
+{
+    int i,j,l;
+    int d=2*n;
+
+    double denAii;
+
+	for (i=0;i<n;i++)
+	{
+		for (j=0;j<i;j++) // split loop (left part)
+		{
+			T[i*d+j]=0;
+		}
+		denAii=1/A[i*n+i]; // calc once for the entire row
+		T[i*d+i]=denAii;
+		x[i]=0.0;
+		for (j=i+1;j<n;j++) // split loop (right part)
+		{
+			T[i*d+j]=0;
+		}
+		for (j=0;j<n;j++)
+		{
+			T[i*d+j+n]=A[j*n+i]*denAii;
+		}
+	}
+
+
+	for (l=n-1; l>=0; l--)
+	{
+		for (i=l; i<=n-1; i++)
+		{
+			x[i]=x[i]+T[l*d+i]*b[l];
+		}
+		for (i=0; i<=l-1; i++)
+		{
+			b[i]=b[i]-T[l*d+n+i]*b[l];
+			*h   =1/(1-T[i*d+n+l]*T[l*d+n+i]);
+			*hh  =T[i*d+n+l]*(*h);
+			T[i*d+i]=T[i*d+i]*(*h);
+			T[i*d+l]= -T[l*d+l]*(*hh);
+			for (j=l+1; j<=n+l-1; j++)
+			{
+				T[i*d+j]=T[i*d+j]*(*h)-T[l*d+j]*(*hh);
+			}
+		}
+	}
+}
+
+// orginal, optimized initialization
+void SLGEWOS_calc_initopt(double** A, double* b, double** T, double* x, int n, double* h, double* hh)
+{
+    int i,j,l;
+
+    double denAii;
+
+	for (i=0;i<n;i++)
+	{
+		for (j=0;j<i;j++) // split loop (left part)
+		{
+			T[i][j]=0;
+		}
+		denAii=1/A[i][i]; // calc once for the entire row
+		T[i][i]=denAii;
+		x[i]=0.0;
+		for (j=i+1;j<n;j++) // split loop (right part)
+		{
+			T[i][j]=0;
+		}
+		for (j=0;j<n;j++)
+		{
+			T[i][j+n]=A[j][i]*denAii;
+		}
+	}
+
+
+	for (l=n-1; l>=0; l--)
+	{
+		for (i=l; i<=n-1; i++)
+		{
+			x[i]=x[i]+T[l][i]*b[l];
+		}
+		for (i=0; i<=l-1; i++)
+		{
+			b[i]=b[i]-T[l][n+i]*b[l];
+			*h   =1/(1-T[i][n+l]*T[l][n+i]);
+			*hh  =T[i][n+l]*(*h);
+			T[i][i]=T[i][i]*(*h);
+			T[i][l]= -T[l][l]*(*hh);
+			for (j=l+1; j<=n+l-1; j++)
+			{
+				T[i][j]=T[i][j]*(*h)-T[l][j]*(*hh);
+			}
+		}
+	}
+}
+
+// orginal, non-optimized initialization
+void SLGEWOS_calc_initnonopt(double** A, double* b, double** T, double* x, int n, double* h, double* hh)
 {
     int i,j,l;
     //int rows=n;
@@ -100,6 +198,7 @@ void SLGEWOS_calc_last(double** A, double* b, double** T, double* x, int n, doub
 }
 */
 
+// daniela's original version
 void SLGEWOS_calc_paper(double** A, double* b, double** T, double* x, int n, double* H)
 {
     int i,j,l;
