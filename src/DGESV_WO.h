@@ -20,7 +20,7 @@ void DGESV_WO(int n, double** A, int m, double** bb, double** xx)
     T=AllocateMatrix2D(n,d,CONTIGUOUS);	// allocate table
 
     DGEIT_W(A, T, n);		// init inhibition table
-    DGEZR(xx, n, m);			// init solution vectors
+    DGEZR(xx, n, m);		// init solution vectors
 
 	for (l=n-1; l>=0; l--)
 	{
