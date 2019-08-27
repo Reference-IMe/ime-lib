@@ -1,6 +1,9 @@
 /*
- *	init inhibition table and solution vector
+ *	init (IT) inhibition table T
+ *	from general (GE) system matrix A of doubles (D)
+ *
  */
+
 void DGEIT_W_1D(double* A, double* T, int n)
 {
     int i,j;
