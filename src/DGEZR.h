@@ -1,6 +1,11 @@
 /*
- *	zero (ZR) general (GE) matrix of doubles (D)
+ *	zero (ZR) general (GE) matrix mat of rows x cols doubles (D)
+ *
  */
+
+#ifndef __DGEZR_H__
+#define __DGEZR_H__
+
 void DGEZR(double** mat, int rows, int cols)
 {
     int i,j;
@@ -13,3 +18,5 @@ void DGEZR(double** mat, int rows, int cols)
 		}
 	}
 }
+
+#endif

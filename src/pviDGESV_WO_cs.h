@@ -1,16 +1,21 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
+#include <mpi.h>
 #include "helpers/matrix.h"
 #include "helpers/vector.h"
-#include <mpi.h>
+#include "DGEZR.h"
+#include "DGEIT_Wx.h"
 
-#include <unistd.h>
+/*
+ *	solve (SV) system with general (GE) matrix A of doubles (D)
+ *	of order n and with m r.h.s in matrix bb and solutions in xx
+ *	with wide overwrite (WO) memory model and checksumming (cs)
+ *	parallelized in interleaved columns (pvi) over cprocs calculating processors and sprocs summing processors
+ *	without optimized initialization
+ *
+ */
 
-void SLGEWOPV_calc_last_mcs(double** A, double* b, double* x, int n, int rank, int cprocs, int sprocs)
+void pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, int rank, int cprocs, int sprocs)
 {
-	int i,j,l,p;						// indexes
+	int i,j,l,p,rhs;				// indexes
 	int XKcols=2*n;					// num of cols X + K
     int myTcols;					// num of cols per process
     	myTcols=XKcols/cprocs;
@@ -68,7 +73,7 @@ void SLGEWOPV_calc_last_mcs(double** A, double* b, double* x, int n, int rank, i
     		{
 				for (i=XKcols; i<Tcols; i++)
 				{
-					map[i]= cprocs + ((i-XKcols) % sprocs);				// n+1th has the first cols of T (S)
+					map[i]= cprocs + ((i-XKcols) % sprocs);		// n+1th has the first cols of T (S)
 					local[i]= (i-XKcols) % sprocs;				// position of the column i(global) in the local matrix
 				}
 				for (i=0; i<XKcols; i++)
@@ -136,6 +141,14 @@ void SLGEWOPV_calc_last_mcs(double** A, double* b, double* x, int n, int rank, i
 	MPI_Type_create_resized (interleaved_row, 0, 1*sizeof(double), & interleaved_row_resized);
 	MPI_Type_commit (& interleaved_row_resized);
 
+	MPI_Datatype multiple_row;
+	MPI_Type_vector (n/cprocs, m, m*cprocs, MPI_DOUBLE, & multiple_row );
+	MPI_Type_commit (& multiple_row);
+
+	MPI_Datatype multiple_row_resized;
+	MPI_Type_create_resized (multiple_row, 0, m*sizeof(double), & multiple_row_resized);
+	MPI_Type_commit (& multiple_row_resized);
+
 	int i_am_calc;
 		if (rank>=cprocs)
 		{
@@ -163,14 +176,11 @@ void SLGEWOPV_calc_last_mcs(double** A, double* b, double* x, int n, int rank, i
 	 *  init inhibition table
 	 */
 
-    MPI_Bcast (&b[0], n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     if (i_am_calc)
     {
-		for (i=0; i<n; i++)
-		{
-			x[i]=0.0;
-		}
+        DGEZR(xx, n, m);				// init (zero) solution vectors
 
 		if (rank==0)
 		{
@@ -237,40 +247,11 @@ void SLGEWOPV_calc_last_mcs(double** A, double* b, double* x, int n, int rank, i
 		{
 			h[i]   = 1/(1-TlastKc[i]*TlastKr[i]);
 			hh[i]  = TlastKc[i]*h[i];
-			b[i]   = b[i]-TlastKr[i]*b[l];
-		}
-
-		// only to debug
-		/*
-		for (j=0; j<Tcols; j++)
-		{
-			if (rank==map[j])
+			for(rhs=0;rhs<m;rhs++)
 			{
-				//printf("%d#%d (%d) sends %d with tag %d\n",l,rank,map[j],j,j);
-				MPI_Send (&Tlocal[0][local[j]], 1, local_single_column, 0, j, MPI_COMM_WORLD);
+				bb[i][rhs] = bb[i][rhs]-TlastKr[i]*bb[l][rhs];
 			}
 		}
-		if (rank==0)
-		{
-			for (j=0; j<Tcols; j++)
-			{
-				//printf("%d#%d recvs %d from %d with tag %d\n",l,rank,j,map[j],j);
-				MPI_Recv (&T[0][j], 1, single_column, map[j], j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-			}
-			printf("\n*%d::\n",l);
-			PrintMatrix2D(T,n,Tcols);
-			printf("lastC:\n");
-			PrintVector(TlastKc,n);
-			printf("lastR:\n");
-			PrintVector(TlastKr,n);
-			printf("h:\n");
-			PrintVector(h,n);
-			printf("\nb:\n");
-			PrintVector(b,n);
-		}
-		*/
-		// end debug
-
 
 		if (rank<cprocs)
 		{
@@ -283,7 +264,10 @@ void SLGEWOPV_calc_last_mcs(double** A, double* b, double* x, int n, int rank, i
 			}
 			for (i=mystart; i<=local[n-1]; i++)
 			{
-				x[global[i]]=x[global[i]]+Tlocal[l][i]*b[l];
+				for(rhs=0;rhs<m;rhs++)
+				{
+					xx[global[i]][rhs]=xx[global[i]][rhs]+Tlocal[l][i]*bb[l][rhs];
+				}
 			}
 
 			// update T
@@ -363,69 +347,35 @@ void SLGEWOPV_calc_last_mcs(double** A, double* b, double* x, int n, int rank, i
 		MPI_Bcast (&TlastK[0][0], 2*n, MPI_DOUBLE, map[n+l-1], MPI_COMM_WORLD);
 	}
 
-	// only to debug
-	/*
-	for (j=0; j<Tcols; j++)
-	{
-		if (rank==map[j])
-		{
-			//printf("%d#%d (%d) sends %d with tag %d\n",l,rank,map[j],j,j);
-			MPI_Send (&Tlocal[0][local[j]], 1, local_single_column, 0, j, MPI_COMM_WORLD);
-		}
-	}
-	if (rank==0)
-	{
-		for (j=0; j<Tcols; j++)
-		{
-			//printf("%d#%d recvs %d from %d with tag %d\n",l,rank,j,map[j],j);
-			MPI_Recv (&T[0][j], 1, single_column, map[j], j, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-		}
-		printf("*%d::\n",l);
-		PrintMatrix2D(T,n,Tcols);
-		printf("lastC:\n");
-		PrintVector(TlastKc,n);
-		printf("lastR:\n");
-		PrintVector(TlastKr,n);
-		printf("h:\n");
-		PrintVector(h,n);
-		printf("\nb:\n");
-		PrintVector(b,n);
-	}
-	*/
-	// end debug
-
 	// last level (l=0)
 
 	if (i_am_calc)
 	{
 		for (i=0; i<myTcols/2; i++)
 		{
-			x[global[i]]=x[global[i]]+Tlocal[0][i]*b[0];
+			for(rhs=0;rhs<m;rhs++)
+			{
+				xx[global[i]][rhs]=xx[global[i]][rhs]+Tlocal[0][i]*bb[0][rhs];
+			}
 		}
 
 		// collect solution
-		//MPI_Gather (&x[rank], 1, interleaved_row_resized, &x[0], 1, interleaved_row_resized, 0, comm_calc);
 		// MPI_IN_PLACE required for MPICH based versions
 		if (rank==0)
 		{
-			MPI_Gather (MPI_IN_PLACE, 1, interleaved_row_resized, &x[0], 1, interleaved_row_resized, 0, comm_calc);
+			MPI_Gather (MPI_IN_PLACE, 1, multiple_row_resized, &xx[0][0], 1, multiple_row_resized, 0, comm_calc);
 		}
 		else
 		{
-			MPI_Gather (&x[rank], 1, interleaved_row_resized, &x[0], 1, interleaved_row_resized, 0, comm_calc);
+			MPI_Gather (&xx[rank][0], 1, multiple_row_resized, &xx[0][0], 1, multiple_row_resized, 0, comm_calc);
 		}
 	}
-
 
 	// cleanup
 	free(local);
 	free(global);
 	free(map);
 
-	/*
-	DeallocateVector(TlastKc);
-	DeallocateVector(TlastKr);
-	*/
 	DeallocateMatrix2D(TlastK,2,CONTIGUOUS);
 	DeallocateVector(h);
 	DeallocateVector(hh);

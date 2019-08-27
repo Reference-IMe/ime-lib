@@ -1,9 +1,13 @@
 #include "helpers/matrix.h"
-#include "DGEIT_W.h"
+#include "DGEIT_Wx.h"
 #include "DGEZR.h"
 
 /*
+ *	solve (SV) system with general (GE) matrix A of doubles (D)
+ *	of order n and with m r.h.s in matrix bb and solutions in xx
+ *	with wide overwrite (WO) memory model
  *	with optimized initialization
+ *
  */
 
 void DGESV_WO(int n, double** A, int m, double** bb, double** xx)
@@ -15,7 +19,6 @@ void DGESV_WO(int n, double** A, int m, double** bb, double** xx)
     double hh;
     double denAii;
     double** T;
-
 
     T=AllocateMatrix2D(n,d,CONTIGUOUS);	// allocate table
 
