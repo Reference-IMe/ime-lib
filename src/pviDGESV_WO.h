@@ -1,21 +1,23 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
+#include <mpi.h>
 #include "helpers/matrix.h"
 #include "helpers/vector.h"
-#include "helpers/types.h"
-#include "DGEIT_W.h"
 #include "DGEZR.h"
-#include <mpi.h>
+#include "DGEIT_Wx.h"
 
-#include <unistd.h>
+/*
+ *	solve (SV) system with general (GE) matrix A of doubles (D)
+ *	of order n and with m r.h.s in matrix bb and solutions in xx
+ *	with wide overwrite (WO) memory model
+ *	parallelized in interleaved columns (pvi) over cprocs calculating processors
+ *	without optimized initialization
+ *
+ */
 
-void pDGESV_WO(int n, double** A, int m, double** b, double** x, int rank, int cprocs)
+void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, int rank, int cprocs)
 {
 	int i,j,l;						// indexes
     int Tcols=2*n;					// total num of cols (X + K)
-    int myTcols;						// num of cols per process
+    int myTcols;					// num of cols per process
     	myTcols=Tcols/cprocs;
     int myend;						// loop boundaries on local cols =myTcols/2;
     int mystart;
@@ -106,9 +108,9 @@ void pDGESV_WO(int n, double** A, int m, double** b, double** x, int rank, int c
 	 *  init inhibition table
 	 */
 
-    MPI_Bcast (&b[0][0], n*m, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-    DGEZR(x, n, m);				// init (zero) solution vectors
+    DGEZR(xx, n, m);			// init (zero) solution vectors
 
 	if (rank==0)
 	{
@@ -142,7 +144,7 @@ void pDGESV_WO(int n, double** A, int m, double** b, double** x, int rank, int c
 		{
 			for(rhs=0;rhs<m;rhs++)
 			{
-				x[global[i]][rhs]=x[global[i]][rhs]+Tlocal[l][i]*b[l][rhs];
+				xx[global[i]][rhs]=xx[global[i]][rhs]+Tlocal[l][i]*bb[l][rhs];
 			}
 		}
 
@@ -154,7 +156,7 @@ void pDGESV_WO(int n, double** A, int m, double** b, double** x, int rank, int c
 			hh[i]  = TlastKc[i]*h[i];
 			for(rhs=0;rhs<m;rhs++)
 			{
-				b[i][rhs] = b[i][rhs]-TlastKr[i]*b[l][rhs];
+				bb[i][rhs] = bb[i][rhs]-TlastKr[i]*bb[l][rhs];
 			}
 		}
 
@@ -230,7 +232,7 @@ void pDGESV_WO(int n, double** A, int m, double** b, double** x, int rank, int c
 	{
 		for(rhs=0;rhs<m;rhs++)
 		{
-			x[global[i]][rhs]=x[global[i]][rhs]+Tlocal[0][i]*b[0][rhs];
+			xx[global[i]][rhs]=xx[global[i]][rhs]+Tlocal[0][i]*bb[0][rhs];
 		}
 	}
 
@@ -238,11 +240,11 @@ void pDGESV_WO(int n, double** A, int m, double** b, double** x, int rank, int c
 	// MPI_IN_PLACE required for MPICH based versions
 	if (rank==0)
 	{
-		MPI_Gather (MPI_IN_PLACE, 1, multiple_row_resized, &x[0][0], 1, multiple_row_resized, 0, MPI_COMM_WORLD);
+		MPI_Gather (MPI_IN_PLACE, 1, multiple_row_resized, &xx[0][0], 1, multiple_row_resized, 0, MPI_COMM_WORLD);
 	}
 	else
 	{
-		MPI_Gather (&x[rank][0], 1, multiple_row_resized, &x[0][0], 1, multiple_row_resized, 0, MPI_COMM_WORLD);
+		MPI_Gather (&xx[rank][0], 1, multiple_row_resized, &xx[0][0], 1, multiple_row_resized, 0, MPI_COMM_WORLD);
 	}
 
 	// cleanup

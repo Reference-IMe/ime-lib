@@ -1,9 +1,13 @@
-#include "helpers/matrix.h"
-#include "DGEIT_W_1D.h"
+#include "../helpers/matrix.h"
+#include "DGEIT_Wx_1D.h"
 #include "DGEZR_1D.h"
 
 /*
+ *	solve (SV) system with general (GE) matrix A of doubles (D)
+ *	of order n and with m r.h.s in matrix bb and solutions in xx
+ *	with wide overwrite (WO) memory model
  *	with optimized initialization, 1D version
+ *
  */
 
 void DGESV_WO_1D(int n, double* A, int m, double* bb, double* xx)
