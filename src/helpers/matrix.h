@@ -107,6 +107,19 @@ void OneMatrix2D(double** mat, cui rows, cui cols)
 	}
 }
 
+void ReferenceMatrix2D(double** mat, cui rows, cui cols)
+{
+	ui r,c;
+
+	for(r=0;r<rows;r++)
+	{
+		for(c=0;c<cols;c++)
+		{
+			mat[r][c]=pow(10,ceil(log10(cols+1)))*(r+1)+c+1;
+		}
+	}
+}
+
 //// 1D matrices
 
 double* AllocateMatrix1D(cui rows, cui cols)
