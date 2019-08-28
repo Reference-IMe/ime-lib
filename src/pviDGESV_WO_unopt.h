@@ -10,10 +10,11 @@
  *	with wide overwrite (WO) memory model
  *	parallelized in interleaved columns (pvi) over cprocs calculating processors
  *	without optimized initialization
+ *	without optimized loops
  *
  */
 
-void pviDGESV_WO_swaploop(int n, double** A, int m, double** bb, double** xx, int rank, int cprocs)
+void pviDGESV_WO_unopt(int n, double** A, int m, double** bb, double** xx, int rank, int cprocs)
 {
 	int i,j,l;						// indexes
     int Tcols=2*n;					// total num of cols (X + K)
@@ -133,7 +134,6 @@ void pviDGESV_WO_swaploop(int n, double** A, int m, double** bb, double** xx, in
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
 	{
-		// ALL procs
 		// update solutions
 		// l .. n-1
 		mystart=local[l];
@@ -149,8 +149,8 @@ void pviDGESV_WO_swaploop(int n, double** A, int m, double** bb, double** xx, in
 			}
 		}
 
-		// ALL procs
 		// update helpers
+		// every process
 		for (i=0; i<=l-1; i++)
 		{
 			h[i]   = 1/(1-TlastKc[i]*TlastKr[i]);
@@ -165,7 +165,6 @@ void pviDGESV_WO_swaploop(int n, double** A, int m, double** bb, double** xx, in
 		// to avoid IFs: each process loops on its own set of cols, with indirect addressing
 
 		// 0 .. l-1
-		// ALL procs
 		// processes with diagonal elements not null
 		mystart=0;
 		myend=local[l-1];
@@ -179,7 +178,6 @@ void pviDGESV_WO_swaploop(int n, double** A, int m, double** bb, double** xx, in
 		}
 
 		// l
-		// ONLY one proc
 		// process with full not null column (column l)
 		if (rank==map[l])
 		{
@@ -190,7 +188,6 @@ void pviDGESV_WO_swaploop(int n, double** A, int m, double** bb, double** xx, in
 		}// TODO: incorporate with next block to form l .. n+l-1
 
 		// l+1 .. n+l-1
-		// ALL procs
 		// all other cases
 		mystart=local[l+1]; // TODO: incorporate l
 		if (rank<map[l+1])
@@ -202,18 +199,9 @@ void pviDGESV_WO_swaploop(int n, double** A, int m, double** bb, double** xx, in
 		{
 			myend--;
 		}
-		/*
 		for (j=mystart; j<=myend; j++) // TODO: swap loops
 		{
 			for (i=0; i<=l-1; i++)
-			{
-				Tlocal[i][j]=Tlocal[i][j]*h[i]-Tlocal[l][j]*hh[i];
-			}
-		}
-		*/
-		for (i=0; i<=l-1; i++)
-		{
-			for (j=mystart; j<=myend; j++)
 			{
 				Tlocal[i][j]=Tlocal[i][j]*h[i]-Tlocal[l][j]*hh[i];
 			}

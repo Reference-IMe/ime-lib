@@ -10,17 +10,15 @@
  *	with wide overwrite (WO) memory model
  *	parallelized in interleaved columns (pvi) over cprocs calculating processors
  *	without optimized initialization
- *
+ *  with optimized loops
  */
 
 void pviDGESV_WO_swaploop(int n, double** A, int m, double** bb, double** xx, int rank, int cprocs)
 {
 	int i,j,l;						// indexes
-	int Acols=n;
     int Tcols=2*n;					// total num of cols (X + K)
-    int myTcols, myAcols;;					// num of cols per process
+    int myTcols;					// num of cols per process
     	myTcols=Tcols/cprocs;
-    	myAcols=Acols/cprocs;
     int myend;						// loop boundaries on local cols =myTcols/2;
     int mystart;
     int rhs;
@@ -31,7 +29,6 @@ void pviDGESV_WO_swaploop(int n, double** A, int m, double** bb, double** xx, in
     double** Tlocal;
     		 Tlocal=AllocateMatrix2D(n, myTcols, CONTIGUOUS);
 
-    /*
     double** T;
 			if (rank==0)
 			{
@@ -41,7 +38,6 @@ void pviDGESV_WO_swaploop(int n, double** A, int m, double** bb, double** xx, in
 			{
 				T=Tlocal;				// dummy assignment to avoid segfault (i.e. in next scatter)
 			}
-	*/
 
 	double** TlastK;
 			TlastK=AllocateMatrix2D(2,n, CONTIGUOUS);	// last col [0] and row [1] of T (K part)
@@ -95,33 +91,18 @@ void pviDGESV_WO_swaploop(int n, double** A, int m, double** bb, double** xx, in
 	MPI_Type_create_resized (multiple_row, 0, m*sizeof(double), & multiple_row_resized);
 	MPI_Type_commit (& multiple_row_resized);
 
-	MPI_Datatype A_row_interleaved;
-	MPI_Type_vector (myAcols, n, n*cprocs , MPI_DOUBLE, & A_row_interleaved ); // T->A
-	MPI_Type_commit (& A_row_interleaved);
-
-	MPI_Datatype A_row_interleaved_resized;
-	MPI_Type_create_resized (A_row_interleaved, 0, n*sizeof(double), & A_row_interleaved_resized);
-	MPI_Type_commit (& A_row_interleaved_resized);
-
-	MPI_Datatype KinT_column_contiguous;
-	MPI_Type_vector (n, 1, 2*myAcols, MPI_DOUBLE, & KinT_column_contiguous ); // T->A
-	MPI_Type_commit (& KinT_column_contiguous);
-
-	MPI_Datatype KinT_column_contiguous_resized;
-	MPI_Type_create_resized (KinT_column_contiguous, 0, 1*sizeof(double), & KinT_column_contiguous_resized);
-	MPI_Type_commit (& KinT_column_contiguous_resized);
+	MPI_Datatype multiple_column;
+	MPI_Type_vector (n * myTcols, 1, cprocs , MPI_DOUBLE, & multiple_column );
+	MPI_Type_commit (& multiple_column);
 
 	MPI_Datatype multiple_column_contiguous;
 	MPI_Type_vector (n, myTcols, myTcols , MPI_DOUBLE, & multiple_column_contiguous );
 	MPI_Type_commit (& multiple_column_contiguous);
-/*
-	MPI_Datatype A_column_interleaved_resized;
-	MPI_Type_create_resized (A_column_interleaved, 0, 1*sizeof(double), & A_column_interleaved_resized);
-	MPI_Type_commit (& A_column_interleaved_resized);
-*/
-	MPI_Datatype multiple_row_transposed;
-	MPI_Type_vector (myAcols, n, 2*n , MPI_DOUBLE, & multiple_row_transposed );
-	MPI_Type_commit (& multiple_row_transposed);
+
+	MPI_Datatype multiple_column_resized;
+	MPI_Type_create_resized (multiple_column, 0, 1*sizeof(double), & multiple_column_resized);
+	MPI_Type_commit (& multiple_column_resized);
+
 
 	/*
 	 *  init inhibition table
@@ -131,69 +112,19 @@ void pviDGESV_WO_swaploop(int n, double** A, int m, double** bb, double** xx, in
 
     DGEZR(xx, n, m);			// init (zero) solution vectors
 
-
-    if (rank==0)
-    {
-		for (i=0;i<n;i++)
-		{//reuse memory
-			TlastKr[i]=A[i][n-1]/A[n-1][n-1]; // last col of A -> last row of K
-			TlastKc[i]=A[i][i]; // diagonal
-		}
-    }
-
-    MPI_Bcast (&TlastK[0][0], 2*n, MPI_DOUBLE, 0, MPI_COMM_WORLD);// last col and diagonal of A
-	MPI_Scatter (&A[0][0], 1, A_row_interleaved_resized, &Tlocal[0][myAcols], myAcols, KinT_column_contiguous_resized, 0, MPI_COMM_WORLD);	// scatter columns to nodes
-
-	/*
-	MPI_Barrier(MPI_COMM_WORLD);
-	if(rank==0)
-		PrintMatrix2D(Tlocal,n,myTcols);
-	MPI_Barrier(MPI_COMM_WORLD);
-	*/
-
-	for (i=0;i<n;i++)
+	if (rank==0)
 	{
-		for (j=0;j<myAcols;j++) // X part
-		{
-			if (i==global[j])
-			{
-				Tlocal[i][j]=1/TlastKc[i];
-			}
-			else
-			{
-				Tlocal[i][j]=0;
-			}
-		}
-	}
-	for (i=0;i<n;i++)
-	{
-		for (j=0;j<myAcols;j++) // K part
-		{
-			Tlocal[i][myAcols+j]=Tlocal[i][myAcols+j]/TlastKc[i];
-		}
-	}
+		DGEIT_W(A, T, n);		// init inhibition table
 
-	/*
-	MPI_Barrier(MPI_COMM_WORLD);
-	if(rank==0)
-		PrintMatrix2D(Tlocal,n,myTcols);
-	MPI_Barrier(MPI_COMM_WORLD);
-	*/
-
-	if (rank==map[n-1])
-	{
-		//PrintMatrix2D(Tlocal,n,myTcols);
 		for (i=0; i<n; i++)		// copy data into local buffer before broadcast
 		{
-			TlastKc[i]=Tlocal[i][local[2*n-1]];
-			//printf("%f\n",TlastKc[i]);
+			TlastKc[i]=T[i][n*2-1];
+			TlastKr[i]=T[n-1][n+i];
 		}
-		//PrintVector(TlastKc, n);
 	}
 
-	MPI_Bcast (&TlastK[0][0], n, MPI_DOUBLE, map[n-1], MPI_COMM_WORLD);	// broadcast of the last col of T (K part)
-
-	//if(rank==0)		PrintVector(TlastKc, n);
+	MPI_Scatter (&T[0][0], 1, multiple_column_resized, &Tlocal[0][0], 1, multiple_column_contiguous, 0, MPI_COMM_WORLD);	// scatter columns to nodes
+	MPI_Bcast (&TlastK[0][0], 2*n, MPI_DOUBLE, 0, MPI_COMM_WORLD);															// broadcast of the last col and the last row of T (K part)
 
 	/*
 	 *  calc inhibition sequence
@@ -338,10 +269,8 @@ void pviDGESV_WO_swaploop(int n, double** A, int m, double** bb, double** xx, in
 	DeallocateVector(h);
 	DeallocateVector(hh);
 	DeallocateMatrix2D(Tlocal,n,CONTIGUOUS);
-	/*
     if (rank==0)
     {
     	DeallocateMatrix2D(T,n,CONTIGUOUS);
     }
-    */
 }
