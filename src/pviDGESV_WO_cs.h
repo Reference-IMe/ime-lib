@@ -310,9 +310,9 @@ void pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, int rank
 			{
 				myend--;
 			}
-			for (j=mystart; j<=myend; j++)
+			for (i=0; i<=l-1; i++)
 			{
-				for (i=0; i<=l-1; i++)
+				for (j=mystart; j<=myend; j++)
 				{
 					Tlocal[i][j]=Tlocal[i][j]*h[i]-Tlocal[l][j]*hh[i];
 				}
@@ -323,9 +323,9 @@ void pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, int rank
 		}
 		else // node containing S
 		{
-			for (j=0; j<myTcols; j++)
+			for (i=0; i<=l-1; i++)
 			{
-				for (i=0; i<=l-1; i++)
+				for (j=0; j<myTcols; j++)
 				{
 					Tlocal[i][j]=Tlocal[i][j]*h[i]-Tlocal[l][j]*hh[i];
 				}
