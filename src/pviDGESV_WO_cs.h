@@ -7,9 +7,10 @@
 /*
  *	solve (SV) system with general (GE) matrix A of doubles (D)
  *	of order n and with m r.h.s in matrix bb and solutions in xx
- *	with wide overwrite (WO) memory model and checksumming (cs)
+ *	with:
+ *	wide overwrite (WO) memory model and checksumming (cs)
  *	parallelized in interleaved columns (pvi) over cprocs calculating processors and sprocs summing processors
- *	without optimized initialization
+ *	sequential initialization
  *
  */
 
