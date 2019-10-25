@@ -12,11 +12,11 @@
  *	parallelized in interleaved columns (pvi) over cprocs calculating processors
  *	parallelized initialization
  *	optimized loops
- *	ifs removed
+ *	ifs NOT removed
  *
  */
 
-void pviDGESV_WO_last(int n, double** A, int m, double** bb, double** xx, int rank, int cprocs)
+void pviDGESV_WO_parinit(int n, double** A, int m, double** bb, double** xx, int rank, int cprocs)
 {
 	int i,j,l;						// indexes
     int Tcols=2*n;					// total num of cols (X + K)
@@ -28,8 +28,6 @@ void pviDGESV_WO_last(int n, double** A, int m, double** bb, double** xx, int ra
     int myend;						// loop boundaries on local cols =myTcols/2;
     int mystart;
     int rhs;
-
-    int avoidif;					// for boolean --> int conversion
 
     int myAcols=n/cprocs;
     /*
@@ -173,17 +171,11 @@ void pviDGESV_WO_last(int n, double** A, int m, double** bb, double** xx, int ra
 		// ALL procs
 		// update solutions
 		// l .. n-1
-
-		/*
 		mystart=local[l];
 		if (rank<map[l])
 		{
 			mystart++;
 		}
-		*/
-		avoidif=rank<map[l];
-		mystart = local[l] + avoidif;
-
 		for (i=mystart; i<=local[n-1]; i++)
 		{
 			for (rhs=0;rhs<m;rhs++)
@@ -211,47 +203,45 @@ void pviDGESV_WO_last(int n, double** A, int m, double** bb, double** xx, int ra
 		// ALL procs
 		// processes with diagonal elements not null
 		mystart=0;
-		/*
 		myend=local[l-1];
 		if (rank>map[l-1])
 		{
 			myend--;
 		}
-		*/
-		avoidif = rank>map[l-1];
-		myend = local[l-1] - avoidif;
-
 		for (i=mystart; i<=myend; i++)
 		{
 			Tlocal[global[i]][i]=Tlocal[global[i]][i]*h[global[i]];
 		}
 
-		// l .. n+l-1
+		// l
+		// ONLY one proc
+		// process with full not null column (column l)
+		if (rank==map[l])
+		{
+			for (i=0; i<=l-1; i++)
+			{
+				Tlocal[i][local[l]]= -Tlocal[l][local[l]]*hh[i];
+			}
+		}// TODO: incorporate with next block to form l .. n+l-1
+
+		// l+1 .. n+l-1
 		// ALL procs
-		/*
-		mystart=local[l];
-		if (rank<map[l])
+		// all other cases
+		mystart=local[l+1]; // TODO: incorporate l
+		if (rank<map[l+1])
 		{
 			mystart++;
 		}
-		*/
-		avoidif=rank<map[l];
-		mystart=local[l]+avoidif;
-		/*
 		myend=local[n+l-1];
 		if (rank>map[n+l-1])
 		{
 			myend--;
 		}
-		*/
-		avoidif=rank>map[n+l-1];
-		myend=local[n+l-1]-avoidif;
-
 		for (i=0; i<=l-1; i++)
 		{
 			for (j=mystart; j<=myend; j++)
 			{
-				Tlocal[i][j]=Tlocal[i][j]*h[i] - Tlocal[l][j]*hh[i];
+				Tlocal[i][j]=Tlocal[i][j]*h[i]-Tlocal[l][j]*hh[i];
 			}
 		}
 
@@ -267,8 +257,12 @@ void pviDGESV_WO_last(int n, double** A, int m, double** bb, double** xx, int ra
 				TlastKc[i]=Tlocal[i][local[n+l-1]];
 			}
 		}
-
+		/*
+		MPI_Bcast (&TlastKc[0], n, MPI_DOUBLE, map[l-1], MPI_COMM_WORLD);
+		MPI_Bcast (&TlastKr[0], n, MPI_DOUBLE, map[l-1], MPI_COMM_WORLD);
 		//TODO: substitute Gather with an All-to-All
+		//TODO: or combine broadcasts in a single one -> DONE
+		*/
 		MPI_Bcast (&TlastK[0][0], Tcols, MPI_DOUBLE, map[l-1], MPI_COMM_WORLD);
 	}
 
