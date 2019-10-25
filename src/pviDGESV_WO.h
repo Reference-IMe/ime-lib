@@ -7,9 +7,12 @@
 /*
  *	solve (SV) system with general (GE) matrix A of doubles (D)
  *	of order n and with m r.h.s in matrix bb[n,m] and solutions in xx[n,m]
- *	with wide overwrite (WO) memory model
+ *	with:
+ *	wide overwrite (WO) memory model
  *	parallelized in interleaved columns (pvi) over cprocs calculating processors
- *	without optimized initialization
+ *	parallelized initialization
+ *	optimized loops
+ *	ifs removed
  *
  */
 
@@ -25,6 +28,8 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, int rank, i
     int myend;						// loop boundaries on local cols =myTcols/2;
     int mystart;
     int rhs;
+
+    int avoidif;					// for boolean --> int conversion
 
     int myAcols=n/cprocs;
     /*
@@ -168,11 +173,17 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, int rank, i
 		// ALL procs
 		// update solutions
 		// l .. n-1
+
+		/*
 		mystart=local[l];
 		if (rank<map[l])
 		{
 			mystart++;
 		}
+		*/
+		avoidif=rank<map[l];
+		mystart = local[l] + avoidif;
+
 		for (i=mystart; i<=local[n-1]; i++)
 		{
 			for (rhs=0;rhs<m;rhs++)
@@ -200,45 +211,47 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, int rank, i
 		// ALL procs
 		// processes with diagonal elements not null
 		mystart=0;
+		/*
 		myend=local[l-1];
 		if (rank>map[l-1])
 		{
 			myend--;
 		}
+		*/
+		avoidif = rank>map[l-1];
+		myend = local[l-1] - avoidif;
+
 		for (i=mystart; i<=myend; i++)
 		{
 			Tlocal[global[i]][i]=Tlocal[global[i]][i]*h[global[i]];
 		}
 
-		// l
-		// ONLY one proc
-		// process with full not null column (column l)
-		if (rank==map[l])
-		{
-			for (i=0; i<=l-1; i++)
-			{
-				Tlocal[i][local[l]]= -Tlocal[l][local[l]]*hh[i];
-			}
-		}// TODO: incorporate with next block to form l .. n+l-1
-
-		// l+1 .. n+l-1
+		// l .. n+l-1
 		// ALL procs
-		// all other cases
-		mystart=local[l+1]; // TODO: incorporate l
-		if (rank<map[l+1])
+		/*
+		mystart=local[l];
+		if (rank<map[l])
 		{
 			mystart++;
 		}
+		*/
+		avoidif=rank<map[l];
+		mystart=local[l]+avoidif;
+		/*
 		myend=local[n+l-1];
 		if (rank>map[n+l-1])
 		{
 			myend--;
 		}
+		*/
+		avoidif=rank>map[n+l-1];
+		myend=local[n+l-1]-avoidif;
+
 		for (i=0; i<=l-1; i++)
 		{
 			for (j=mystart; j<=myend; j++)
 			{
-				Tlocal[i][j]=Tlocal[i][j]*h[i]-Tlocal[l][j]*hh[i];
+				Tlocal[i][j]=Tlocal[i][j]*h[i] - Tlocal[l][j]*hh[i];
 			}
 		}
 
@@ -254,12 +267,8 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, int rank, i
 				TlastKc[i]=Tlocal[i][local[n+l-1]];
 			}
 		}
-		/*
-		MPI_Bcast (&TlastKc[0], n, MPI_DOUBLE, map[l-1], MPI_COMM_WORLD);
-		MPI_Bcast (&TlastKr[0], n, MPI_DOUBLE, map[l-1], MPI_COMM_WORLD);
+
 		//TODO: substitute Gather with an All-to-All
-		//TODO: or combine broadcasts in a single one -> DONE
-		*/
 		MPI_Bcast (&TlastK[0][0], Tcols, MPI_DOUBLE, map[l-1], MPI_COMM_WORLD);
 	}
 
