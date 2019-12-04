@@ -1,9 +1,8 @@
 #include <mpi.h>
-#include "helpers/matrix.h"
-#include "helpers/vector.h"
-#include "DGEZR.h"
-#include <signal.h>
-#include "../ft-real/pDGEIT_Wx.h"
+#include "../helpers/matrix.h"
+#include "../helpers/vector.h"
+#include "../DGEZR.h"
+#include "pDGEIT_Wx_ft1.h"
 
 /*
  *	solve (SV) system with general (GE) matrix A of doubles (D)
@@ -17,21 +16,8 @@
  *
  */
 
-extern int failing_rank;
-extern int failing_level;
-extern int faulty;
-extern int faulty_location;
-extern MPI_Comm current_comm;
-extern void common_error_handler(int s);
-
-void pviDGESV_WO_ft(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm, int sprocs)
+void pviDGESV_WO_ft1(int n, double** A, int m, double** bb, double** xx, int rank, int cprocs, int sprocs)
 {
-    int rank;
-	int nprocs, cprocs;
-	MPI_Comm_size(comm, &nprocs);
-	MPI_Comm_rank(comm, &rank);
-	cprocs=nprocs-sprocs;
-
 	int i,j,l;						// indexes
     int Tcols=2*n;					// total num of cols (X + K)
     int myTcols;					// num of T cols per process
@@ -104,29 +90,22 @@ void pviDGESV_WO_ft(int n, double** A, int m, double** bb, double** xx, MPI_Comm
 	MPI_Type_commit (& xx_rows_interleaved_resized);
 
 
-	// FT
-
-
-
     /*
 	 *  init inhibition table
 	 */
 	DGEZR(xx, n, m);													// init (zero) solution vectors
-	pDGEIT_W(n, A, Tlocal, TlastK, comm, map, global, local);	// init inhibition table
+	pDGEIT_W_ft1(A, Tlocal, TlastK, n, rank, cprocs, sprocs, map, global, local);	// init inhibition table
 
-	faulty_location=1;
 	// send all r.h.s to all procs
-    MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm);
-    faulty_location=10;
+    MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
 	/*
 	 *  calc inhibition sequence
 	 */
-if (!faulty)
-{
+
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
 	{
-
 		// ALL procs
 		// update solutions
 		// l .. n-1
@@ -212,10 +191,8 @@ if (!faulty)
 			}
 		}
 
-		faulty_location=2;
 		// collect chunks of last row of K to "future" last node
-		MPI_Gather (&Tlocal[l-1][local[n]], myTcols/2, MPI_DOUBLE, &TlastKr[0], 1, TlastKr_chunks_resized, map[l-1], comm);
-		faulty_location=20;
+		MPI_Gather (&Tlocal[l-1][local[n]], myTcols/2, MPI_DOUBLE, &TlastKr[0], 1, TlastKr_chunks_resized, map[l-1], MPI_COMM_WORLD);
 
 		//future last node broadcasts last row and col of K
 		if (rank==map[l-1])
@@ -227,30 +204,8 @@ if (!faulty)
 			}
 		}
 
-		// inject ERROR
-		if (l==failing_level)
-		{
-			//MPI_Barrier(current_comm);
-			//sleep(5);
-			if (rank==failing_rank)
-			{
-				printf("\n===============================\n");
-				printf("rank %d failing at level %d",failing_rank,failing_level);
-				printf("\n===============================\n");
-				raise(SIGKILL);
-			}
-			//else
-			{
-				faulty=1;
-				sleep(1);
-				break;
-			}
-		}
-
-		faulty_location=3;
 		//TODO: substitute Gather with an All-to-All
-		MPI_Bcast (&TlastK[0][0], Tcols, MPI_DOUBLE, map[l-1], comm);
-		faulty_location=30;
+		MPI_Bcast (&TlastK[0][0], Tcols, MPI_DOUBLE, map[l-1], MPI_COMM_WORLD);
 	}
 
 	// last level (l=0)
@@ -262,18 +217,17 @@ if (!faulty)
 		}
 	}
 
-	faulty_location=4;
 	// collect solution
 	// MPI_IN_PLACE required for MPICH based versions
 	if (rank==0)
 	{
-		MPI_Gather (MPI_IN_PLACE, 1, xx_rows_interleaved_resized, &xx[0][0], 1, xx_rows_interleaved_resized, 0, comm);
+		MPI_Gather (MPI_IN_PLACE, 1, xx_rows_interleaved_resized, &xx[0][0], 1, xx_rows_interleaved_resized, 0, MPI_COMM_WORLD);
 	}
 	else
 	{
-		MPI_Gather (&xx[rank][0], 1, xx_rows_interleaved_resized, &xx[0][0], 1, xx_rows_interleaved_resized, 0, comm);
+		MPI_Gather (&xx[rank][0], 1, xx_rows_interleaved_resized, &xx[0][0], 1, xx_rows_interleaved_resized, 0, MPI_COMM_WORLD);
 	}
-}
+
 	// cleanup
 	free(local);
 	free(global);
