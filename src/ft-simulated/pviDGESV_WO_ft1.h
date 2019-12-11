@@ -16,7 +16,7 @@
  *
  */
 
-void pviDGESV_WO_ft1(int n, double** A, int m, double** bb, double** xx, int rank, int cprocs, int sprocs)
+void pviDGESV_WO_ft1_sim(int n, double** A, int m, double** bb, double** xx, int rank, int cprocs, int sprocs, int failing_rank, int failing_level)
 {
 	int i,j,l;						// indexes
 	int XKcols=2*n;					// num of cols X + K
@@ -34,9 +34,12 @@ void pviDGESV_WO_ft1(int n, double** A, int m, double** bb, double** xx, int ran
 
     int avoidif;					// for boolean --> int conversion
 
+    int fault_detected=0;
+
     int myAcols=n/cprocs;
 
     int nprocs=cprocs+sprocs;
+
 
     /*
      * local storage for a part of the input matrix (continuous columns, not interleaved)
@@ -49,20 +52,21 @@ void pviDGESV_WO_ft1(int n, double** A, int m, double** bb, double** xx, int ran
 	double*  TlastKc=&TlastK[0][0];						// alias for last col
 	double*  TlastKr=&TlastK[1][0];						// alias for last row
 
-    double* h;							// helper vectors
+    double* h;											// helper vectors
     		h=AllocateVector(n);
     double* hh;
 			hh=AllocateVector(n);
 
-
 	/*
 	 * map columns to process
 	 */
-
 	int*	local;
 			local=malloc(Tcols*sizeof(int));
 	int*	map;
 			map=malloc(Tcols*sizeof(int));
+			/*
+			 * old version
+
 			if (sprocs>0)						// with checksum cols
 			{
 				for (i=XKcols; i<Tcols; i++)
@@ -84,8 +88,23 @@ void pviDGESV_WO_ft1(int n, double** A, int m, double** bb, double** xx, int ran
 					local[i]=floor(i/cprocs);	// position of the column i(global) in the local matrix
 				}
 			}
+			*/
+			for (i=0; i<XKcols; i++)
+			{
+				map[i]= i % cprocs;			// who has the col i
+				local[i]=floor(i/cprocs);	// position of the column i(global) in the local matrix
+			}
+			for (i=0; i<Scols; i++)			// not executed if sprocs = 0
+			{
+				map[XKcols+i]= cprocs + (i % sprocs);		// n+1th has the first cols of T (S)
+				local[XKcols+i]= i % sprocs;				// position of the column i(global) in the local matrix
+			}
+
 	int*	global;
 			global=malloc(myTcols*sizeof(int));
+			/*
+			 * old version
+
 			if (sprocs>0)						// with checksum cols
 			{
 				if (rank>=cprocs)
@@ -110,11 +129,15 @@ void pviDGESV_WO_ft1(int n, double** A, int m, double** bb, double** xx, int ran
 					global[i]= i * cprocs + rank; 	// position of the column i(local) in the global matrix
 				}
 			}
+			*/
+			for(i=0; i<myTcols; i++)		// executed also on ranks >= cprocs, but useless
+			{
+				global[i]= i * cprocs + rank; 	// position of the column i(local) in the global matrix
+			}
 
     /*
      * MPI derived types
      */
-
 	MPI_Datatype TlastKr_chunks;
 	MPI_Type_vector (n/cprocs, 1, cprocs, MPI_DOUBLE, & TlastKr_chunks );
 	MPI_Type_commit (& TlastKr_chunks);
@@ -133,37 +156,36 @@ void pviDGESV_WO_ft1(int n, double** A, int m, double** bb, double** xx, int ran
 	MPI_Type_create_resized (xx_rows_interleaved, 0, m*sizeof(double), & xx_rows_interleaved_resized);
 	MPI_Type_commit (& xx_rows_interleaved_resized);
 
-	int i_am_calc;
-		if (rank>=cprocs)
-		{
-			i_am_calc=0;
-		}
-		else
-		{
-			i_am_calc=1;
-		}
+	/*
+	 * distinction between calc/checksumming, healthy/faulty
+	 */
+	MPI_Comm current_comm_world, comm_calc;
 
-	MPI_Comm comm_calc;
-	int rank_calc;
-	if (sprocs>0)
+	int i_am_calc; // participating in ime calc = 1, checksumming = 0
+	int i_am_fine; // healthy = 1, faulty = 0
+	int spare_rank=cprocs;
+
+	if (rank>=cprocs)
 	{
-		MPI_Comm_split(MPI_COMM_WORLD, i_am_calc, rank, &comm_calc);
-		MPI_Comm_rank(comm_calc, &rank_calc);
+		i_am_calc=0;
+		i_am_fine=1;
+		current_comm_world=MPI_COMM_WORLD;
+		MPI_Comm_split(MPI_COMM_WORLD, MPI_UNDEFINED, MPI_UNDEFINED, &comm_calc); // checksumming procs don't belong to calc communicator
 	}
 	else
 	{
-		comm_calc=MPI_COMM_WORLD;
-		rank_calc=rank;
+		i_am_calc=1;
+		i_am_fine=1;
+		current_comm_world=MPI_COMM_WORLD;
+		MPI_Comm_split(MPI_COMM_WORLD, i_am_calc, rank, &comm_calc); // calc procs belong to calc communicator
 	}
 
     /*
 	 *  init inhibition table
 	 */
-	DGEZR(xx, n, m);													// init (zero) solution vectors
-	pDGEIT_W_ft1(A, Tlocal, TlastK, n, rank, cprocs, sprocs, map, global, local);	// init inhibition table
-
-	// send all r.h.s to all procs
-    MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+	DGEZR(xx, n, m);																			// init (zero) solution vectors
+	pDGEIT_W_ft1(A, Tlocal, TlastK, n, rank, cprocs, sprocs, map, global, local, failing_rank);	// init inhibition table
+    MPI_Bcast(&bb[0][0], n*m, MPI_DOUBLE, 0, MPI_COMM_WORLD);									// send all r.h.s to all procs
 
 	/*
 	 *  calc inhibition sequence
@@ -172,6 +194,96 @@ void pviDGESV_WO_ft1(int n, double** A, int m, double** bb, double** xx, int ran
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
 	{
+		if ((l<=failing_level) && (sprocs>0) && (fault_detected==0)) // time to have a fault!
+		{
+			fault_detected=1;
+			/*
+			 * old version
+
+			if (rank==failing_rank)
+			{
+				i_am_fine=0;
+			}
+			if (i_am_fine)
+			{
+				if (rank<cprocs)
+				{
+					MPI_Comm_split(MPI_COMM_WORLD, i_am_fine, rank, &comm_calc);
+				}
+				else // (rank == cprocs)
+				{
+					i_am_calc=1;
+					MPI_Comm_split(MPI_COMM_WORLD, i_am_fine, failing_rank, &comm_calc);
+				}
+			}
+			else // I'm faulty
+			{
+				MPI_Comm_split(MPI_COMM_WORLD, MPI_UNDEFINED, MPI_UNDEFINED, &comm_calc);
+			}
+
+			if (rank==failing_rank)	// if FT enabled, inject fault
+			{
+				MPI_Send(&xx[0][0], n*m, MPI_DOUBLE, cprocs, 0, MPI_COMM_WORLD);
+
+				printf("\n bye bye from %d",rank);
+				sleep(2);
+				break;
+			}
+			else
+			{
+				// swap rank 1 (faulty) with last rank (checksum)
+				if (rank==cprocs) // new 1
+				{
+					MPI_Recv(&xx[0][0], n*m, MPI_DOUBLE, failing_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+					printf("\n hello from %d, ",rank);
+					rank=failing_rank;
+					printf("now %d",rank);
+					for(i=0; i<myTcols; i++)
+					{
+						global[i]= i * cprocs + rank; 	// position of the column i(local) in the global matrix
+					}
+				}
+			}
+			current_comm_world=comm_calc;
+			MPI_Comm_rank(current_comm_world, &rank);	//get current process id
+			*/
+			if (rank==failing_rank)
+			{
+				printf("\n bye bye from %d",rank);
+
+				i_am_fine=0;
+				i_am_calc=0;
+				// simulate recovery
+				MPI_Send(&xx[0][0], n*m, MPI_DOUBLE, spare_rank, 0, MPI_COMM_WORLD);
+				MPI_Comm_split(MPI_COMM_WORLD, MPI_UNDEFINED, MPI_UNDEFINED, &comm_calc);
+
+				sleep(2);
+				break;
+			}
+			if (rank==spare_rank)
+			{
+				printf("\n hello from %d, ",rank);
+
+				i_am_calc=1;
+				// simulate recovery
+				MPI_Recv(&xx[0][0], n*m, MPI_DOUBLE, failing_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				MPI_Comm_split(MPI_COMM_WORLD, i_am_fine, failing_rank, &comm_calc);
+				rank=failing_rank;
+				printf("now %d\n",rank);
+				for(i=0; i<myTcols; i++)			// update index with future new rank
+				{
+					global[i]= i * cprocs + rank; 	// position of the column i(local) in the global matrix
+				}
+			}
+			if ((rank!=spare_rank) && (rank!=failing_rank))
+			{
+				MPI_Comm_split(MPI_COMM_WORLD, i_am_fine, rank, &comm_calc);
+			}
+			current_comm_world=comm_calc;
+			MPI_Comm_rank(current_comm_world, &rank);
+		}
+
 		// ALL procs
 		// update helpers
 		for (i=0; i<=l-1; i++)
@@ -184,7 +296,7 @@ void pviDGESV_WO_ft1(int n, double** A, int m, double** bb, double** xx, int ran
 			}
 		}
 
-		if (rank<cprocs)
+		if (i_am_calc)
 		{
 			// ALL procs
 			// update solutions
@@ -207,8 +319,6 @@ void pviDGESV_WO_ft1(int n, double** A, int m, double** bb, double** xx, int ran
 					xx[global[i]][rhs]=xx[global[i]][rhs]+Tlocal[l][i]*bb[l][rhs];
 				}
 			}
-
-
 
 			// update T
 			// to avoid IFs: each process loops on its own set of cols, with indirect addressing
@@ -263,7 +373,6 @@ void pviDGESV_WO_ft1(int n, double** A, int m, double** bb, double** xx, int ran
 
 			// collect chunks of last row of K to "future" last node
 			MPI_Gather (&Tlocal[l-1][local[n]], myTcols/2, MPI_DOUBLE, &TlastKr[0], 1, TlastKr_chunks_resized, map[l-1], comm_calc);
-
 		}
 		else // node containing S
 		{
@@ -274,7 +383,6 @@ void pviDGESV_WO_ft1(int n, double** A, int m, double** bb, double** xx, int ran
 					Tlocal[i][j]=Tlocal[i][j]*h[i]-Tlocal[l][j]*hh[i];
 				}
 			}
-
 		}
 
 		//future last node broadcasts last row and col of K
@@ -289,12 +397,15 @@ void pviDGESV_WO_ft1(int n, double** A, int m, double** bb, double** xx, int ran
 
 		//TODO: substitute Gather with an All-to-All
 		//MPI_Bcast (&TlastK[0][0], Tcols, MPI_DOUBLE, map[l-1], MPI_COMM_WORLD);
-		MPI_Bcast (&TlastK[0][0], XKcols, MPI_DOUBLE, map[n+l-1], MPI_COMM_WORLD); // n
-	}
+		MPI_Bcast (&TlastK[0][0], XKcols, MPI_DOUBLE, map[l-1], current_comm_world); // n
+
+
+	}// end loop over levels > 0
 
 	// last level (l=0)
 	if (i_am_calc)
 	{
+
 		for (i=0; i<myTcols/2; i++)
 		{
 			for(rhs=0;rhs<m;rhs++)
@@ -305,23 +416,19 @@ void pviDGESV_WO_ft1(int n, double** A, int m, double** bb, double** xx, int ran
 
 		// collect solution
 		// MPI_IN_PLACE required for MPICH based versions
-		if (rank==0)
+
+		//if (comm_calc != MPI_COMM_NULL)
 		{
-			MPI_Gather (MPI_IN_PLACE, 1, xx_rows_interleaved_resized, &xx[0][0], 1, xx_rows_interleaved_resized, 0, comm_calc);
-		}
-		else
-		{
-			MPI_Gather (&xx[rank][0], 1, xx_rows_interleaved_resized, &xx[0][0], 1, xx_rows_interleaved_resized, 0, comm_calc);
+			if (rank==0)
+			{
+				MPI_Gather (MPI_IN_PLACE, 1, xx_rows_interleaved_resized, &xx[0][0], 1, xx_rows_interleaved_resized, 0, comm_calc);
+			}
+			else
+			{
+				MPI_Gather (&xx[rank][0], 1, xx_rows_interleaved_resized, &xx[0][0], 1, xx_rows_interleaved_resized, 0, comm_calc);
+			}
 		}
 	}
-
-	/*
-	MPI_Barrier(MPI_COMM_WORLD);
-	sleep(2*rank);
-	printf("\n\n Matrix Tloc (%d):\n",rank);
-	PrintMatrix2D(Tlocal, n, myTcols);
-	MPI_Barrier(MPI_COMM_WORLD);
-	*/
 
 	// cleanup
 	free(local);
@@ -339,6 +446,10 @@ void pviDGESV_WO_ft1(int n, double** A, int m, double** bb, double** xx, int ran
 	MPI_Type_free(&xx_rows_interleaved_resized);
 	if (sprocs>0)
 	{
-		MPI_Comm_free(&comm_calc);
+		if (comm_calc != MPI_COMM_NULL)
+		{
+			MPI_Comm_free(&comm_calc);
+		}
 	}
 }
+
