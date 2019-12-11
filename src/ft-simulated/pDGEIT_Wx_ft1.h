@@ -11,7 +11,7 @@
 #ifndef __pDGEIT_W_FT_H__
 #define __pDGEIT_W_FT_H__
 
-void pDGEIT_W_ft1(double** A, double** Tlocal, double** TlastK, int n, int rank, int cprocs, int sprocs, int* map, int* global, int* local)
+void pDGEIT_W_ft1(double** A, double** Tlocal, double** TlastK, int n, int rank, int cprocs, int sprocs, int* map, int* global, int* local, int failing_rank)
 {
 	int i,j;
 
@@ -94,17 +94,20 @@ void pDGEIT_W_ft1(double** A, double** Tlocal, double** TlastK, int n, int rank,
 		}
 	}// init done
 
-	/*
-	MPI_Barrier(MPI_COMM_WORLD);
-	sleep(2*rank);
-	printf("\n\n Matrix Tloc (%d):\n",rank);
-	PrintMatrix2D(Tlocal, n, myTcols);
-	MPI_Barrier(MPI_COMM_WORLD);
-	*/
 
 	if (sprocs>0) // in ft mode
 	{
-		MPI_Reduce(&Tlocal[0][0], &Slocal[0][0], n*myTcols, MPI_DOUBLE, MPI_SUM, cprocs, MPI_COMM_WORLD);
+		//MPI_Reduce(&Tlocal[0][0], &Slocal[0][0], n*myTcols, MPI_DOUBLE, MPI_SUM, cprocs, MPI_COMM_WORLD);
+
+		// fake fault recovery init
+		if (rank==failing_rank)
+		{
+			MPI_Send(&Tlocal[0][0],n*myTcols,MPI_DOUBLE,cprocs,cprocs,MPI_COMM_WORLD);
+		}
+		if (rank==cprocs)
+		{
+			MPI_Recv(&Slocal[0][0],n*myTcols,MPI_DOUBLE,failing_rank,cprocs,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+		}
 
 		if (rank==cprocs) // on (single) checksumming node
 		{
@@ -123,6 +126,14 @@ void pDGEIT_W_ft1(double** A, double** Tlocal, double** TlastK, int n, int rank,
 		}
 	}
 	DeallocateMatrix2D(Slocal,n,CONTIGUOUS);
+
+	/*
+	MPI_Barrier(MPI_COMM_WORLD);
+	sleep(2*rank);
+	printf("\n\n Matrix Tloc (%d):\n",rank);
+	PrintMatrix2D(Tlocal, n, myTcols);
+	MPI_Barrier(MPI_COMM_WORLD);
+	*/
 
 	// prepare (copy into local buffer) last col of T (K part)
 	if (rank==map[n-1])
