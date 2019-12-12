@@ -97,8 +97,9 @@ void pDGEIT_W_ft1(double** A, double** Tlocal, double** TlastK, int n, int rank,
 
 	if (sprocs>0) // in ft mode
 	{
-		//MPI_Reduce(&Tlocal[0][0], &Slocal[0][0], n*myTcols, MPI_DOUBLE, MPI_SUM, cprocs, MPI_COMM_WORLD);
+		MPI_Reduce(&Tlocal[0][0], &Slocal[0][0], n*myTcols, MPI_DOUBLE, MPI_SUM, cprocs, MPI_COMM_WORLD);
 
+		/*
 		// fake fault recovery init
 		if (rank==failing_rank)
 		{
@@ -108,6 +109,7 @@ void pDGEIT_W_ft1(double** A, double** Tlocal, double** TlastK, int n, int rank,
 		{
 			MPI_Recv(&Slocal[0][0],n*myTcols,MPI_DOUBLE,failing_rank,cprocs,MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 		}
+		*/
 
 		if (rank==cprocs) // on (single) checksumming node
 		{
