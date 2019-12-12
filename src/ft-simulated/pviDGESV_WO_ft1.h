@@ -196,6 +196,9 @@ void pviDGESV_WO_ft1_sim(int n, double** A, int m, double** bb, double** xx, int
 	{
 		if ((l<=failing_level) && (sprocs>0) && (fault_detected==0)) // time to have a fault!
 		{
+			double** Slocal;
+			Slocal=AllocateMatrix2D(n,myTcols, CONTIGUOUS);
+
 			fault_detected=1;
 			/*
 			 * old version
@@ -255,7 +258,7 @@ void pviDGESV_WO_ft1_sim(int n, double** A, int m, double** bb, double** xx, int
 				i_am_fine=0;
 				i_am_calc=0;
 				// simulate recovery
-				MPI_Send(&xx[0][0], n*m, MPI_DOUBLE, spare_rank, 0, MPI_COMM_WORLD);
+				//MPI_Send(&xx[0][0], n*m, MPI_DOUBLE, spare_rank, 0, MPI_COMM_WORLD);
 				MPI_Comm_split(MPI_COMM_WORLD, MPI_UNDEFINED, MPI_UNDEFINED, &comm_calc);
 
 				sleep(2);
@@ -267,22 +270,61 @@ void pviDGESV_WO_ft1_sim(int n, double** A, int m, double** bb, double** xx, int
 
 				i_am_calc=1;
 				// simulate recovery
-				MPI_Recv(&xx[0][0], n*m, MPI_DOUBLE, failing_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				//MPI_Recv(&xx[0][0], n*m, MPI_DOUBLE, failing_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
 				MPI_Comm_split(MPI_COMM_WORLD, i_am_fine, failing_rank, &comm_calc);
 				rank=failing_rank;
 				printf("now %d\n",rank);
+				printf("\n recovering..");
+
+				// recovery from other procs
+				// recovery = checksum - node1 - node2 - .. = - (- checksum + node1 + node2 +..)
+				for (i=0;i<n;i++)																			// checksum = - checksum
+				{
+					for (j=0;j<myTcols;j++)
+					{
+						Tlocal[i][j]=-1*Tlocal[i][j];
+					}
+				}
+				MPI_Reduce(&Tlocal[0][0], &Slocal[0][0], n*myTcols, MPI_DOUBLE, MPI_SUM, failing_rank, comm_calc);	// recovery = - checksum + node1 + node2 +..
+				for (i=0;i<n;i++)for (i=0;i<n;i++)															// recovery = - recovery
+				{
+					for (j=0;j<myTcols;j++)
+					{
+						Tlocal[i][j]=-1*Slocal[i][j];
+					}
+				}
+
+				// recovery from myself
 				for(i=0; i<myTcols; i++)			// update index with future new rank
 				{
 					global[i]= i * cprocs + rank; 	// position of the column i(local) in the global matrix
 				}
-			}
+				for (j=n-1; j>failing_level; j--)
+				{
+					avoidif=rank<map[j];
+					mystart = local[j] + avoidif;
+					for (i=mystart; i<=local[n-1]; i++)
+					{
+						for (rhs=0;rhs<m;rhs++)
+						{
+							xx[global[i]][rhs]=xx[global[i]][rhs]+Tlocal[j][i]*bb[j][rhs];
+						}
+					}
+				}
+				printf("\n ..recovered!\n");
+
+			} // spare rank
+
 			if ((rank!=spare_rank) && (rank!=failing_rank))
 			{
 				MPI_Comm_split(MPI_COMM_WORLD, i_am_fine, rank, &comm_calc);
+				MPI_Reduce(&Tlocal[0][0], &Slocal[0][0], n*myTcols, MPI_DOUBLE, MPI_SUM, failing_rank, comm_calc);	// recovery = - checksum + node1 + node2 +..
 			}
 			current_comm_world=comm_calc;
 			MPI_Comm_rank(current_comm_world, &rank);
-		}
+
+		} // time to have a fault!
 
 		// ALL procs
 		// update helpers
