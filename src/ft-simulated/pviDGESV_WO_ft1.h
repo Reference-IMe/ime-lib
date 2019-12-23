@@ -1,3 +1,4 @@
+#include <unistd.h>
 #include <mpi.h>
 #include "../helpers/matrix.h"
 #include "../helpers/vector.h"
