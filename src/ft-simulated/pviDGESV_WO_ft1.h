@@ -3,7 +3,7 @@
 #include "../helpers/matrix.h"
 #include "../helpers/vector.h"
 #include "../DGEZR.h"
-#include "pDGEIT_Wx_ft1.h"
+#include "pDGEIT_WX_ft1.h"
 
 /*
  *	solve (SV) system with general (GE) matrix A of doubles (D)
@@ -17,8 +17,13 @@
  *
  */
 
-void pviDGESV_WO_ft1_sim(int n, double** A, int m, double** bb, double** xx, int rank, int cprocs, int sprocs, int failing_rank, int failing_level)
+void pviDGESV_WO_ft1_sim(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm, int sprocs, int failing_rank, int failing_level)
 {
+    int rank, nprocs, cprocs; //
+    MPI_Comm_rank(comm, &rank);		//get current process id
+    MPI_Comm_size(comm, &nprocs);	// get number of processes
+    cprocs = nprocs - sprocs;
+
 	int i,j,l;						// indexes
 	int XKcols=2*n;					// num of cols X + K
     int myTcols;					// num of cols per process
@@ -39,7 +44,7 @@ void pviDGESV_WO_ft1_sim(int n, double** A, int m, double** bb, double** xx, int
 
     int myAcols=n/cprocs;
 
-    int nprocs=cprocs+sprocs;
+    //int nprocs=cprocs+sprocs;
 
 
     /*
@@ -170,15 +175,15 @@ void pviDGESV_WO_ft1_sim(int n, double** A, int m, double** bb, double** xx, int
 	{
 		i_am_calc=0;
 		i_am_fine=1;
-		current_comm_world=MPI_COMM_WORLD;
-		MPI_Comm_split(MPI_COMM_WORLD, MPI_UNDEFINED, MPI_UNDEFINED, &comm_calc); // checksumming procs don't belong to calc communicator
+		current_comm_world=comm;
+		MPI_Comm_split(comm, MPI_UNDEFINED, MPI_UNDEFINED, &comm_calc); // checksumming procs don't belong to calc communicator
 	}
 	else
 	{
 		i_am_calc=1;
 		i_am_fine=1;
-		current_comm_world=MPI_COMM_WORLD;
-		MPI_Comm_split(MPI_COMM_WORLD, i_am_calc, rank, &comm_calc); // calc procs belong to calc communicator
+		current_comm_world=comm;
+		MPI_Comm_split(comm, i_am_calc, rank, &comm_calc); // calc procs belong to calc communicator
 	}
 
     /*
@@ -186,7 +191,7 @@ void pviDGESV_WO_ft1_sim(int n, double** A, int m, double** bb, double** xx, int
 	 */
 	DGEZR(xx, n, m);																			// init (zero) solution vectors
 	pDGEIT_W_ft1(A, Tlocal, TlastK, n, rank, cprocs, sprocs, map, global, local, failing_rank);	// init inhibition table
-    MPI_Bcast(&bb[0][0], n*m, MPI_DOUBLE, 0, MPI_COMM_WORLD);									// send all r.h.s to all procs
+    MPI_Bcast(&bb[0][0], n*m, MPI_DOUBLE, 0, comm);									// send all r.h.s to all procs
 
 	/*
 	 *  calc inhibition sequence
@@ -260,7 +265,7 @@ void pviDGESV_WO_ft1_sim(int n, double** A, int m, double** bb, double** xx, int
 				i_am_calc=0;
 				// simulate recovery
 				//MPI_Send(&xx[0][0], n*m, MPI_DOUBLE, spare_rank, 0, MPI_COMM_WORLD);
-				MPI_Comm_split(MPI_COMM_WORLD, MPI_UNDEFINED, MPI_UNDEFINED, &comm_calc);
+				MPI_Comm_split(comm, MPI_UNDEFINED, MPI_UNDEFINED, &comm_calc);
 
 				sleep(2);
 				break;
@@ -273,7 +278,7 @@ void pviDGESV_WO_ft1_sim(int n, double** A, int m, double** bb, double** xx, int
 				// simulate recovery
 				//MPI_Recv(&xx[0][0], n*m, MPI_DOUBLE, failing_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-				MPI_Comm_split(MPI_COMM_WORLD, i_am_fine, failing_rank, &comm_calc);
+				MPI_Comm_split(comm, i_am_fine, failing_rank, &comm_calc);
 				rank=failing_rank;
 				printf("now %d\n",rank);
 				printf("\n recovering..");
@@ -319,7 +324,7 @@ void pviDGESV_WO_ft1_sim(int n, double** A, int m, double** bb, double** xx, int
 
 			if ((rank!=spare_rank) && (rank!=failing_rank))
 			{
-				MPI_Comm_split(MPI_COMM_WORLD, i_am_fine, rank, &comm_calc);
+				MPI_Comm_split(comm, i_am_fine, rank, &comm_calc);
 				MPI_Reduce(&Tlocal[0][0], &Slocal[0][0], n*myTcols, MPI_DOUBLE, MPI_SUM, failing_rank, comm_calc);	// recovery = - checksum + node1 + node2 +..
 			}
 			current_comm_world=comm_calc;
