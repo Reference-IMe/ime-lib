@@ -10,7 +10,7 @@
 #ifndef __pDGEIT_W_H__
 #define __pDGEIT_W_H__
 
-void pDGEIT_W(double** A, double** Tlocal, double** TlastK, int n, int rank, int cprocs, int* map, int* global, int* local)
+void pDGEIT_W(double** A, double** Tlocal, double** TlastK, int n, MPI_Comm comm, int rank, int cprocs, int* map, int* global, int* local)
 {
 	int i,j;
 
@@ -53,8 +53,8 @@ void pDGEIT_W(double** A, double** Tlocal, double** TlastK, int n, int rank, int
 		}
     }
 
-    MPI_Bcast (&TlastK[0][0], Tcols, MPI_DOUBLE, 0, MPI_COMM_WORLD); // last col and diagonal of A
-	MPI_Scatter (&A[0][0], 1, A_rows_interleaved_resized, &Tlocal[0][myAchunks], myAchunks, KinT_column_contiguous_resized, 0, MPI_COMM_WORLD);	// scatter columns to nodes
+    MPI_Bcast (&TlastK[0][0], Tcols, MPI_DOUBLE, 0, comm); // last col and diagonal of A
+	MPI_Scatter (&A[0][0], 1, A_rows_interleaved_resized, &Tlocal[0][myAchunks], myAchunks, KinT_column_contiguous_resized, 0, comm);	// scatter columns to nodes
 
     // init
 	for (i=0;i<n;i++)
@@ -84,7 +84,7 @@ void pDGEIT_W(double** A, double** Tlocal, double** TlastK, int n, int rank, int
 		}
 	}
 
-	MPI_Bcast (&TlastK[0][0], n, MPI_DOUBLE, map[n-1], MPI_COMM_WORLD);	// broadcast of the last col of T (K part)
+	MPI_Bcast (&TlastK[0][0], n, MPI_DOUBLE, map[n-1], comm);	// broadcast of the last col of T (K part)
 
 }
 

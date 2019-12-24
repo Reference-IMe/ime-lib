@@ -2,7 +2,7 @@
 #include "helpers/matrix.h"
 #include "helpers/vector.h"
 #include "DGEZR.h"
-#include "pDGEIT_Wx.h"
+#include "pDGEIT_WX.h"
 
 /*
  *	solve (SV) system with general (GE) matrix A of doubles (D)
@@ -15,9 +15,12 @@
  *	ifs removed
  *
  */
-
-void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, int rank, int cprocs)
+void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
+    int rank, cprocs; //
+    MPI_Comm_rank(comm, &rank);		//get current process id
+    MPI_Comm_size(comm, &cprocs);	// get number of processes
+
 	int i,j,l;						// indexes
     int Tcols=2*n;					// total num of cols (X + K)
     int myTcols;					// num of T cols per process
@@ -94,10 +97,10 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, int rank, i
 	 *  init inhibition table
 	 */
 	DGEZR(xx, n, m);													// init (zero) solution vectors
-	pDGEIT_W(A, Tlocal, TlastK, n, rank, cprocs, map, global, local);	// init inhibition table
+	pDGEIT_W(A, Tlocal, TlastK, n, comm, rank, cprocs, map, global, local);	// init inhibition table
 
 	// send all r.h.s to all procs
-    MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm);
 
 	/*
 	 *  calc inhibition sequence
@@ -192,7 +195,7 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, int rank, i
 		}
 
 		// collect chunks of last row of K to "future" last node
-		MPI_Gather (&Tlocal[l-1][local[n]], myTcols/2, MPI_DOUBLE, &TlastKr[0], 1, TlastKr_chunks_resized, map[l-1], MPI_COMM_WORLD);
+		MPI_Gather (&Tlocal[l-1][local[n]], myTcols/2, MPI_DOUBLE, &TlastKr[0], 1, TlastKr_chunks_resized, map[l-1], comm);
 
 		//future last node broadcasts last row and col of K
 		if (rank==map[l-1])
@@ -205,7 +208,7 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, int rank, i
 		}
 
 		//TODO: substitute Gather with an All-to-All
-		MPI_Bcast (&TlastK[0][0], Tcols, MPI_DOUBLE, map[l-1], MPI_COMM_WORLD);
+		MPI_Bcast (&TlastK[0][0], Tcols, MPI_DOUBLE, map[l-1], comm);
 	}
 
 	// last level (l=0)
@@ -221,11 +224,11 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, int rank, i
 	// MPI_IN_PLACE required for MPICH based versions
 	if (rank==0)
 	{
-		MPI_Gather (MPI_IN_PLACE, 1, xx_rows_interleaved_resized, &xx[0][0], 1, xx_rows_interleaved_resized, 0, MPI_COMM_WORLD);
+		MPI_Gather (MPI_IN_PLACE, 1, xx_rows_interleaved_resized, &xx[0][0], 1, xx_rows_interleaved_resized, 0, comm);
 	}
 	else
 	{
-		MPI_Gather (&xx[rank][0], 1, xx_rows_interleaved_resized, &xx[0][0], 1, xx_rows_interleaved_resized, 0, MPI_COMM_WORLD);
+		MPI_Gather (&xx[rank][0], 1, xx_rows_interleaved_resized, &xx[0][0], 1, xx_rows_interleaved_resized, 0, comm);
 	}
 
 	// cleanup

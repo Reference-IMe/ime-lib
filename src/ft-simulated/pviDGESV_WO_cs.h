@@ -14,8 +14,13 @@
  *
  */
 
-void pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, int rank, int cprocs, int sprocs)
+void pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm, int sprocs)
 {
+    int rank, nprocs, cprocs; //
+    MPI_Comm_rank(comm, &rank);		//get current process id
+    MPI_Comm_size(comm, &nprocs);	// get number of processes
+    cprocs = nprocs - sprocs;
+
 	int i,j,l,p,rhs;				// indexes
 	int XKcols=2*n;					// num of cols X + K
     int myTcols;					// num of cols per process
@@ -26,7 +31,6 @@ void pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, int rank
     int myend;						// loop boundaries on local cols
     int mystart;
 
-    int nprocs=cprocs+sprocs;
 
     /*
      * local storage for a part of the input matrix (continuous columns, not interleaved)
@@ -164,12 +168,12 @@ void pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, int rank
 	int rank_calc;
 	if (sprocs>0)
 	{
-		MPI_Comm_split(MPI_COMM_WORLD, i_am_calc, rank, &comm_calc);
+		MPI_Comm_split(comm, i_am_calc, rank, &comm_calc);
 		MPI_Comm_rank(comm_calc, &rank_calc);
 	}
 	else
 	{
-		comm_calc=MPI_COMM_WORLD;
+		comm_calc=comm;
 		rank_calc=rank;
 	}
 
@@ -177,7 +181,7 @@ void pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, int rank
 	 *  init inhibition table
 	 */
 
-    MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm);
 
     if (i_am_calc)
     {
@@ -218,7 +222,7 @@ void pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, int rank
 			for (j=0; j<sprocs; j++)
 			{
 				// send checksumming cols
-				MPI_Send (&T[0][XKcols+j*myTcols], myTcols, single_column_resized, cprocs+j, cprocs+j, MPI_COMM_WORLD);
+				MPI_Send (&T[0][XKcols+j*myTcols], myTcols, single_column_resized, cprocs+j, cprocs+j, comm);
 			}
 		}
 		// scatter other columns to nodes
@@ -229,11 +233,11 @@ void pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, int rank
     }
     else // checksum node
     {
-    	MPI_Recv (&Tlocal[0][0], n*myTcols, MPI_DOUBLE, 0, rank, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    	MPI_Recv (&Tlocal[0][0], n*myTcols, MPI_DOUBLE, 0, rank, comm, MPI_STATUS_IGNORE);
     }
 
 	// broadcast of the last col and the last row of T (K part)
-	MPI_Bcast (&TlastK[0][0], 2*n, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+	MPI_Bcast (&TlastK[0][0], 2*n, MPI_DOUBLE, 0, comm);
 
 	/*
 	 *  calc inhibition sequence
@@ -345,7 +349,7 @@ void pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, int rank
 		}
 
 		// broadcast of the last col and the last row of T (K part)
-		MPI_Bcast (&TlastK[0][0], 2*n, MPI_DOUBLE, map[n+l-1], MPI_COMM_WORLD);
+		MPI_Bcast (&TlastK[0][0], 2*n, MPI_DOUBLE, map[n+l-1], comm);
 	}
 
 	// last level (l=0)
