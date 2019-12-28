@@ -25,16 +25,18 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
     int Tcols=2*n;					// total num of cols (X + K)
     int myTcols;					// num of T cols per process
     	myTcols=Tcols/cprocs;
-    int myAchunks;					// num of A rows/cols per process
-    	myAchunks=n/cprocs;
-    int myxxrows=myAchunks;
+    //int myAchunks;					// num of A rows/cols per process
+    //	myAchunks=n/cprocs;
+    int myxxrows=n/cprocs;
+    int myKcols;
+    	myKcols=myTcols/2;
     int myend;						// loop boundaries on local cols =myTcols/2;
     int mystart;
     int rhs;
 
     int avoidif;					// for boolean --> int conversion
 
-    int myAcols=n/cprocs;
+    //int myAcols=n/cprocs;
     /*
      * local storage for a part of the input matrix (continuous columns, not interleaved)
      */
@@ -74,6 +76,11 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
      * MPI derived types
      */
 
+	/*
+	 * option 1: derived data type, for interleaving while for gathering
+	 *           non working for some values of n and np, why? extent of derived MPI data type?
+	 */
+	/*
 	MPI_Datatype TlastKr_chunks;
 	MPI_Type_vector (n/cprocs, 1, cprocs, MPI_DOUBLE, & TlastKr_chunks );
 	MPI_Type_commit (& TlastKr_chunks);
@@ -81,6 +88,12 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
 	MPI_Datatype TlastKr_chunks_resized;
 	MPI_Type_create_resized (TlastKr_chunks, 0, 1*sizeof(double), & TlastKr_chunks_resized);
 	MPI_Type_commit (& TlastKr_chunks_resized);
+	*/
+
+	/*
+	 * option 2: standard data type, explicit loop for interleaving after gathering
+	 *           see below
+	 */
 
 	// rows of xx to be extracted
 	MPI_Datatype xx_rows_interleaved;
@@ -96,8 +109,9 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
     /*
 	 *  init inhibition table
 	 */
-	DGEZR(xx, n, m);													// init (zero) solution vectors
+	DGEZR(xx, n, m);														// init (zero) solution vectors
 	pDGEIT_W(A, Tlocal, TlastK, n, comm, rank, cprocs, map, global, local);	// init inhibition table
+
 
 	// send all r.h.s to all procs
     MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm);
@@ -120,7 +134,7 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
 			mystart++;
 		}
 		*/
-		avoidif=rank<map[l];
+		avoidif=(rank<map[l]);
 		mystart = local[l] + avoidif;
 
 		for (i=mystart; i<=local[n-1]; i++)
@@ -157,7 +171,7 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
 			myend--;
 		}
 		*/
-		avoidif = rank>map[l-1];
+		avoidif = (rank>map[l-1]);
 		myend = local[l-1] - avoidif;
 
 		for (i=mystart; i<=myend; i++)
@@ -174,7 +188,7 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
 			mystart++;
 		}
 		*/
-		avoidif=rank<map[l];
+		avoidif=(rank<map[l]);
 		mystart=local[l]+avoidif;
 		/*
 		myend=local[n+l-1];
@@ -183,7 +197,7 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
 			myend--;
 		}
 		*/
-		avoidif=rank>map[n+l-1];
+		avoidif=(rank>map[n+l-1]);
 		myend=local[n+l-1]-avoidif;
 
 		for (i=0; i<=l-1; i++)
@@ -195,15 +209,36 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
 		}
 
 		// collect chunks of last row of K to "future" last node
-		MPI_Gather (&Tlocal[l-1][local[n]], myTcols/2, MPI_DOUBLE, &TlastKr[0], 1, TlastKr_chunks_resized, map[l-1], comm);
+
+		// option 1: non working
+		//MPI_Gather (&Tlocal[l-1][local[n]], myTcols/2, MPI_DOUBLE, &TlastKr[0], 1, TlastKr_chunks_resized, map[l-1], comm);
+		// option 2: use last column buffer for temporary copy of non-interleaved data
+		MPI_Gather (&Tlocal[l-1][myKcols], myKcols, MPI_DOUBLE, &TlastKc[0], myKcols, MPI_DOUBLE, map[l-1], comm);
 
 		//future last node broadcasts last row and col of K
 		if (rank==map[l-1])
 		{
 			// copy data into local buffer before broadcast
+
+			// option 1
+			/*
 			for (i=0; i<n; i++)
 			{
 				TlastKc[i]=Tlocal[i][local[n+l-1]];
+			}
+			*/
+
+			// option 2
+			myend=local[n+l-1];
+			for (i=0; i<myKcols; i++)
+			{
+				int ii=i*cprocs;
+				for (j=0; j<cprocs; j++)
+				{
+					int jj=j*myKcols+i;
+					TlastKr[ii+j]=TlastKc[jj];		// interleave columns of the last row
+					TlastKc[jj]=Tlocal[jj][myend];	// copy last column
+				}
 			}
 		}
 
@@ -212,13 +247,14 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
 	}
 
 	// last level (l=0)
-	for (i=0; i<myTcols/2; i++)
+	for (i=0; i<myxxrows; i++)
 	{
 		for(rhs=0;rhs<m;rhs++)
 		{
 			xx[global[i]][rhs]=xx[global[i]][rhs]+Tlocal[0][i]*bb[0][rhs];
 		}
 	}
+
 
 	// collect solution
 	// MPI_IN_PLACE required for MPICH based versions

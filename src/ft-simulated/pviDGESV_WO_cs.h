@@ -25,6 +25,8 @@ void pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, MPI_Comm
 	int XKcols=2*n;					// num of cols X + K
     int myTcols;					// num of cols per process
     	myTcols=XKcols/cprocs;
+    int myKcols;
+    	myKcols=myTcols/2;
     int Scols;
     	Scols=myTcols*sprocs;
     int Tcols=XKcols+Scols;			// num of cols X + K + S
@@ -138,6 +140,11 @@ void pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, MPI_Comm
 	MPI_Type_vector (n, 1, myTcols, MPI_DOUBLE, & local_single_column );
 	MPI_Type_commit (& local_single_column);
 
+	/*
+	 * option 1: derived data type, for interleaving while for gathering
+	 *           non working for some values of n and np, why? extent of derived MPI data type?
+	 */
+	/*
 	MPI_Datatype interleaved_row;
 	MPI_Type_vector (n/cprocs, 1, cprocs, MPI_DOUBLE, & interleaved_row );
 	MPI_Type_commit (& interleaved_row);
@@ -145,6 +152,12 @@ void pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, MPI_Comm
 	MPI_Datatype interleaved_row_resized;
 	MPI_Type_create_resized (interleaved_row, 0, 1*sizeof(double), & interleaved_row_resized);
 	MPI_Type_commit (& interleaved_row_resized);
+	*/
+
+	/*
+	 * option 2: standard data type, explicit loop for interleaving after gathering
+	 *           see below
+	 */
 
 	MPI_Datatype multiple_row;
 	MPI_Type_vector (n/cprocs, m, m*cprocs, MPI_DOUBLE, & multiple_row );
@@ -324,7 +337,11 @@ void pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, MPI_Comm
 			}
 
 			// gather chunks of last row of K to "future" last node
-			MPI_Gather (&Tlocal[l-1][local[n]], myTcols/2, MPI_DOUBLE, &TlastKr[0], 1, interleaved_row_resized, map[l-1], comm_calc);
+			// option 1: non working
+			//MPI_Gather (&Tlocal[l-1][local[n]], myTcols/2, MPI_DOUBLE, &TlastKr[0], 1, interleaved_row_resized, map[l-1], comm_calc);
+			// option 2: use last column buffer for temporary copy of non-interleaved data
+			MPI_Gather (&Tlocal[l-1][myKcols], myKcols, MPI_DOUBLE, &TlastKc[0], myKcols, MPI_DOUBLE, map[l-1], comm_calc);
+
 		}
 		else // node containing S
 		{
@@ -339,17 +356,34 @@ void pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, MPI_Comm
 		}
 
 		//future last node broadcasts last row and col of K
-		if (rank==map[n+l-1])
+		if (rank==map[l-1])
 		{
 			// copy data into local buffer before broadcast
+
+			// option 1
+			/*
 			for (i=0; i<n; i++)
 			{
 				TlastKc[i]=Tlocal[i][local[n+l-1]];
 			}
+			*/
+
+			// option 2
+			myend=local[n+l-1];
+			for (i=0; i<myKcols; i++)
+			{
+				int ii=i*cprocs;
+				for (j=0; j<cprocs; j++)
+				{
+					int jj=j*myKcols+i;
+					TlastKr[ii+j]=TlastKc[jj];		// interleave columns of the last row
+					TlastKc[jj]=Tlocal[jj][myend];	// copy last column
+				}
+			}
 		}
 
 		// broadcast of the last col and the last row of T (K part)
-		MPI_Bcast (&TlastK[0][0], 2*n, MPI_DOUBLE, map[n+l-1], comm);
+		MPI_Bcast (&TlastK[0][0], 2*n, MPI_DOUBLE, map[l-1], comm);
 	}
 
 	// last level (l=0)
