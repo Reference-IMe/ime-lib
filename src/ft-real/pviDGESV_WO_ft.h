@@ -21,7 +21,7 @@ extern int failing_rank;
 extern int failing_level;
 extern int faulty;
 extern int faulty_location;
-extern MPI_Comm current_comm;
+extern MPI_Comm ftla_current_comm;
 extern void common_error_handler(int s);
 
 void pviDGESV_WO_ft(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm, int sprocs)
