@@ -67,7 +67,7 @@ void PrintMatrix2D(double** const mat, cui rows, cui cols)
 	{
 		for(c=0;c<cols;c++)
 		{
-			printf("%.3g\t",mat[r][c]);
+			printf("%.3f\t",mat[r][c]);
 		}
 		printf("\n");
 	}
@@ -140,7 +140,7 @@ void PrintMatrix1D(double* const mat, cui rows, cui cols)
 	{
 		for(c=0;c<cols;c++)
 		{
-			printf("%.3g\t",mat[r*cols+c]);
+			printf("%.3f\t",mat[r*cols+c]);
 		}
 		printf("\n");
 	}
