@@ -167,7 +167,7 @@ void pviDGEF_WO_ft1_sim(int n, double** A, double** K, MPI_Comm comm, int sprocs
 
 			if (rank==failing_rank)
 			{
-				printf("\n bye bye from %d",rank);
+				printf("\n## IMe pviDGEF: bye bye from %d",rank);
 
 				i_am_fine=0;
 				i_am_calc=0;
@@ -181,7 +181,7 @@ void pviDGEF_WO_ft1_sim(int n, double** A, double** K, MPI_Comm comm, int sprocs
 
 			if (rank==spare_rank)
 			{
-				printf("\n hello from %d, ",rank);
+				printf("\n## IMe pviDGEF: hello from %d, ",rank);
 
 				i_am_calc=1;
 				// simulate recovery
@@ -189,8 +189,8 @@ void pviDGEF_WO_ft1_sim(int n, double** A, double** K, MPI_Comm comm, int sprocs
 
 				MPI_Comm_split(comm, i_am_fine, failing_rank, &comm_calc);
 				rank=failing_rank;
-				printf("now %d\n",rank);
-				printf("\n recovering..");
+				printf("now %d",rank);
+				printf("\n## IMe pviDGEF: recovering..");
 
 				// recovery from other procs
 				// recovery = checksum - node1 - node2 - .. = - (- checksum + node1 + node2 +..)
@@ -229,7 +229,7 @@ void pviDGEF_WO_ft1_sim(int n, double** A, double** K, MPI_Comm comm, int sprocs
 					}
 				}
 				*/
-				printf("\n ..recovered!\n");
+				printf("\n## IMe pviDGEF: ..recovered!\n");
 
 			} // spare rank
 
