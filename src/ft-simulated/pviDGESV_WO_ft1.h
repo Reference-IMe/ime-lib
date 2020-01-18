@@ -44,8 +44,6 @@ void pviDGESV_WO_ft1_sim(int n, double** A, int m, double** bb, double** xx, MPI
 
     int fault_detected=0;
 
-    int myAcols=n/cprocs;
-
 
     /*
      * local storage for a part of the input matrix (continuous columns, not interleaved)
@@ -202,7 +200,7 @@ void pviDGESV_WO_ft1_sim(int n, double** A, int m, double** bb, double** xx, MPI
 	 *  init inhibition table
 	 */
 	DGEZR(xx, n, m);																			// init (zero) solution vectors
-	pDGEIT_W_ft1(A, Tlocal, TlastK, n, rank, cprocs, sprocs, map, global, local, failing_rank);	// init inhibition table
+	pDGEIT_W_ft1(A, Tlocal, TlastK, n, rank, cprocs, sprocs, map, global, local);	// init inhibition table
     MPI_Bcast(&bb[0][0], n*m, MPI_DOUBLE, 0, comm);									// send all r.h.s to all procs
 
 	/*

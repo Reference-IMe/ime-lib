@@ -1,12 +1,11 @@
 #include <mpi.h>
 #include "helpers/matrix.h"
 #include "helpers/vector.h"
-#include "DGEZR.h"
 #include "pDGEIT_WX.h"
 
 /*
- *	solve (SV) system with general (GE) matrix A of doubles (D)
- *	of order n and with m r.h.s in matrix bb[n,m] and solutions in xx[n,m]
+ *	factorization (F) of a general (GE) matrix A of doubles (D)
+ *	of order n
  *	with:
  *	wide overwrite (WO) memory model
  *	parallelized in interleaved columns (pvi) over cprocs calculating processors
@@ -15,30 +14,23 @@
  *	ifs removed
  *
  */
-void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+void pviDGEF_WO(int n, double** A, double** K, MPI_Comm comm)
 {
     int rank, cprocs; //
     MPI_Comm_rank(comm, &rank);		//get current process id
     MPI_Comm_size(comm, &cprocs);	// get number of processes
 
 	int i,j,l;						// indexes
-	int ii,jj;
-	int gi;
     int Tcols=2*n;					// total num of cols (X + K)
     int myTcols;					// num of T cols per process
     	myTcols=Tcols/cprocs;
-    //int myAchunks;					// num of A rows/cols per process
-    //	myAchunks=n/cprocs;
-    int myxxrows=n/cprocs;
-    int myKcols;
+    int myKcols;					// num of K (or X) cols per process
     	myKcols=myTcols/2;
-    int myend, myend_2;						// loop boundaries on local cols =myTcols/2;
-    int mystart, mystart_2;
-    int rhs;
+    int myend;						// loop boundaries on local cols =myTcols/2;
+    int mystart;
 
     int avoidif;					// for boolean --> int conversion
 
-    //int myAcols=n/cprocs;
     /*
      * local storage for a part of the input matrix (continuous columns, not interleaved)
      */
@@ -77,46 +69,22 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
     /*
      * MPI derived types
      */
+	MPI_Datatype Tlocal_half;
+	MPI_Type_vector (n, myKcols, myTcols, MPI_DOUBLE, & Tlocal_half );
+	MPI_Type_commit (& Tlocal_half);
 
-	/*
-	 * option 1: derived data type, for interleaving while for gathering
-	 *           non working for some values of n and np, why? extent of derived MPI data type?
-	 */
-	/*
-	MPI_Datatype TlastKr_chunks;
-	MPI_Type_vector (n/cprocs, 1, cprocs, MPI_DOUBLE, & TlastKr_chunks );
-	MPI_Type_commit (& TlastKr_chunks);
+	MPI_Datatype Thalf_interleaved;
+	MPI_Type_vector (n*myKcols, 1, cprocs, MPI_DOUBLE, & Thalf_interleaved );
+	MPI_Type_commit (& Thalf_interleaved);
 
-	MPI_Datatype TlastKr_chunks_resized;
-	MPI_Type_create_resized (TlastKr_chunks, 0, 1*sizeof(double), & TlastKr_chunks_resized);
-	MPI_Type_commit (& TlastKr_chunks_resized);
-	*/
-
-	/*
-	 * option 2: standard data type, explicit loop for interleaving after gathering
-	 *           see below
-	 */
-
-	// rows of xx to be extracted
-	MPI_Datatype xx_rows_interleaved;
-	MPI_Type_vector (myxxrows, m, m*cprocs, MPI_DOUBLE, & xx_rows_interleaved );
-	MPI_Type_commit (& xx_rows_interleaved);
-
-	// rows of xx to be extracted, properly resized for gathering
-	MPI_Datatype xx_rows_interleaved_resized;
-	MPI_Type_create_resized (xx_rows_interleaved, 0, m*sizeof(double), & xx_rows_interleaved_resized);
-	MPI_Type_commit (& xx_rows_interleaved_resized);
-
+	MPI_Datatype Thalf_interleaved_resized;
+	MPI_Type_create_resized (Thalf_interleaved, 0, 1*sizeof(double), & Thalf_interleaved_resized);
+	MPI_Type_commit (& Thalf_interleaved_resized);
 
     /*
 	 *  init inhibition table
 	 */
-	DGEZR(xx, n, m);														// init (zero) solution vectors
 	pDGEIT_W(A, Tlocal, TlastK, n, comm, rank, cprocs, map, global, local);	// init inhibition table
-
-
-	// send all r.h.s to all procs
-    MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm);
 
 	/*
 	 *  calc inhibition sequence
@@ -129,24 +97,8 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
 		// update solutions
 		// l .. n-1
 
-		/*
-		mystart=local[l];
-		if (rank<map[l])
-		{
-			mystart++;
-		}
-		*/
-		avoidif=(rank<map[l]);
-		mystart = local[l] + avoidif;
-
-		for (i=mystart; i<=local[n-1]; i++)
-		{
-			gi = i * cprocs + rank;
-			for (rhs=0;rhs<m;rhs++)
-			{
-				xx[gi][rhs]=xx[gi][rhs]+Tlocal[l][i]*bb[l][rhs];
-			}
-		}
+		//avoidif=(rank<map[l]);
+		//mystart = local[l] + avoidif;
 
 		// ALL procs
 		// update helpers
@@ -154,10 +106,6 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
 		{
 			h[i]   = 1/(1-TlastKc[i]*TlastKr[i]);
 			hh[i]  = TlastKc[i]*h[i];
-			for (rhs=0;rhs<m;rhs++)
-			{
-				bb[i][rhs] = bb[i][rhs]-TlastKr[i]*bb[l][rhs];
-			}
 		}
 
 		// update T
@@ -166,27 +114,25 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
 		// 0 .. l-1
 		// ALL procs
 		// processes with diagonal elements not null
-		//mystart_1=0;
-		//avoidif = (rank>map[l-1]);
-		//myend_1 = local[l-1] - avoidif;
+		mystart=0;
+		avoidif = (rank>map[l-1]);
+		myend = local[l-1] - avoidif;
+		for (i=mystart; i<=myend; i++)
+		{
+			Tlocal[global[i]][i]=Tlocal[global[i]][i]*h[global[i]];
+		}
+
 		// l .. n+l-1
 		// ALL procs
 		avoidif=(rank<map[l]);
-		mystart_2=local[l]+avoidif;
+		mystart=local[l]+avoidif;
 		avoidif=(rank>map[n+l-1]);
-		myend_2=local[n+l-1]-avoidif;
-
-		for (j=0;j<mystart_2;j++)
-		{
-			gi = j * cprocs + rank;;
-			Tlocal[gi][j]=Tlocal[gi][j]*h[gi]; // diagonal elements
-		}
-
+		myend=local[n+l-1]-avoidif;
 		for (i=0; i<=l-1; i++)
 		{
-			for (j=mystart_2; j<=myend_2; j++)
+			for (j=mystart; j<=myend; j++)
 			{
-				Tlocal[i][j]=Tlocal[i][j]*h[i] - Tlocal[l][j]*hh[i]; // non-diagonal elements
+				Tlocal[i][j]=Tlocal[i][j]*h[i] - Tlocal[l][j]*hh[i];
 			}
 		}
 
@@ -214,10 +160,10 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
 			myend=local[n+l-1];
 			for (i=0; i<myKcols; i++)
 			{
-				ii=i*cprocs;
+				int ii=i*cprocs;
 				for (j=0; j<cprocs; j++)
 				{
-					jj=j*myKcols+i;
+					int jj=j*myKcols+i;
 					TlastKr[ii+j]=TlastKc[jj];		// interleave columns of the last row
 					TlastKc[jj]=Tlocal[jj][myend];	// copy last column
 				}
@@ -228,27 +174,10 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
 		MPI_Bcast (&TlastK[0][0], Tcols, MPI_DOUBLE, map[l-1], comm);
 	}
 
-	// last level (l=0)
-	for (i=0; i<myxxrows; i++)
-	{
-		for(rhs=0;rhs<m;rhs++)
-		{
-			gi = i * cprocs + rank;
-			xx[gi][rhs]=xx[gi][rhs]+Tlocal[0][i]*bb[0][rhs];
-		}
-	}
 
+	MPI_Gather (&Tlocal[0][0], 1, Tlocal_half, &A[0][0], 1, Thalf_interleaved_resized, 0, comm);
+	MPI_Gather (&Tlocal[0][myKcols], 1, Tlocal_half, &K[0][0], 1, Thalf_interleaved_resized, 0, comm);
 
-	// collect solution
-	// MPI_IN_PLACE required for MPICH based versions
-	if (rank==0)
-	{
-		MPI_Gather (MPI_IN_PLACE, 1, xx_rows_interleaved_resized, &xx[0][0], 1, xx_rows_interleaved_resized, 0, comm);
-	}
-	else
-	{
-		MPI_Gather (&xx[rank][0], 1, xx_rows_interleaved_resized, &xx[0][0], 1, xx_rows_interleaved_resized, 0, comm);
-	}
 
 	// cleanup
 	free(local);
@@ -258,5 +187,5 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
 	DeallocateMatrix2D(TlastK,2,CONTIGUOUS);
 	DeallocateVector(h);
 	DeallocateVector(hh);
-	DeallocateMatrix2D(Tlocal,n,CONTIGUOUS);
+	//DeallocateMatrix2D(Tlocal,n,CONTIGUOUS);
 }

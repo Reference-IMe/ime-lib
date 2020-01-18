@@ -22,8 +22,6 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
     MPI_Comm_size(comm, &cprocs);	// get number of processes
 
 	int i,j,l;						// indexes
-	int ii,jj;
-	int gi;
     int Tcols=2*n;					// total num of cols (X + K)
     int myTcols;					// num of T cols per process
     	myTcols=Tcols/cprocs;
@@ -32,8 +30,8 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
     int myxxrows=n/cprocs;
     int myKcols;
     	myKcols=myTcols/2;
-    int myend, myend_2;						// loop boundaries on local cols =myTcols/2;
-    int mystart, mystart_2;
+    int myend;						// loop boundaries on local cols =myTcols/2;
+    int mystart;
     int rhs;
 
     int avoidif;					// for boolean --> int conversion
@@ -141,10 +139,9 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
 
 		for (i=mystart; i<=local[n-1]; i++)
 		{
-			gi = i * cprocs + rank;
 			for (rhs=0;rhs<m;rhs++)
 			{
-				xx[gi][rhs]=xx[gi][rhs]+Tlocal[l][i]*bb[l][rhs];
+				xx[global[i]][rhs]=xx[global[i]][rhs]+Tlocal[l][i]*bb[l][rhs];
 			}
 		}
 
@@ -166,27 +163,48 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
 		// 0 .. l-1
 		// ALL procs
 		// processes with diagonal elements not null
-		//mystart_1=0;
-		//avoidif = (rank>map[l-1]);
-		//myend_1 = local[l-1] - avoidif;
+		mystart=0;
+		/*
+		myend=local[l-1];
+		if (rank>map[l-1])
+		{
+			myend--;
+		}
+		*/
+		avoidif = (rank>map[l-1]);
+		myend = local[l-1] - avoidif;
+
+		for (i=mystart; i<=myend; i++)
+		{
+			Tlocal[global[i]][i]=Tlocal[global[i]][i]*h[global[i]];
+		}
+
 		// l .. n+l-1
 		// ALL procs
-		avoidif=(rank<map[l]);
-		mystart_2=local[l]+avoidif;
-		avoidif=(rank>map[n+l-1]);
-		myend_2=local[n+l-1]-avoidif;
-
-		for (j=0;j<mystart_2;j++)
+		/*
+		mystart=local[l];
+		if (rank<map[l])
 		{
-			gi = j * cprocs + rank;;
-			Tlocal[gi][j]=Tlocal[gi][j]*h[gi]; // diagonal elements
+			mystart++;
 		}
+		*/
+		avoidif=(rank<map[l]);
+		mystart=local[l]+avoidif;
+		/*
+		myend=local[n+l-1];
+		if (rank>map[n+l-1])
+		{
+			myend--;
+		}
+		*/
+		avoidif=(rank>map[n+l-1]);
+		myend=local[n+l-1]-avoidif;
 
 		for (i=0; i<=l-1; i++)
 		{
-			for (j=mystart_2; j<=myend_2; j++)
+			for (j=mystart; j<=myend; j++)
 			{
-				Tlocal[i][j]=Tlocal[i][j]*h[i] - Tlocal[l][j]*hh[i]; // non-diagonal elements
+				Tlocal[i][j]=Tlocal[i][j]*h[i] - Tlocal[l][j]*hh[i];
 			}
 		}
 
@@ -214,10 +232,10 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
 			myend=local[n+l-1];
 			for (i=0; i<myKcols; i++)
 			{
-				ii=i*cprocs;
+				int ii=i*cprocs;
 				for (j=0; j<cprocs; j++)
 				{
-					jj=j*myKcols+i;
+					int jj=j*myKcols+i;
 					TlastKr[ii+j]=TlastKc[jj];		// interleave columns of the last row
 					TlastKc[jj]=Tlocal[jj][myend];	// copy last column
 				}
@@ -233,8 +251,7 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
 	{
 		for(rhs=0;rhs<m;rhs++)
 		{
-			gi = i * cprocs + rank;
-			xx[gi][rhs]=xx[gi][rhs]+Tlocal[0][i]*bb[0][rhs];
+			xx[global[i]][rhs]=xx[global[i]][rhs]+Tlocal[0][i]*bb[0][rhs];
 		}
 	}
 
