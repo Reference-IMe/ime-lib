@@ -21,6 +21,8 @@ void pviDGEF_WO(int n, double** A, double** K, MPI_Comm comm)
     MPI_Comm_size(comm, &cprocs);	// get number of processes
 
 	int i,j,l;						// indexes
+	int ii,jj;
+	int gi;
     int Tcols=2*n;					// total num of cols (X + K)
     int myTcols;					// num of T cols per process
     	myTcols=Tcols/cprocs;
@@ -57,7 +59,7 @@ void pviDGEF_WO(int n, double** A, double** K, MPI_Comm comm)
 			for (i=0; i<Tcols; i++)
 			{
 				map[i]= i % cprocs;			// who has the col i
-				local[i]=floor(i/cprocs);	// position of the column i(global) in the local matrix
+				local[i]=(int)floor(i/cprocs);	// position of the column i(global) in the local matrix
 			}
     int*	global;
     		global=malloc(myTcols*sizeof(int));
@@ -114,13 +116,10 @@ void pviDGEF_WO(int n, double** A, double** K, MPI_Comm comm)
 		// 0 .. l-1
 		// ALL procs
 		// processes with diagonal elements not null
-		mystart=0;
-		avoidif = (rank>map[l-1]);
-		myend = local[l-1] - avoidif;
-		for (i=mystart; i<=myend; i++)
-		{
-			Tlocal[global[i]][i]=Tlocal[global[i]][i]*h[global[i]];
-		}
+		//mystart=0;
+		//avoidif = (rank>map[l-1]);
+		//myend = local[l-1] - avoidif;
+
 
 		// l .. n+l-1
 		// ALL procs
@@ -128,6 +127,13 @@ void pviDGEF_WO(int n, double** A, double** K, MPI_Comm comm)
 		mystart=local[l]+avoidif;
 		avoidif=(rank>map[n+l-1]);
 		myend=local[n+l-1]-avoidif;
+
+		for (j=0;j<mystart;j++)
+		{
+			gi = j * cprocs + rank;;
+			Tlocal[gi][j]=Tlocal[gi][j]*h[gi]; // diagonal elements
+		}
+
 		for (i=0; i<=l-1; i++)
 		{
 			for (j=mystart; j<=myend; j++)
@@ -160,10 +166,10 @@ void pviDGEF_WO(int n, double** A, double** K, MPI_Comm comm)
 			myend=local[n+l-1];
 			for (i=0; i<myKcols; i++)
 			{
-				int ii=i*cprocs;
+				ii=i*cprocs;
 				for (j=0; j<cprocs; j++)
 				{
-					int jj=j*myKcols+i;
+					jj=j*myKcols+i;
 					TlastKr[ii+j]=TlastKc[jj];		// interleave columns of the last row
 					TlastKc[jj]=Tlocal[jj][myend];	// copy last column
 				}

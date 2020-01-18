@@ -11,7 +11,7 @@
 #ifndef __pDGEIT_W_FT_H__
 #define __pDGEIT_W_FT_H__
 
-void pDGEIT_W_ft1(double** A, double** Tlocal, double** TlastK, int n, int rank, int cprocs, int sprocs, int* map, int* global, int* local, int failing_rank)
+void pDGEIT_W_ft1(double** A, double** Tlocal, double** TlastK, int n, int rank, int cprocs, int sprocs, int* map, int* global, int* local)
 {
 	int i,j;
 

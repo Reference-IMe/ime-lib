@@ -32,18 +32,13 @@ void pviDGEF_WO_ft1_sim(int n, double** A, double** K, MPI_Comm comm, int sprocs
     int Scols;
     	Scols=myTcols*sprocs;
     int Tcols=XKcols+Scols;			// num of cols X + K + S
-    int myAchunks;					// num of A rows/cols per process
-    	myAchunks=n/cprocs;
-    int myxxrows=myAchunks;
+
     int myend;						// loop boundaries on local cols =myTcols/2;
     int mystart;
-    int rhs;
 
     int avoidif;					// for boolean --> int conversion
 
     int fault_detected=0;
-
-    int myAcols=n/cprocs;
 
 
     /*
@@ -73,7 +68,7 @@ void pviDGEF_WO_ft1_sim(int n, double** A, double** K, MPI_Comm comm, int sprocs
 			for (i=0; i<XKcols; i++)
 			{
 				map[i]= i % cprocs;			// who has the col i
-				local[i]=floor(i/cprocs);	// position of the column i(global) in the local matrix
+				local[i]=(int)floor(i/cprocs);	// position of the column i(global) in the local matrix
 			}
 			for (i=0; i<Scols; i++)			// not executed if sprocs = 0
 			{
@@ -149,7 +144,7 @@ void pviDGEF_WO_ft1_sim(int n, double** A, double** K, MPI_Comm comm, int sprocs
     /*
 	 *  init inhibition table
 	 */
-	pDGEIT_W_ft1(A, Tlocal, TlastK, n, rank, cprocs, sprocs, map, global, local, failing_rank);	// init inhibition table
+	pDGEIT_W_ft1(A, Tlocal, TlastK, n, rank, cprocs, sprocs, map, global, local);	// init inhibition table
 
 	/*
 	 *  calc inhibition sequence
