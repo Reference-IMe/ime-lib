@@ -17,7 +17,7 @@ void DGESV_WO(int n, double** A, int m, double** bb, double** xx)
 
     double h;
     double hh;
-    double denAii;
+    //double denAii;
     double** T;
 
     T=AllocateMatrix2D(n,d,CONTIGUOUS);	// allocate table
