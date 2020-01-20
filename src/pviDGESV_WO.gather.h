@@ -15,13 +15,15 @@
  *	ifs removed
  *
  */
-void pviDGESV_WO_nocacheopt(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+void pviDGESV_WO_gather(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
     int rank, cprocs; //
     MPI_Comm_rank(comm, &rank);		//get current process id
     MPI_Comm_size(comm, &cprocs);	// get number of processes
 
 	int i,j,l;						// indexes
+	int ii,jj;
+	int gi;
     int Tcols=2*n;					// total num of cols (X + K)
     int myTcols;					// num of T cols per process
     	myTcols=Tcols/cprocs;
@@ -30,8 +32,8 @@ void pviDGESV_WO_nocacheopt(int n, double** A, int m, double** bb, double** xx, 
     int myxxrows=n/cprocs;
     int myKcols;
     	myKcols=myTcols/2;
-    int myend;						// loop boundaries on local cols =myTcols/2;
-    int mystart;
+    int myend, myend_2;						// loop boundaries on local cols =myTcols/2;
+    int mystart, mystart_2;
     int rhs;
 
     int avoidif;					// for boolean --> int conversion
@@ -80,7 +82,7 @@ void pviDGESV_WO_nocacheopt(int n, double** A, int m, double** bb, double** xx, 
 	 * option 1: derived data type, for interleaving while for gathering
 	 *           non working for some values of n and np, why? extent of derived MPI data type?
 	 */
-	/*
+
 	MPI_Datatype TlastKr_chunks;
 	MPI_Type_vector (n/cprocs, 1, cprocs, MPI_DOUBLE, & TlastKr_chunks );
 	MPI_Type_commit (& TlastKr_chunks);
@@ -88,7 +90,7 @@ void pviDGESV_WO_nocacheopt(int n, double** A, int m, double** bb, double** xx, 
 	MPI_Datatype TlastKr_chunks_resized;
 	MPI_Type_create_resized (TlastKr_chunks, 0, 1*sizeof(double), & TlastKr_chunks_resized);
 	MPI_Type_commit (& TlastKr_chunks_resized);
-	*/
+
 
 	/*
 	 * option 2: standard data type, explicit loop for interleaving after gathering
@@ -139,9 +141,10 @@ void pviDGESV_WO_nocacheopt(int n, double** A, int m, double** bb, double** xx, 
 
 		for (i=mystart; i<=local[n-1]; i++)
 		{
+			gi = i * cprocs + rank;
 			for (rhs=0;rhs<m;rhs++)
 			{
-				xx[global[i]][rhs]=xx[global[i]][rhs]+Tlocal[l][i]*bb[l][rhs];
+				xx[gi][rhs]=xx[gi][rhs]+Tlocal[l][i]*bb[l][rhs];
 			}
 		}
 
@@ -163,57 +166,36 @@ void pviDGESV_WO_nocacheopt(int n, double** A, int m, double** bb, double** xx, 
 		// 0 .. l-1
 		// ALL procs
 		// processes with diagonal elements not null
-		mystart=0;
-		/*
-		myend=local[l-1];
-		if (rank>map[l-1])
-		{
-			myend--;
-		}
-		*/
-		avoidif = (rank>map[l-1]);
-		myend = local[l-1] - avoidif;
-
-		for (i=mystart; i<=myend; i++)
-		{
-			Tlocal[global[i]][i]=Tlocal[global[i]][i]*h[global[i]];
-		}
-
+		//mystart_1=0;
+		//avoidif = (rank>map[l-1]);
+		//myend_1 = local[l-1] - avoidif;
 		// l .. n+l-1
 		// ALL procs
-		/*
-		mystart=local[l];
-		if (rank<map[l])
-		{
-			mystart++;
-		}
-		*/
 		avoidif=(rank<map[l]);
-		mystart=local[l]+avoidif;
-		/*
-		myend=local[n+l-1];
-		if (rank>map[n+l-1])
-		{
-			myend--;
-		}
-		*/
+		mystart_2=local[l]+avoidif;
 		avoidif=(rank>map[n+l-1]);
-		myend=local[n+l-1]-avoidif;
+		myend_2=local[n+l-1]-avoidif;
+
+		for (j=0;j<mystart_2;j++)
+		{
+			gi = j * cprocs + rank;;
+			Tlocal[gi][j]=Tlocal[gi][j]*h[gi]; // diagonal elements
+		}
 
 		for (i=0; i<=l-1; i++)
 		{
-			for (j=mystart; j<=myend; j++)
+			for (j=mystart_2; j<=myend_2; j++)
 			{
-				Tlocal[i][j]=Tlocal[i][j]*h[i] - Tlocal[l][j]*hh[i];
+				Tlocal[i][j]=Tlocal[i][j]*h[i] - Tlocal[l][j]*hh[i]; // non-diagonal elements
 			}
 		}
 
 		// collect chunks of last row of K to "future" last node
 
 		// option 1: non working
-		//MPI_Gather (&Tlocal[l-1][local[n]], myTcols/2, MPI_DOUBLE, &TlastKr[0], 1, TlastKr_chunks_resized, map[l-1], comm);
+		MPI_Gather (&Tlocal[l-1][local[n]], myTcols/2, MPI_DOUBLE, &TlastKr[0], 1, TlastKr_chunks_resized, map[l-1], comm);
 		// option 2: use last column buffer for temporary copy of non-interleaved data
-		MPI_Gather (&Tlocal[l-1][myKcols], myKcols, MPI_DOUBLE, &TlastKc[0], myKcols, MPI_DOUBLE, map[l-1], comm);
+		//MPI_Gather (&Tlocal[l-1][myKcols], myKcols, MPI_DOUBLE, &TlastKc[0], myKcols, MPI_DOUBLE, map[l-1], comm);
 
 		//future last node broadcasts last row and col of K
 		if (rank==map[l-1])
@@ -221,25 +203,27 @@ void pviDGESV_WO_nocacheopt(int n, double** A, int m, double** bb, double** xx, 
 			// copy data into local buffer before broadcast
 
 			// option 1
-			/*
+
 			for (i=0; i<n; i++)
 			{
 				TlastKc[i]=Tlocal[i][local[n+l-1]];
 			}
-			*/
+
 
 			// option 2
+			/*
 			myend=local[n+l-1];
 			for (i=0; i<myKcols; i++)
 			{
-				int ii=i*cprocs;
+				ii=i*cprocs;
 				for (j=0; j<cprocs; j++)
 				{
-					int jj=j*myKcols+i;
+					jj=j*myKcols+i;
 					TlastKr[ii+j]=TlastKc[jj];		// interleave columns of the last row
 					TlastKc[jj]=Tlocal[jj][myend];	// copy last column
 				}
 			}
+			*/
 		}
 
 		//TODO: substitute Gather with an All-to-All
@@ -251,7 +235,8 @@ void pviDGESV_WO_nocacheopt(int n, double** A, int m, double** bb, double** xx, 
 	{
 		for(rhs=0;rhs<m;rhs++)
 		{
-			xx[global[i]][rhs]=xx[global[i]][rhs]+Tlocal[0][i]*bb[0][rhs];
+			gi = i * cprocs + rank;
+			xx[gi][rhs]=xx[gi][rhs]+Tlocal[0][i]*bb[0][rhs];
 		}
 	}
 
