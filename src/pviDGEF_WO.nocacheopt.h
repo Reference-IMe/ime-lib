@@ -14,7 +14,7 @@
  *	ifs removed
  *
  */
-void pviDGEF_WO(int n, double** A, double** K, MPI_Comm comm)
+void pviDGEF_WO_nocacheopt(int n, double** A, double** K, MPI_Comm comm)
 {
     int rank, cprocs; //
     MPI_Comm_rank(comm, &rank);		//get current process id
