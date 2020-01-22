@@ -22,7 +22,7 @@ void pviDGESV_WO_gather(int n, double** A, int m, double** bb, double** xx, MPI_
     MPI_Comm_size(comm, &cprocs);	// get number of processes
 
 	int i,j,l;						// indexes
-	int ii,jj;
+	//int ii,jj;
 	int gi;
     int Tcols=2*n;					// total num of cols (X + K)
     int myTcols;					// num of T cols per process
@@ -32,7 +32,8 @@ void pviDGESV_WO_gather(int n, double** A, int m, double** bb, double** xx, MPI_
     int myxxrows=n/cprocs;
     int myKcols;
     	myKcols=myTcols/2;
-    int myend, myend_2;						// loop boundaries on local cols =myTcols/2;
+    //int myend;
+    int myend_2;						// loop boundaries on local cols =myTcols/2;
     int mystart, mystart_2;
     int rhs;
 
@@ -193,7 +194,7 @@ void pviDGESV_WO_gather(int n, double** A, int m, double** bb, double** xx, MPI_
 		// collect chunks of last row of K to "future" last node
 
 		// option 1: non working
-		MPI_Gather (&Tlocal[l-1][local[n]], myTcols/2, MPI_DOUBLE, &TlastKr[0], 1, TlastKr_chunks_resized, map[l-1], comm);
+		MPI_Gather (&Tlocal[l-1][local[n]], myKcols, MPI_DOUBLE, &TlastKr[0], 1, TlastKr_chunks_resized, map[l-1], comm);
 		// option 2: use last column buffer for temporary copy of non-interleaved data
 		//MPI_Gather (&Tlocal[l-1][myKcols], myKcols, MPI_DOUBLE, &TlastKc[0], myKcols, MPI_DOUBLE, map[l-1], comm);
 
