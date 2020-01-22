@@ -21,7 +21,7 @@ void pviDGEF_WO_allgather(int n, double** A, double** K, MPI_Comm comm)
     MPI_Comm_size(comm, &cprocs);	// get number of processes
 
 	int i,j,l;						// indexes
-	int ii,jj;
+	//int ii,jj;
 	int gi;
     int Tcols=2*n;					// total num of cols (X + K)
     int myTcols;					// num of T cols per process
