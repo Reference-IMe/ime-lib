@@ -43,10 +43,10 @@ void pDGEIT_W_async(double** A, double** Tlocal, double** TlastK, int n, MPI_Com
 	MPI_Type_create_resized (KinT_column_contiguous, 0, 1*sizeof(double), & KinT_column_contiguous_resized);
 	MPI_Type_commit (& KinT_column_contiguous_resized);
 
-	MPI_Request mpi_request;
-	MPI_Status  mpi_status;
+	//MPI_Request mpi_request;
+	//MPI_Status  mpi_status;
 
-	MPI_Iscatter (&A[0][0], 1, A_rows_interleaved_resized, &Tlocal[0][myAchunks], myAchunks, KinT_column_contiguous_resized, 0, comm, &mpi_request);	// scatter columns to nodes
+	MPI_Scatter (&A[0][0], 1, A_rows_interleaved_resized, &Tlocal[0][myAchunks], myAchunks, KinT_column_contiguous_resized, 0, comm);	// scatter columns to nodes
 
     // prepare entire last row of K and entire diagonal of A in buffer to be sent
     if (rank==0)
@@ -58,7 +58,7 @@ void pDGEIT_W_async(double** A, double** Tlocal, double** TlastK, int n, MPI_Com
 		}
     }
 
-    MPI_Wait(&mpi_request, &mpi_status);
+
 
     MPI_Bcast (&TlastK[0][0], Tcols, MPI_DOUBLE, 0, comm); // last col and diagonal of A
 

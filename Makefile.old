@@ -29,6 +29,7 @@ ifeq ($(machine),$(filter $(machine),marconi galileo))
     MPIFC = mpiifort
     MACHINEFLAGS_ser = -I$(MKL_INC) -L$(MKL_LIB) -lmkl_intel_lp64 -lmkl_core -lmkl_sequential -lm
     MACHINEFLAGS = -I$(MKL_INC) -L$(MKL_LIB) -lmkl_scalapack_lp64 -lmkl_intel_lp64 -lmkl_blacs_intelmpi_lp64 -lmkl_core -lmkl_sequential -lmkl_gf_lp64 -lm
+    FTLAMAKEFILE = Makefile.cineca.mk
   else
     ifeq ($(mpi),ch)
       # marconi mpich
@@ -55,6 +56,7 @@ else
         MPIFC = mpiifort
         MACHINEFLAGS_ser= -I${MKLROOT}/include -L${MKLROOT}/lib -mkl -ldl -lm
         MACHINEFLAGS= -I${MKLROOT}/include -L${MKLROOT}/lib -mkl -lmkl_scalapack_lp64 -lmkl_blacs_intelmpi_lp64 -ldl -lm
+        FTLAMAKEFILE = Makefile.enea.mk
       else # end cresco6 intel
         ifeq ($(mpi),ch) # cresco6 mpich
           # marconi mpich
@@ -76,47 +78,109 @@ else
   endif # end ubuntu
 endif # end marconi (and all)
 
-SEQ_EXE = $(BIN_DIR)/compare_solve
-PAR_EXE = $(BIN_DIR)/compare_all_p $(BIN_DIR)/compare_checkpointing $(BIN_DIR)/compare_svxk $(BIN_DIR)/compare_solve_p $(BIN_DIR)/compare_pviDGEF $(BIN_DIR)/compare_pviDGESV
-EXE = $(SEQ_EXE) $(PAR_EXE)
+SEQ_EXE = compare_solve
+PAR_EXE = compare_all_p compare_checkpointing compare_svxk compare_solve_p compare_pviDGEF compare_pviDGESV
+EXE = $(addprefix $(BIN_DIR)/, $(SEQ_EXE) $(PAR_EXE) )
 
-PAR_STD_DEP = $(SRC_DIR)/*.h $(TST_DIR)/test_*.h $(TST_DIR)/tester_head_p.c $(TST_DIR)/tester_shoulder_p.c $(TST_DIR)/tester_tail_p.c $(SRC_DIR)/helpers/*.h
-SEQ_STD_DEP = $(SRC_DIR)/*.h $(TST_DIR)/tester_head.c $(TST_DIR)/tester_shoulder.c $(TST_DIR)/tester_tail.c $(SRC_DIR)/helpers/*.h
+PAR_STD_DEP = $(SRC_DIR)/pDGEIT_WX.h $(TST_DIR)/test_*.h $(TST_DIR)/tester_head_p.c $(TST_DIR)/tester_shoulder_p.c $(TST_DIR)/tester_tail_p.c $(SRC_DIR)/helpers/*.h
+SEQ_STD_DEP = $(TST_DIR)/tester_head.c $(TST_DIR)/tester_shoulder.c $(TST_DIR)/tester_tail.c $(SRC_DIR)/helpers/*.h
 
-all: $(BIN_DIR) $(TST_DIR)/FTLA/libftla.a $(EXE) # $(SRC_DIR)/FTLA/pdmatgen.o 
+all: $(TST_DIR)/LAPACK/lapack-3.9.0/librefblas.a \
+		$(TST_DIR)/LAPACK/lapack-3.9.0/liblapack.a \
+		$(TST_DIR)/ScaLAPACK/scalapack-2.0.1/libscalapack.a \
+		$(TST_DIR)/FTLA/libftla.a $(EXE) \
+		| $(BIN_DIR)
 .PHONY: all
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
 
+$(TST_DIR)/LAPACK/lapack-3.9.0/librefblas.a:
+	cd $(TST_DIR)/LAPACK/lapack-3.9.0 && $(MAKE) -j2 blaslib
+
+$(TST_DIR)/LAPACK/lapack-3.9.0/liblapack.a: $(TST_DIR)/LAPACK/lapack-3.9.0/librefblas.a
+	cd $(TST_DIR)/LAPACK/lapack-3.9.0 && $(MAKE) -j2 lapacklib
+
+$(TST_DIR)/ScaLAPACK/scalapack-2.0.1/libscalapack.a: $(TST_DIR)/LAPACK/lapack-3.9.0/librefblas.a $(TST_DIR)/LAPACK/lapack-3.9.0/liblapack.a
+	cd $(TST_DIR)/ScaLAPACK/scalapack-2.0.1 && $(MAKE) LAPACK_DIR=$(TST_DIR)/LAPACK/lapack-3.9.0
+	
 #$(SRC_DIR)/FTLA/pdmatgen.o: $(SRC_DIR)/FTLA/pdmatgen.f
 #	$(MPIFC) $(FFLAGS) -c $< -o $@ $(MACHINEFLAGS)
 	
 $(TST_DIR)/FTLA/libftla.a:
-	cd $(TST_DIR)/FTLA && $(MAKE)
+	cd $(TST_DIR)/FTLA && $(MAKE) -f $(FTLAMAKEFILE)
+
 
 $(TST_DIR)/ScaLAPACK.mod/%.o: $(TST_DIR)/ScaLAPACK.mod/%.f
 	$(MPIFC) $(FFLAGS) -c $< -o $@ $(MACHINEFLAGS)
 	
-$(BIN_DIR)/compare_solve : $(TST_DIR)/compare_solve.c $(TST_DIR)/test_IMe_DGESV.h $(TST_DIR)/test_GaussianElimination_GE.h $(TST_DIR)/test_LAPACK_DGESV.h
+$(BIN_DIR)/compare_solve: $(TST_DIR)/compare_solve.c \
+				$(TST_DIR)/test_IMe_DGESV.h \
+				$(TST_DIR)/test_GaussianElimination_GE.h \
+				$(TST_DIR)/test_LAPACK_DGESV.h \
+				| $(BIN_DIR)
 	$(CC) $(CFLAGS) $(TST_DIR)/compare_solve.c -o $(BIN_DIR)/compare_solve $(MACHINEFLAGS_ser)
 
-$(BIN_DIR)/compare_solve_p: $(TST_DIR)/compare_solve_p.c $(PAR_STD_DEP) $(SRC_DIR)/ft-simulated/*.h $(TST_DIR)/ScaLAPACK.mod/*.h $(TST_DIR)/ScaLAPACK.mod/pdgetrf_cp.o $(TST_DIR)/ScaLAPACK.mod/pdgeqrf_cp.o $(TST_DIR)/ScaLAPACK/*.h
+$(BIN_DIR)/compare_solve_p: $(TST_DIR)/compare_solve_p.c \
+				$(PAR_STD_DEP) \
+				$(SRC_DIR)/pviDGESV*.h \
+				$(SRC_DIR)/ft-simulated/*.h \
+				$(TST_DIR)/ScaLAPACK.mod/*.h \
+				$(TST_DIR)/ScaLAPACK.mod/pdgetrf_cp.o \
+				$(TST_DIR)/ScaLAPACK.mod/pdgeqrf_cp.o \
+				$(TST_DIR)/ScaLAPACK/*.h \
+				| $(BIN_DIR)
 	$(MPICC) $(CFLAGS) -lifcore $< -o $(BIN_DIR)/compare_solve_p $(TST_DIR)/ScaLAPACK.mod/pdgetrf_cp.o $(TST_DIR)/ScaLAPACK.mod/pdgeqrf_cp.o -L$(TST_DIR)/ScaLAPACK $(MACHINEFLAGS)
 
-$(BIN_DIR)/compare_all_p: $(TST_DIR)/compare_all_p.c $(PAR_STD_DEP) $(SRC_DIR)/ft-simulated/*.h $(TST_DIR)/ScaLAPACK.mod/*.h $(TST_DIR)/ScaLAPACK.mod/pdgetrf_cp.o $(TST_DIR)/ScaLAPACK.mod/pdgeqrf_cp.o $(TST_DIR)/ScaLAPACK/*.h $(TST_DIR)/FTLA.mod/*.h $(TST_DIR)/FTLA/libftla.a
+$(BIN_DIR)/compare_all_p: $(TST_DIR)/compare_all_p.c \
+				$(PAR_STD_DEP) \
+				$(SRC_DIR)/pviDGESV*.h \
+				$(SRC_DIR)/pviDGEF*.h \
+				$(SRC_DIR)/ft-simulated/*.h \
+				$(TST_DIR)/ScaLAPACK.mod/*.h \
+				$(TST_DIR)/ScaLAPACK.mod/pdgetrf_cp.o \
+				$(TST_DIR)/ScaLAPACK.mod/pdgeqrf_cp.o \
+				$(TST_DIR)/ScaLAPACK/*.h \
+				$(TST_DIR)/FTLA.mod/*.h \
+				| $(TST_DIR)/FTLA/libftla.a \
+				$(BIN_DIR)
 	$(MPICC) $(CFLAGS) -lifcore $< -o $(BIN_DIR)/compare_all_p $(TST_DIR)/ScaLAPACK.mod/pdgetrf_cp.o $(TST_DIR)/ScaLAPACK.mod/pdgeqrf_cp.o $(TST_DIR)/FTLA/libftla.a $(TST_DIR)/FTLA/helpersftla.a -L$(TST_DIR)/ScaLAPACK $(MACHINEFLAGS)
 
-$(BIN_DIR)/compare_checkpointing: $(TST_DIR)/compare_checkpointing.c $(PAR_STD_DEP) $(TST_DIR)/ScaLAPACK.mod/*.h $(TST_DIR)/ScaLAPACK.mod/pdgetrf_cp.o $(TST_DIR)/ScaLAPACK.mod/pdgeqrf_cp.o $(TST_DIR)/ScaLAPACK/*.h
+$(BIN_DIR)/compare_checkpointing: $(TST_DIR)/compare_checkpointing.c \
+				$(PAR_STD_DEP) \
+				$(SRC_DIR)/pviDGEF_WO.h \
+				$(TST_DIR)/ScaLAPACK.mod/*.h \
+				$(TST_DIR)/ScaLAPACK.mod/pdgetrf_cp.o \
+				$(TST_DIR)/ScaLAPACK.mod/pdgeqrf_cp.o \
+				$(TST_DIR)/ScaLAPACK/*.h \
+				| $(BIN_DIR)
 	$(MPICC) $(CFLAGS) -lifcore $< -o $(BIN_DIR)/compare_checkpointing $(TST_DIR)/ScaLAPACK.mod/pdgetrf_cp.o $(TST_DIR)/ScaLAPACK.mod/pdgeqrf_cp.o -L$(TST_DIR)/ScaLAPACK $(MACHINEFLAGS)
 
-$(BIN_DIR)/compare_svxk: $(TST_DIR)/compare_svxk.c $(PAR_STD_DEP) $(TST_DIR)/../*.h $(TST_DIR)/*.h $(TST_DIR)/ScaLAPACK/*.h
+$(BIN_DIR)/compare_svxk: $(TST_DIR)/compare_svxk.c \
+				$(PAR_STD_DEP) \
+				$(SRC_DIR)/pviDGEF_WO.h \
+				$(TST_DIR)/../*.h \
+				$(TST_DIR)/*.h \
+				$(TST_DIR)/ScaLAPACK/*.h \
+				| $(BIN_DIR)
 	$(MPICC) $(CFLAGS) -lifcore $< -o $(BIN_DIR)/compare_svxk -L$(TST_DIR)/ScaLAPACK $(MACHINEFLAGS)
 
-$(BIN_DIR)/compare_pviDGEF: $(TST_DIR)/compare_pviDGEF.c $(PAR_STD_DEP) $(TST_DIR)/../*.h $(TST_DIR)/*.h $(TST_DIR)/ScaLAPACK/*.h
+$(BIN_DIR)/compare_pviDGEF: $(TST_DIR)/compare_pviDGEF.c \
+				$(PAR_STD_DEP) \
+				$(SRC_DIR)/pviDGEF*.h \
+				$(TST_DIR)/../*.h \
+				$(TST_DIR)/*.h \
+				$(TST_DIR)/ScaLAPACK/*.h \
+				| $(BIN_DIR)
 	$(MPICC) $(CFLAGS) -lifcore $< -o $(BIN_DIR)/compare_pviDGEF -L$(TST_DIR)/ScaLAPACK $(MACHINEFLAGS)
 
-$(BIN_DIR)/compare_pviDGESV: $(TST_DIR)/compare_pviDGESV.c $(PAR_STD_DEP) $(TST_DIR)/../*.h $(TST_DIR)/*.h $(TST_DIR)/ScaLAPACK/*.h
+$(BIN_DIR)/compare_pviDGESV: $(TST_DIR)/compare_pviDGESV.c \
+				$(PAR_STD_DEP) \
+				$(SRC_DIR)/pviDGESV*.h \
+				$(TST_DIR)/../*.h \
+				$(TST_DIR)/*.h \
+				$(TST_DIR)/ScaLAPACK/*.h \
+				| $(BIN_DIR)
 	$(MPICC) $(CFLAGS) -lifcore $< -o $(BIN_DIR)/compare_pviDGESV -L$(TST_DIR)/ScaLAPACK $(MACHINEFLAGS)
 
 #$(BIN_DIR)/%: $(SRC_DIR)/%.c $(SRC_DIR)/*.h $(SRC_DIR)/../ft-simulated/*.h $(SRC_DIR)/ScaLAPACK/*.o $(SRC_DIR)/ScaLAPACK/*.f $(SRC_DIR)/ScaLAPACK/*.h $(SRC_DIR)/FTLA/libftla.a $(SRC_DIR)/FTLA/helpersftla.a
@@ -124,5 +188,5 @@ $(BIN_DIR)/compare_pviDGESV: $(TST_DIR)/compare_pviDGESV.c $(PAR_STD_DEP) $(TST_
 
 clean:
 	rm -f $(EXE)
-	rm -f $(TST_DIR)/ScaLAPACK.mod/*.o
+	cd $(TST_DIR)/ScaLAPACK.mod && rm -f *.o
 	cd $(TST_DIR)/FTLA && $(MAKE) clean
