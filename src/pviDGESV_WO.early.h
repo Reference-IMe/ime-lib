@@ -15,7 +15,7 @@
  *	ifs removed
  *
  */
-void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+void pviDGESV_WO_early(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
     int rank, cprocs; //
     MPI_Comm_rank(comm, &rank);		//get current process id
@@ -72,7 +72,7 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
 				global[i]= i * cprocs + rank; // position of the column i(local) in the global matrix
 			}
 
-	MPI_Request mpi_request;
+	MPI_Request mpi_request, mpi_request2;
 	MPI_Status  mpi_status;
 
     /*
@@ -166,40 +166,19 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
 		mystart=local[n];
 		avoidif=(rank>map[n+l-1]);
 		myend=local[n+l-1]-avoidif;
-		for (i=0; i<=l-1; i++)
+		// rows from l-1 to 0
+		// l-1
+
+		i=l-1;
+		for (j=myend; j>=mystart; j--)
 		{
-			for (j=mystart; j<=myend; j++)
-			{
-				Tlocal[i][j]=Tlocal[i][j]*h[i] - Tlocal[l][j]*hh[i];
-			}
+			Tlocal[i][j]=Tlocal[i][j]*h[i] - Tlocal[l][j]*hh[i];
 		}
+		MPI_Iallgather (&Tlocal[l-1][local[n]], myKcols, MPI_DOUBLE, &TlastKr[0], 1, TlastKr_chunks_resized, comm, &mpi_request2);
 
-		// collect chunks of last row of K to "future" last node
-		// option 1: non working
-		MPI_Igather (&Tlocal[l-1][local[n]], myKcols, MPI_DOUBLE, &TlastKr[0], 1, TlastKr_chunks_resized, map[l-1], comm, &mpi_request);
-		// option 2: use last column buffer for temporary copy of non-interleaved data
-		//MPI_Gather (&Tlocal[l-1][myKcols], myKcols, MPI_DOUBLE, &TlastKc[0], myKcols, MPI_DOUBLE, map[l-1], comm);
-
-		//////// X
-		// 0 .. l-1
-		// ALL procs
-		// processes with diagonal elements not null
-		mystart=0;
-		avoidif = (rank>map[l-1]);
-		myend = local[l-1] - avoidif;
-		for (i=mystart; i<=myend; i++)
+		for (i=l-2; i>=0; i--)
 		{
-			Tlocal[global[i]][i]=Tlocal[global[i]][i]*h[global[i]];
-		}
-
-		// l .. n-1
-		// ALL procs
-		avoidif=(rank<map[l]);
-		mystart=local[l]+avoidif;
-		myend=local[n-1];
-		for (i=0; i<=l-1; i++)
-		{
-			for (j=mystart; j<=myend; j++)
+			for (j=myend; j>=mystart; j--)
 			{
 				Tlocal[i][j]=Tlocal[i][j]*h[i] - Tlocal[l][j]*hh[i];
 			}
@@ -233,10 +212,36 @@ void pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm co
 			}
 			*/
 		}
+		MPI_Ibcast (&TlastKc[0], Tcols/2, MPI_DOUBLE, map[l-1], comm, &mpi_request);
+
+		//////// X
+		// 0 .. l-1
+		// ALL procs
+		// processes with diagonal elements not null
+		mystart=0;
+		avoidif = (rank>map[l-1]);
+		myend = local[l-1] - avoidif;
+		for (i=mystart; i<=myend; i++)
+		{
+			Tlocal[global[i]][i]=Tlocal[global[i]][i]*h[global[i]];
+		}
+
+		// l .. n-1
+		// ALL procs
+		avoidif=(rank<map[l]);
+		mystart=local[l]+avoidif;
+		myend=local[n-1];
+		for (i=0; i<=l-1; i++)
+		{
+			for (j=mystart; j<=myend; j++)
+			{
+				Tlocal[i][j]=Tlocal[i][j]*h[i] - Tlocal[l][j]*hh[i];
+			}
+		}
+
 		// wait until gather completed
-		MPI_Wait(&mpi_request, &mpi_status);
+		MPI_Wait(&mpi_request2, &mpi_status);
 		//TODO: substitute Gather with an All-to-All
-		MPI_Ibcast (&TlastK[0][0], Tcols, MPI_DOUBLE, map[l-1], comm, &mpi_request);
 	}
 
 	// last level (l=0)
