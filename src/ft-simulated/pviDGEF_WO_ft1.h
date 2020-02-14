@@ -1,5 +1,7 @@
 #include <unistd.h>
 #include <mpi.h>
+#include <time.h>
+#include "../helpers/info.h"
 #include "../helpers/matrix.h"
 #include "../helpers/vector.h"
 #include "pDGEIT_WX_ft1.h"
@@ -16,8 +18,12 @@
  *
  */
 
-void pviDGEF_WO_ft1_sim(int n, double** A, double** K, MPI_Comm comm, int sprocs, int failing_rank, int failing_level)
+result_info pviDGEF_WO_ft1_sim(int n, double** A, double** K, MPI_Comm comm, int sprocs, int failing_rank, int failing_level)
 {
+	result_info wall_clock;
+
+	wall_clock.total_start_time = time(NULL);
+
     int rank, nprocs, cprocs; //
     MPI_Comm_rank(comm, &rank);		//get current process id
     MPI_Comm_size(comm, &nprocs);	// get number of processes
@@ -144,7 +150,11 @@ void pviDGEF_WO_ft1_sim(int n, double** A, double** K, MPI_Comm comm, int sprocs
     /*
 	 *  init inhibition table
 	 */
+	wall_clock.core_start_time = time(NULL);
+
 	pDGEIT_W_ft1(A, Tlocal, TlastK, n, rank, cprocs, sprocs, map, global, local);	// init inhibition table
+
+    wall_clock.core_end_time = time(NULL);
 
 	/*
 	 *  calc inhibition sequence
@@ -357,5 +367,9 @@ void pviDGEF_WO_ft1_sim(int n, double** A, double** K, MPI_Comm comm, int sprocs
 			MPI_Comm_free(&comm_calc);
 		}
 	}
+
+	wall_clock.total_end_time = time(NULL);
+
+	return wall_clock;
 }
 

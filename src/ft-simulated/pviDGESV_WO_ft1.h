@@ -1,5 +1,7 @@
 #include <unistd.h>
 #include <mpi.h>
+#include <time.h>
+#include "../helpers/info.h"
 #include "../helpers/matrix.h"
 #include "../helpers/vector.h"
 #include "../DGEZR.h"
@@ -17,8 +19,12 @@
  *
  */
 
-void pviDGESV_WO_ft1_sim(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm, int sprocs, int failing_rank, int failing_level)
+result_info pviDGESV_WO_ft1_sim(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm, int sprocs, int failing_rank, int failing_level)
 {
+	result_info wall_clock;
+
+	wall_clock.total_start_time = time(NULL);
+
     int rank, nprocs, cprocs; //
     MPI_Comm_rank(comm, &rank);		//get current process id
     MPI_Comm_size(comm, &nprocs);	// get number of processes
@@ -199,9 +205,13 @@ void pviDGESV_WO_ft1_sim(int n, double** A, int m, double** bb, double** xx, MPI
     /*
 	 *  init inhibition table
 	 */
+	wall_clock.core_start_time = time(NULL);
+
 	DGEZR(xx, n, m);																			// init (zero) solution vectors
 	pDGEIT_W_ft1(A, Tlocal, TlastK, n, rank, cprocs, sprocs, map, global, local);	// init inhibition table
     MPI_Bcast(&bb[0][0], n*m, MPI_DOUBLE, 0, comm);									// send all r.h.s to all procs
+
+    wall_clock.core_end_time = time(NULL);
 
 	/*
 	 *  calc inhibition sequence
@@ -532,5 +542,9 @@ void pviDGESV_WO_ft1_sim(int n, double** A, int m, double** bb, double** xx, MPI
 			MPI_Comm_free(&comm_calc);
 		}
 	}
+
+	wall_clock.total_end_time = time(NULL);
+
+	return wall_clock;
 }
 

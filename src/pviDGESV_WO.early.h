@@ -1,4 +1,6 @@
 #include <mpi.h>
+#include <time.h>
+#include "helpers/info.h"
 #include "helpers/matrix.h"
 #include "helpers/vector.h"
 #include "DGEZR.h"
@@ -15,8 +17,12 @@
  *	ifs removed
  *
  */
-void pviDGESV_WO_early(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+result_info pviDGESV_WO_early(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
+	result_info wall_clock;
+
+	wall_clock.total_start_time = time(NULL);
+
     int rank, cprocs; //
     MPI_Comm_rank(comm, &rank);		//get current process id
     MPI_Comm_size(comm, &cprocs);	// get number of processes
@@ -112,10 +118,9 @@ void pviDGESV_WO_early(int n, double** A, int m, double** bb, double** xx, MPI_C
     /*
 	 *  init inhibition table
 	 */
-	DGEZR(xx, n, m);														// init (zero) solution vectors
+	DGEZR(xx, n, m);																// init (zero) solution vectors
 	pDGEIT_W_async(A, Tlocal, TlastK, n, comm, rank, cprocs, map, global, local);	// init inhibition table
-
-    MPI_Ibcast (&TlastK[0][0], n, MPI_DOUBLE, map[n-1], comm, &mpi_request);	// broadcast of the last col of T (K part)
+    MPI_Ibcast (&TlastK[0][0], n, MPI_DOUBLE, map[n-1], comm, &mpi_request);		// broadcast of the last col of T (K part)
 
 	// send all r.h.s to all procs
     MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm);
@@ -123,6 +128,7 @@ void pviDGESV_WO_early(int n, double** A, int m, double** bb, double** xx, MPI_C
 	/*
 	 *  calc inhibition sequence
 	 */
+	wall_clock.core_start_time = time(NULL);
 
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
@@ -153,8 +159,6 @@ void pviDGESV_WO_early(int n, double** A, int m, double** bb, double** xx, MPI_C
 				bb[i][rhs] = bb[i][rhs]-TlastKr[i]*bb[l][rhs];
 			}
 		}
-
-
 
 
 		//////////////// update T
@@ -255,6 +259,8 @@ void pviDGESV_WO_early(int n, double** A, int m, double** bb, double** xx, MPI_C
 
 	MPI_Wait(&mpi_request, &mpi_status);
 
+    wall_clock.core_end_time = time(NULL);
+
 	// collect solution
 	// MPI_IN_PLACE required for MPICH based versions
 	if (rank==0)
@@ -275,4 +281,8 @@ void pviDGESV_WO_early(int n, double** A, int m, double** bb, double** xx, MPI_C
 	DeallocateVector(h);
 	DeallocateVector(hh);
 	DeallocateMatrix2D(Tlocal,n,CONTIGUOUS);
+
+	wall_clock.total_end_time = time(NULL);
+
+	return wall_clock;
 }
