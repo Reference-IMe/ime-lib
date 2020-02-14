@@ -1,4 +1,6 @@
 #include <mpi.h>
+#include <time.h>
+#include "helpers/info.h"
 #include "helpers/matrix.h"
 #include "helpers/vector.h"
 #include "pDGEIT_WX.h"
@@ -14,8 +16,12 @@
  *	ifs removed
  *
  */
-void pviDGEF_WO_nocacheopt(int n, double** A, double** K, MPI_Comm comm)
+result_info pviDGEF_WO_nocacheopt(int n, double** A, double** K, MPI_Comm comm)
 {
+	result_info wall_clock;
+
+	wall_clock.total_start_time = time(NULL);
+
     int rank, cprocs; //
     MPI_Comm_rank(comm, &rank);		//get current process id
     MPI_Comm_size(comm, &cprocs);	// get number of processes
@@ -89,6 +95,7 @@ void pviDGEF_WO_nocacheopt(int n, double** A, double** K, MPI_Comm comm)
 	/*
 	 *  calc inhibition sequence
 	 */
+	wall_clock.core_start_time = time(NULL);
 
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
@@ -174,6 +181,7 @@ void pviDGEF_WO_nocacheopt(int n, double** A, double** K, MPI_Comm comm)
 		MPI_Bcast (&TlastK[0][0], Tcols, MPI_DOUBLE, map[l-1], comm);
 	}
 
+    wall_clock.core_end_time = time(NULL);
 
 	MPI_Gather (&Tlocal[0][0], 1, Tlocal_half, &A[0][0], 1, Thalf_interleaved_resized, 0, comm);
 	MPI_Gather (&Tlocal[0][myKcols], 1, Tlocal_half, &K[0][0], 1, Thalf_interleaved_resized, 0, comm);
@@ -188,4 +196,8 @@ void pviDGEF_WO_nocacheopt(int n, double** A, double** K, MPI_Comm comm)
 	DeallocateVector(h);
 	DeallocateVector(hh);
 	//DeallocateMatrix2D(Tlocal,n,CONTIGUOUS);
+
+	wall_clock.total_end_time = time(NULL);
+
+	return wall_clock;
 }

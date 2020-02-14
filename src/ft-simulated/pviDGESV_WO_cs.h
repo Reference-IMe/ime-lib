@@ -1,4 +1,6 @@
 #include <mpi.h>
+#include <time.h>
+#include "../helpers/info.h"
 #include "../helpers/matrix.h"
 #include "../helpers/vector.h"
 #include "../DGEZR.h"
@@ -14,8 +16,12 @@
  *
  */
 
-void pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm, int sprocs)
+result_info pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm, int sprocs)
 {
+	result_info wall_clock;
+
+	wall_clock.total_start_time = time(NULL);
+
     int rank, nprocs, cprocs; //
     MPI_Comm_rank(comm, &rank);		//get current process id
     MPI_Comm_size(comm, &nprocs);	// get number of processes
@@ -193,6 +199,7 @@ void pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, MPI_Comm
 	/*
 	 *  init inhibition table
 	 */
+	wall_clock.core_start_time = time(NULL);
 
     MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm);
 
@@ -251,6 +258,8 @@ void pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, MPI_Comm
 
 	// broadcast of the last col and the last row of T (K part)
 	MPI_Bcast (&TlastK[0][0], 2*n, MPI_DOUBLE, 0, comm);
+
+    wall_clock.core_end_time = time(NULL);
 
 	/*
 	 *  calc inhibition sequence
@@ -423,4 +432,8 @@ void pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, MPI_Comm
     {
     	DeallocateMatrix2D(T,n,CONTIGUOUS);
     }
+
+	wall_clock.total_end_time = time(NULL);
+
+	return wall_clock;
 }
