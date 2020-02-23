@@ -93,7 +93,7 @@ result_info pviDGEF_WO(int n, double** A, double** K, MPI_Comm comm)
 	 *  init inhibition table
 	 */
 
-	pDGEIT_W(A, Tlocal, TlastK, n, comm, rank, cprocs, map, global, local);	// init inhibition table
+	pDGEIT_WX(A, Tlocal, TlastK, n, comm, rank, cprocs, map, global, local);	// init inhibition table
 
 	/*
 	 *  calc inhibition sequence

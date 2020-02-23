@@ -1,10 +1,11 @@
 #include <mpi.h>
 #include <time.h>
+
+#include "../DGEIT_WX.h"
 #include "../helpers/info.h"
 #include "../helpers/matrix.h"
 #include "../helpers/vector.h"
 #include "../DGEZR.h"
-#include "../DGEIT_Wx.h"
 
 /*
  *	solve (SV) system with general (GE) matrix A of doubles (D)
