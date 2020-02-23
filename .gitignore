@@ -2,6 +2,7 @@
 
 .metadata
 bin/
+bin.copy/
 tmp/
 *.tmp
 *.bak
@@ -58,4 +59,8 @@ local.properties
 
 /.project
 /.ptp-sync/
-/compare_pDGESV.o
+**/*.o
+**/*.oo
+**/*.a
+**/.ptp-sync-folder
+**/.gitignore

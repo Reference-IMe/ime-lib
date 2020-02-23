@@ -4,7 +4,8 @@
 #include "helpers/matrix.h"
 #include "helpers/vector.h"
 #include "DGEZR.h"
-#include "pDGEIT_WX_async.h"
+//#include "pDGEIT_WX_async.h"
+#include "pDGEIT_WX.h"
 
 /*
  *	solve (SV) system with general (GE) matrix A of doubles (D)
@@ -78,8 +79,9 @@ result_info pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_
 				global[i]= i * cprocs + rank; // position of the column i(local) in the global matrix
 			}
 
-	MPI_Request mpi_request;
 	MPI_Status  mpi_status;
+	MPI_Request mpi_request = MPI_REQUEST_NULL;
+
 
     /*
      * MPI derived types
@@ -119,8 +121,9 @@ result_info pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_
 	 *  init inhibition table
 	 */
 	DGEZR(xx, n, m);															// init (zero) solution vectors
-	pDGEIT_W_async(A, Tlocal, TlastK, n, comm, rank, cprocs, map, global, local);// init inhibition table
-    MPI_Ibcast (&TlastK[0][0], n, MPI_DOUBLE, map[n-1], comm, &mpi_request);	// broadcast of the last col of T (K part)
+	pDGEIT_WX(A, Tlocal, TlastK, n, comm, rank, cprocs, map, global, local);	// init inhibition table
+	//pDGEIT_W_async(A, Tlocal, TlastK, n, comm, rank, cprocs, map, global, local);// init inhibition table
+    //MPI_Ibcast (&TlastK[0][0], n, MPI_DOUBLE, map[n-1], comm, &mpi_request);	// broadcast of the last col of T (K part)
     MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm);							// send all r.h.s to all procs
 
 	/*
