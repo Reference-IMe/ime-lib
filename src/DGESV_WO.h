@@ -1,5 +1,5 @@
+#include "DGEIT_WX.h"
 #include "helpers/matrix.h"
-#include "DGEIT_Wx.h"
 #include "DGEZR.h"
 
 /*

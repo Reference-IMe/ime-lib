@@ -17,7 +17,7 @@
  *	ifs removed
  *
  */
-result_info pviDGESV_WO_early(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+result_info pviDGESV_WO_early2(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
 	result_info wall_clock;
 
@@ -135,7 +135,7 @@ result_info pviDGESV_WO_early(int n, double** A, int m, double** bb, double** xx
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
 	{
-/*
+
 		// ALL procs
 		// update solutions
 		// l .. n-1
@@ -148,7 +148,6 @@ result_info pviDGESV_WO_early(int n, double** A, int m, double** bb, double** xx
 				xx[global[i]][rhs]=xx[global[i]][rhs]+Tlocal[l][i]*bb[l][rhs];
 			}
 		}
-*/
 
 		MPI_Wait(&mpi_request, &mpi_status);
 
@@ -184,22 +183,34 @@ result_info pviDGESV_WO_early(int n, double** A, int m, double** bb, double** xx
 		}
 		MPI_Igather (&Tlocal[l-1][local[n]], myKcols, MPI_DOUBLE, &TlastKr[0], 1, TlastKr_chunks_resized, map[l-1], comm, &mpi_request2);
 
-				// ALL procs
-				// update solutions
-				// l .. n-1
-				avoidif=(rank<map[l]);
-				mystart = local[l] + avoidif;
-				for (i=mystart; i<=local[n-1]; i++)
-				{
-					for (rhs=0;rhs<m;rhs++)
-					{
-						xx[global[i]][rhs]=xx[global[i]][rhs]+Tlocal[l][i]*bb[l][rhs];
-					}
-				}
+			//////// X
+			// 0 .. l-1
+			// ALL procs
+			// processes with diagonal elements not null
+			mystart=0;
+			avoidif = (rank>map[l-1]);
+			myend = local[l-1] - avoidif;
+			for (i=mystart; i<=myend; i++)
+			{
+				Tlocal[global[i]][i]=Tlocal[global[i]][i]*h[global[i]];
+			}
 
-				mystart=local[n];
-				avoidif=(rank>map[n+l-1]);
-				myend=local[n+l-1]-avoidif;
+			// l .. n-1
+			// ALL procs
+			avoidif=(rank<map[l]);
+			mystart=local[l]+avoidif;
+			myend=local[n-1];
+			for (i=0; i<=l-1; i++)
+			{
+				for (j=mystart; j<=myend; j++)
+				{
+					Tlocal[i][j]=Tlocal[i][j]*h[i] - Tlocal[l][j]*hh[i];
+				}
+			}
+
+			mystart=local[n];
+			avoidif=(rank>map[n+l-1]);
+			myend=local[n+l-1]-avoidif;
 
 		// other rows
 		//		//future last node prepares last col of K first
@@ -241,30 +252,7 @@ result_info pviDGESV_WO_early(int n, double** A, int m, double** bb, double** xx
 		}
 
 
-		//////// X
-		// 0 .. l-1
-		// ALL procs
-		// processes with diagonal elements not null
-		mystart=0;
-		avoidif = (rank>map[l-1]);
-		myend = local[l-1] - avoidif;
-		for (i=mystart; i<=myend; i++)
-		{
-			Tlocal[global[i]][i]=Tlocal[global[i]][i]*h[global[i]];
-		}
 
-		// l .. n-1
-		// ALL procs
-		avoidif=(rank<map[l]);
-		mystart=local[l]+avoidif;
-		myend=local[n-1];
-		for (i=0; i<=l-1; i++)
-		{
-			for (j=mystart; j<=myend; j++)
-			{
-				Tlocal[i][j]=Tlocal[i][j]*h[i] - Tlocal[l][j]*hh[i];
-			}
-		}
 
 		// wait until gather completed
 		//if (rank!=map[l-1])

@@ -7,10 +7,10 @@
  *
  */
 
-#ifndef __pDGEIT_W_H__
-#define __pDGEIT_W_H__
+#ifndef __pDGEIT_WX_H__
+#define __pDGEIT_WX_H__
 
-void pDGEIT_W(double** A, double** Tlocal, double** TlastK, int n, MPI_Comm comm, int rank, int cprocs, int* map, int* global, int* local)
+void pDGEIT_WX(double** A, double** Tlocal, double** TlastK, int n, MPI_Comm comm, int rank, int cprocs, int* map, int* global, int* local)
 {
 	int i,j;
 
