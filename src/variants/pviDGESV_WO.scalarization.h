@@ -4,7 +4,7 @@
 #include "helpers/matrix.h"
 #include "helpers/vector.h"
 #include "DGEZR.h"
-#include "pDGEIT_WX_async.h"
+#include "pDGEIT_WX.h"
 
 /*
  *	solve (SV) system with general (GE) matrix A of doubles (D)
@@ -17,7 +17,7 @@
  *	ifs removed
  *
  */
-result_info pviDGESV_WO_earliest-allgather(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+result_info pviDGESV_WO_scalarization(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
 	result_info wall_clock;
 
@@ -41,6 +41,8 @@ result_info pviDGESV_WO_earliest-allgather(int n, double** A, int m, double** bb
     int rhs;
 
     int avoidif;					// for boolean --> int conversion
+    int gi, li;
+    double TlastKri, Tlocali, hi, hhi;
 
     //int myAcols=n/cprocs;
     /*
@@ -78,8 +80,9 @@ result_info pviDGESV_WO_earliest-allgather(int n, double** A, int m, double** bb
 				global[i]= i * cprocs + rank; // position of the column i(local) in the global matrix
 			}
 
-	MPI_Request mpi_request, mpi_request2;
 	MPI_Status  mpi_status;
+	MPI_Request mpi_request = MPI_REQUEST_NULL;
+
 
     /*
      * MPI derived types
@@ -118,12 +121,11 @@ result_info pviDGESV_WO_earliest-allgather(int n, double** A, int m, double** bb
     /*
 	 *  init inhibition table
 	 */
-	DGEZR(xx, n, m);																// init (zero) solution vectors
-	pDGEIT_W_async(A, Tlocal, TlastK, n, comm, rank, cprocs, map, global, local);	// init inhibition table
-    MPI_Ibcast (&TlastK[0][0], n, MPI_DOUBLE, map[n-1], comm, &mpi_request);		// broadcast of the last col of T (K part)
-
-	// send all r.h.s to all procs
-    MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm);
+	DGEZR(xx, n, m);															// init (zero) solution vectors
+	pDGEIT_WX(A, Tlocal, TlastK, n, comm, rank, cprocs, map, global, local);	// init inhibition table
+	//pDGEIT_W_async(A, Tlocal, TlastK, n, comm, rank, cprocs, map, global, local);// init inhibition table
+    //MPI_Ibcast (&TlastK[0][0], n, MPI_DOUBLE, map[n-1], comm, &mpi_request);	// broadcast of the last col of T (K part)
+    MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm);							// send all r.h.s to all procs
 
 	/*
 	 *  calc inhibition sequence
@@ -140,9 +142,11 @@ result_info pviDGESV_WO_earliest-allgather(int n, double** A, int m, double** bb
 		mystart = local[l] + avoidif;
 		for (i=mystart; i<=local[n-1]; i++)
 		{
+			gi=global[i];
+			Tlocali=Tlocal[l][i];
 			for (rhs=0;rhs<m;rhs++)
 			{
-				xx[global[i]][rhs]=xx[global[i]][rhs]+Tlocal[l][i]*bb[l][rhs];
+				xx[gi][rhs]=xx[gi][rhs]+Tlocali*bb[l][rhs];
 			}
 		}
 
@@ -152,11 +156,12 @@ result_info pviDGESV_WO_earliest-allgather(int n, double** A, int m, double** bb
 		// update helpers
 		for (i=0; i<=l-1; i++)
 		{
-			h[i]   = 1/(1-TlastKc[i]*TlastKr[i]);
+			TlastKri=TlastKr[i];
+			h[i]   = 1/(1-TlastKc[i]*TlastKri);
 			hh[i]  = TlastKc[i]*h[i];
 			for (rhs=0;rhs<m;rhs++)
 			{
-				bb[i][rhs] = bb[i][rhs]-TlastKr[i]*bb[l][rhs];
+				bb[i][rhs] = bb[i][rhs]-TlastKri*bb[l][rhs];
 			}
 		}
 
@@ -170,52 +175,22 @@ result_info pviDGESV_WO_earliest-allgather(int n, double** A, int m, double** bb
 		mystart=local[n];
 		avoidif=(rank>map[n+l-1]);
 		myend=local[n+l-1]-avoidif;
-		// rows from l-1 to 0
-
-		// last row l-1
-		i=l-1;
-		for (j=myend; j>=mystart; j--)
+		for (i=0; i<=l-1; i++)
 		{
-			Tlocal[i][j]=Tlocal[i][j]*h[i] - Tlocal[l][j]*hh[i];
-		}
-		MPI_Iallgather (&Tlocal[l-1][local[n]], myKcols, MPI_DOUBLE, &TlastKr[0], 1, TlastKr_chunks_resized, comm, &mpi_request2);
-
-		// other rows
-		//		//future last node prepares last col of K first
-		if (rank==map[l-1])
-		{
-			// last col
-			j=myend;
-			i=l-1;
-			TlastKc[i]=Tlocal[i][j];
-			for (i=l-2; i>=0; i--)
+			hi=h[i];
+			hhi=hh[i];
+			for (j=mystart; j<=myend; j++)
 			{
-				Tlocal[i][j]=Tlocal[i][j]*h[i] - Tlocal[l][j]*hh[i];
-				TlastKc[i]=Tlocal[i][j];
-			}
-			MPI_Ibcast (&TlastKc[0], l-1, MPI_DOUBLE, map[l-1], comm, &mpi_request);
-			// size: Tcols/2
-			// other cols
-			for (i=l-2; i>=0; i--)
-			{
-				for (j=myend-1; j>=mystart; j--)
-				{
-					Tlocal[i][j]=Tlocal[i][j]*h[i] - Tlocal[l][j]*hh[i];
-				}
-			}
-		}
-		else
-		{
-			MPI_Ibcast (&TlastKc[0], l-1, MPI_DOUBLE, map[l-1], comm, &mpi_request);
-			for (i=l-2; i>=0; i--)
-			{
-				for (j=myend; j>=mystart; j--)
-				{
-					Tlocal[i][j]=Tlocal[i][j]*h[i] - Tlocal[l][j]*hh[i];
-				}
+				Tlocal[i][j]=Tlocal[i][j]*hi - Tlocal[l][j]*hhi;
 			}
 		}
 
+		// collect chunks of last row of K to "future" last node
+		// option 1: non working
+		MPI_Igather (&Tlocal[l-1][local[n]], myKcols, MPI_DOUBLE, &TlastKr[0], 1, TlastKr_chunks_resized, map[l-1], comm, &mpi_request);
+
+		// option 2: use last column buffer for temporary copy of non-interleaved data
+		//MPI_Gather (&Tlocal[l-1][myKcols], myKcols, MPI_DOUBLE, &TlastKc[0], myKcols, MPI_DOUBLE, map[l-1], comm);
 
 		//////// X
 		// 0 .. l-1
@@ -226,7 +201,8 @@ result_info pviDGESV_WO_earliest-allgather(int n, double** A, int m, double** bb
 		myend = local[l-1] - avoidif;
 		for (i=mystart; i<=myend; i++)
 		{
-			Tlocal[global[i]][i]=Tlocal[global[i]][i]*h[global[i]];
+			gi=global[i];
+			Tlocal[gi][i]=Tlocal[gi][i]*h[gi];
 		}
 
 		// l .. n-1
@@ -236,23 +212,56 @@ result_info pviDGESV_WO_earliest-allgather(int n, double** A, int m, double** bb
 		myend=local[n-1];
 		for (i=0; i<=l-1; i++)
 		{
+			hi=h[i];
+			hhi=hh[i];
 			for (j=mystart; j<=myend; j++)
 			{
-				Tlocal[i][j]=Tlocal[i][j]*h[i] - Tlocal[l][j]*hh[i];
+				Tlocal[i][j]=Tlocal[i][j]*hi - Tlocal[l][j]*hhi;
 			}
 		}
 
+		//future last node broadcasts last row and col of K
+		if (rank==map[l-1])
+		{
+			// copy data into local buffer before broadcast
+
+			// option 1
+			li=local[n+l-1];
+			for (i=0; i<l-1; i++)
+			{
+				TlastKc[i]=Tlocal[i][li];
+			}
+
+
+			// option 2
+			/*
+			myend=local[n+l-1];
+			for (i=0; i<myKcols; i++)
+			{
+				ii=i*cprocs;
+				for (j=0; j<cprocs; j++)
+				{
+					jj=j*myKcols+i;
+					TlastKr[ii+j]=TlastKc[jj];		// interleave columns of the last row
+					TlastKc[jj]=Tlocal[jj][myend];	// copy last column
+				}
+			}
+			*/
+		}
 		// wait until gather completed
-		MPI_Wait(&mpi_request2, &mpi_status);
+		MPI_Wait(&mpi_request, &mpi_status);
 		//TODO: substitute Gather with an All-to-All
+		MPI_Ibcast (&TlastK[0][0], Tcols, MPI_DOUBLE, map[l-1], comm, &mpi_request);
 	}
 
 	// last level (l=0)
 	for (i=0; i<myxxrows; i++)
 	{
+		gi=global[i];
+		Tlocali=Tlocal[0][i];
 		for(rhs=0;rhs<m;rhs++)
 		{
-			xx[global[i]][rhs]=xx[global[i]][rhs]+Tlocal[0][i]*bb[0][rhs];
+			xx[gi][rhs]=xx[gi][rhs]+Tlocali*bb[0][rhs];
 		}
 	}
 
