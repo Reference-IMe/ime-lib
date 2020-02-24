@@ -17,7 +17,7 @@
  *	ifs removed
  *
  */
-result_info pviDGESV_WO_early(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+result_info pviDGESV_WO_early-allgather(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
 	result_info wall_clock;
 
