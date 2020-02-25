@@ -1,4 +1,5 @@
 #include <mpi.h>
+#include <omp.h>
 #include <time.h>
 #include "helpers/info.h"
 #include "helpers/matrix.h"
@@ -78,6 +79,7 @@ result_info pviDGESV_WO_omp(int n, double** A, int m, double** bb, double** xx, 
 				global[i]= i * cprocs + rank; // position of the column i(local) in the global matrix
 			}
 
+
 				int namelen;
 				char processor_name[MPI_MAX_PROCESSOR_NAME];
 				int iam = 0, np = 1;
@@ -89,6 +91,7 @@ result_info pviDGESV_WO_omp(int n, double** A, int m, double** bb, double** xx, 
 					iam = omp_get_thread_num();
 					printf("Hybrid: Hello from thread %d out of %d from process %d out of %d on %s\n", iam, np, rank, cprocs, processor_name);
 				}
+
 
 	MPI_Status  mpi_status;
 	MPI_Request mpi_request = MPI_REQUEST_NULL;
