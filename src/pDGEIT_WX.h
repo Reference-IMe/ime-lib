@@ -10,18 +10,18 @@
 #ifndef __pDGEIT_WX_H__
 #define __pDGEIT_WX_H__
 
-void pDGEIT_WX(double** A, double** Tlocal, double** TlastK, int n, MPI_Comm comm, int rank, int cprocs, int* map, int* global, int* local)
+void pDGEIT_WX(double** A, double** Xlocal, double** Klocal, double** lastK, int n, MPI_Comm comm, int rank, int cprocs, int* map, int* global, int* local)
 {
 	int i,j;
 
     int myAchunks;					// num of A rows/cols per process
     	myAchunks=n/cprocs;
 
-    int Tcols=2*n;
-    int myTcols=Tcols/cprocs;
+    int myKcols;
+    	myKcols=n/cprocs;
 
-	double*  TlastKc=&TlastK[0][0];						// alias for last col
-	double*  TlastKr=&TlastK[1][0];						// alias for last row
+	double*  lastKc=&lastK[0][0];						// alias for last col
+	double*  lastKr=&lastK[1][0];						// alias for last row
 
 	// rows of A to be extracted and sent
 	MPI_Datatype A_rows_interleaved;
@@ -34,27 +34,28 @@ void pDGEIT_WX(double** A, double** Tlocal, double** TlastK, int n, MPI_Comm com
 	MPI_Type_commit (& A_rows_interleaved_resized);
 
 	// rows of A extracted, to be stored as contiguous columns in T (K part)
-	MPI_Datatype KinT_column_contiguous;
-	MPI_Type_vector (n, 1, myTcols, MPI_DOUBLE, & KinT_column_contiguous );
-	MPI_Type_commit (& KinT_column_contiguous);
+	MPI_Datatype K_column_contiguous;
+	MPI_Type_vector (n, 1, myKcols, MPI_DOUBLE, & K_column_contiguous );
+	MPI_Type_commit (& K_column_contiguous);
 
 	// rows of A extracted, to be stored as contiguous columns in T (K part), properly resized for scattering
-	MPI_Datatype KinT_column_contiguous_resized;
-	MPI_Type_create_resized (KinT_column_contiguous, 0, 1*sizeof(double), & KinT_column_contiguous_resized);
-	MPI_Type_commit (& KinT_column_contiguous_resized);
+	MPI_Datatype K_column_contiguous_resized;
+	MPI_Type_create_resized (K_column_contiguous, 0, 1*sizeof(double), & K_column_contiguous_resized);
+	MPI_Type_commit (& K_column_contiguous_resized);
+
 
     // prepare entire last row of K and entire diagonal of A in buffer to be sent
     if (rank==0)
     {
 		for (i=0;i<n;i++)
 		{//reuse memory
-			TlastKr[i]=A[i][n-1]/A[n-1][n-1]; // last col of A -> last row of K
-			TlastKc[i]=A[i][i]; // diagonal
+			lastKr[i]=A[i][n-1]/A[n-1][n-1]; // last col of A -> last row of K
+			lastKc[i]=A[i][i]; // diagonal
 		}
     }
 
-    MPI_Bcast (&TlastK[0][0], Tcols, MPI_DOUBLE, 0, comm); // last col and diagonal of A
-	MPI_Scatter (&A[0][0], 1, A_rows_interleaved_resized, &Tlocal[0][myAchunks], myAchunks, KinT_column_contiguous_resized, 0, comm);	// scatter columns to nodes
+    MPI_Bcast (&lastK[0][0], 2*n, MPI_DOUBLE, 0, comm); // last col and diagonal of A
+	MPI_Scatter (&A[0][0], 1, A_rows_interleaved_resized, &Klocal[0][0], myAchunks, K_column_contiguous_resized, 0, comm);	// scatter columns to nodes
 
     // init
 	for (i=0;i<n;i++)
@@ -64,14 +65,14 @@ void pDGEIT_WX(double** A, double** Tlocal, double** TlastK, int n, MPI_Comm com
 			// X part
 			if (i==global[j])
 			{
-				Tlocal[i][j]=1/TlastKc[i];
+				Xlocal[i][j]=1/lastKc[i];
 			}
 			else
 			{
-				Tlocal[i][j]=0;
+				Xlocal[i][j]=0;
 			}
 			// K part
-			Tlocal[i][myAchunks+j]=Tlocal[i][myAchunks+j]/TlastKc[i];
+			Klocal[i][j]=Klocal[i][j]/lastKc[i];
 		}
 	}
 
@@ -80,11 +81,11 @@ void pDGEIT_WX(double** A, double** Tlocal, double** TlastK, int n, MPI_Comm com
 	{
 		for (i=0; i<n; i++)
 		{
-			TlastKc[i]=Tlocal[i][local[2*n-1]];
+			lastKc[i]=Klocal[i][local[n-1]];
 		}
 	}
 
-	MPI_Bcast (&TlastK[0][0], n, MPI_DOUBLE, map[n-1], comm);	// broadcast of the last col of T (K part)
+	MPI_Bcast (&lastK[0][0], n, MPI_DOUBLE, map[n-1], comm);	// broadcast of the last col of T (K part)
 
 }
 
