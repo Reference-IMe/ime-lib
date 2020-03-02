@@ -30,6 +30,14 @@ void PrintVector(double* const vec, cui rows)
 	//printf("\n");
 }
 
+void PrintVectorINT(int* const vec, cui rows)
+{
+	ui r;
+	for(r=0;r<rows;r++)
+		printf("%d\n",vec[r]);
+	//printf("\n");
+}
+
 void FillVector(double* vec, cui rows, double val)
 {
 	ui r;
