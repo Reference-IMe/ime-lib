@@ -23,8 +23,24 @@ void pDGEIT_WX_1D(double** A, double** Xlocal, double** Klocal, double** lastK, 
     int myKcols;
     	myKcols=n/cprocs;
 
+    /*
 	double*  lastKc=&lastK[0][0];						// alias for last col
 	double*  lastKr=&lastK[1][0];						// alias for last row
+	*/
+
+	double** lastKr;
+				lastKr=malloc(bf*sizeof(double*));
+				for(i=0;i<bf;i++)
+				{
+					lastKr[i]=lastK[i];						// alias for last row
+				}
+	double** lastKc;
+				lastKc=malloc(bf*sizeof(double*));
+				for(i=0;i<bf;i++)
+				{
+					lastKc[i]=lastK[bf+i];						// alias for last col
+				}
+
 
 	// rows of A to be extracted and sent
 	MPI_Datatype A_rows_interleaved;
@@ -52,12 +68,15 @@ void pDGEIT_WX_1D(double** A, double** Xlocal, double** Klocal, double** lastK, 
     {
 		for (i=0;i<n;i++)
 		{//reuse memory
-			lastKr[i]=A[i][n-1]/A[n-1][n-1]; // last col of A -> last row of K
-			lastKc[i]=A[i][i]; // diagonal
+			for (j=0;j<bf;j++)
+			{
+				lastKr[j][i]=A[i][n-1-j]/A[n-1-j][n-1-j]; // last cols of A -> last rows of K
+			}
+			lastKc[0][i]=A[i][i]; // diagonal
 		}
     }
 
-    MPI_Bcast (&lastK[0][0], 2*n, MPI_DOUBLE, 0, comm); // last col and diagonal of A
+    MPI_Bcast (&lastK[0][0], n*(bf+1), MPI_DOUBLE, 0, comm); // last cols and diagonal of A
 	MPI_Scatter (&A[0][0], 1, A_rows_interleaved_resized, &Klocal[0][0], myArows, K_column_contiguous_resized, 0, comm);	// scatter columns to nodes
 
     // init
@@ -68,14 +87,14 @@ void pDGEIT_WX_1D(double** A, double** Xlocal, double** Klocal, double** lastK, 
 			// X part
 			if (i==global[j])
 			{
-				Xlocal[i][j]=1/lastKc[i];
+				Xlocal[i][j]=1/lastKc[0][i];
 			}
 			else
 			{
 				Xlocal[i][j]=0;
 			}
 			// K part
-			Klocal[i][j]=Klocal[i][j]/lastKc[i];
+			Klocal[i][j]=Klocal[i][j]/lastKc[0][i];
 		}
 	}
 
@@ -84,11 +103,14 @@ void pDGEIT_WX_1D(double** A, double** Xlocal, double** Klocal, double** lastK, 
 	{
 		for (i=0; i<n; i++)
 		{
-			lastKc[i]=Klocal[i][local[n-1]];
+			for (j=0;j<bf;j++)
+			{
+				lastKc[j][i]=Klocal[i][local[n-1-j]];
+			}
 		}
 	}
 
-	MPI_Bcast (&lastK[0][0], n, MPI_DOUBLE, map[n-1], comm);	// broadcast of the last col of T (K part)
+	MPI_Bcast (&lastKc[0][0], n*bf, MPI_DOUBLE, map[n-1], comm);	// broadcast of the last cols of T (K part)
 
 }
 
