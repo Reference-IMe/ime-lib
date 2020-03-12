@@ -94,7 +94,7 @@ void FillMatrix2D(double** mat, cui rows, cui cols)
 	mat[0][cols-1]=-1.;
 }
 
-void OneMatrix2D(double** mat, cui rows, cui cols)
+void SetMatrix2D(double setval, double** mat, cui rows, cui cols)
 {
 	ui r,c;
 
@@ -102,9 +102,14 @@ void OneMatrix2D(double** mat, cui rows, cui cols)
 	{
 		for(c=0;c<cols;c++)
 		{
-			mat[r][c]=1;
+			mat[r][c]=setval;
 		}
 	}
+}
+
+void OneMatrix2D(double** mat, cui rows, cui cols)
+{
+	SetMatrix2D(1, mat, rows, cols);
 }
 
 void ReferenceMatrix2D(double** mat, cui rows, cui cols)
@@ -116,6 +121,23 @@ void ReferenceMatrix2D(double** mat, cui rows, cui cols)
 		for(c=0;c<cols;c++)
 		{
 			mat[r][c]=pow(10,ceil(log10(cols+1)))*(r+1)+c+1;
+		}
+	}
+}
+
+void RandomMatrix2D(double** mat, cui rows, cui cols, int seed)
+{
+	// random generation in a given interval: https://stackoverflow.com/questions/13408990/how-to-generate-random-float-number-in-c
+
+	ui r,c;
+
+	srand(seed);
+
+	for(r=0;r<rows;r++)
+	{
+		for(c=0;c<cols;c++)
+		{
+			mat[r][c]=((double)rand()) / ((double)RAND_MAX);
 		}
 	}
 }
@@ -189,7 +211,8 @@ void FillMatrixT1D(double* mat, cui rows, cui cols) // Transposed
 	mat[0+rows*(cols-1)]=-1.;
 }
 
-void OneMatrix1D(double* mat, cui rows, cui cols)
+
+void SetMatrix1D(double setval, double* mat, cui rows, cui cols)
 {
 	ui r,c;
 
@@ -197,7 +220,56 @@ void OneMatrix1D(double* mat, cui rows, cui cols)
 	{
 		for(c=0;c<cols;c++)
 		{
-			mat[r*cols+c]=1;
+			mat[r*cols+c]=setval;
+		}
+	}
+}
+
+void OneMatrix1D(double* mat, cui rows, cui cols)
+{
+	SetMatrix1D(1, mat, rows, cols);
+}
+
+void DiagonalMatrix1D(double diagval, double offdiagval, double* mat, cui rows, cui cols)
+{
+	ui i,imin;
+
+	imin = MIN(rows, cols);
+
+	SetMatrix1D(offdiagval, mat, rows, cols);
+
+	for(i=0;i<imin;i++)
+	{
+			mat[i*cols+i]=diagval;
+	}
+}
+
+void ReferenceMatrix1D(double* mat, cui rows, cui cols)
+{
+	ui r,c;
+
+	for(r=0;r<rows;r++)
+	{
+		for(c=0;c<cols;c++)
+		{
+			mat[r*cols+c]=pow(10,ceil(log10(cols+1)))*(r+1)+c+1;
+		}
+	}
+}
+
+void RandomMatrix1D(double* mat, cui rows, cui cols, int seed)
+{
+	// random generation in a given interval: https://stackoverflow.com/questions/13408990/how-to-generate-random-float-number-in-c
+
+	ui r,c;
+
+	srand(seed);
+
+	for(r=0;r<rows;r++)
+	{
+		for(c=0;c<cols;c++)
+		{
+			mat[r*cols+c]=((double)rand()) / ((double)RAND_MAX);;
 		}
 	}
 }

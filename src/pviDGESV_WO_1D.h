@@ -196,18 +196,25 @@ result_info pviDGESV_WO_1D(int bf, int n, double** A, int m, double** bb, double
 			if (rank==0)
 			{
 				printf("\nlevel %d\n",l);
-				printf("bfi   %d\n",bfi);
+				if (bfi==0)
+				{
+					printf("- lastK received\n");
+				}
+				else
+				{
+					printf("- lastK calculated from %d\n",l+1);
+				}
 			}
 	    	if(rank==i)
 	    	{
-	    	printf("rank %d(%d):\n",rank,l);
-			printf("last R\n");
-			PrintMatrix2D(lastKr, bf, n);
-			printf("last C\n");
-			PrintMatrix2D(lastKc, bf, n);
-	    	printf("h(%d)\n",l);
-			PrintVector(h, n);
-			printf("\n");
+				printf("\nrank %d(%d):\n",rank,l);
+				printf("last R\n");
+				PrintMatrix2D(lastKr, bf, n);
+				printf("last C\n");
+				PrintMatrix2D(lastKc, bf, n);
+				printf("h(%d)\n",l);
+				PrintVector(h, n);
+				printf("\n");
 	    	}
 	    }
 
@@ -250,43 +257,66 @@ result_info pviDGESV_WO_1D(int bf, int n, double** A, int m, double** bb, double
 		if (bfi<bf-1)
 		{
 			bfi++;
-
+		    for (i=0;i<cprocs;i++)
+		    {
+		    	MPI_Barrier(comm);
+		    	if(rank==i)
+		    	{
+					printf("\nrank %d(%d):\n",rank,l);
+					printf("pre C\n");
+					PrintMatrix2D(lastKc, bf, n);
+					printf("\n");
+		    	}
+		    }
 			for (j=0; j<=l-1; j++)
 			{
 				lastKc[bfi][j]=lastKc[bfi][j]*h[j]   - lastKc[bfi-1][l-1]*hh[j];
 				lastKr[bfi][j]=lastKr[bfi][j]*h[l-1] - lastKr[bfi-1][j]*hh[l-1];
 			}
-
+		    for (i=0;i<cprocs;i++)
+		    {
+		    	MPI_Barrier(comm);
+		    	if(rank==i)
+		    	{
+					printf("\nrank %d(%d):\n",rank,l);
+					printf("post C\n");
+					PrintMatrix2D(lastKc, bf, n);
+					printf("\n");
+		    	}
+		    }
 		}
 		else
 		{
 			bfi=0;
-			// collect chunks of last row of K to "future" last node
-			//MPI_Igather (&Klocal[l-1][local[0]], myKcols, MPI_DOUBLE, &lastKr[0], 1, lastKr_chunks_resized, map[l-1], comm, &mpi_request);
-			MPI_Gather (&Klocal[l-1][local[0]], myKcols, MPI_DOUBLE, &lastKr[0][0], 1, lastKr_chunks_resized, map[l-bf], comm);
-			if (l>2){
-				MPI_Gather (&Klocal[l-2][local[0]], myKcols, MPI_DOUBLE, &lastKr[1][0], 1, lastKr_chunks_resized, map[l-bf], comm);
-			}
-			//MPI_Gather (&Klocal[l-bf][local[0]], bf*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, multiple_lastKr_chunks_resized, map[l-bf], comm);
-
-			//future last node broadcasts last rows and cols of K
-			if (rank==map[l-bf])
 			{
-				// copy data into local buffer before broadcast
-				for (i=0; i<=l-1; i++)
+
+				// collect chunks of last row of K to "future" last node
+				//MPI_Igather (&Klocal[l-1][local[0]], myKcols, MPI_DOUBLE, &lastKr[0], 1, lastKr_chunks_resized, map[l-1], comm, &mpi_request);
+
+					MPI_Gather (&Klocal[l-1][local[0]], myKcols, MPI_DOUBLE, &lastKr[0][0], 1, lastKr_chunks_resized, map[l-bf], comm);
+					MPI_Gather (&Klocal[l-2][local[0]], myKcols, MPI_DOUBLE, &lastKr[1][0], 1, lastKr_chunks_resized, map[l-bf], comm);
+
+				//MPI_Gather (&Klocal[l-bf][local[0]], bf*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, multiple_lastKr_chunks_resized, map[l-bf], comm);
+
+				//future last node broadcasts last rows and cols of K
+				if (rank==map[l-bf])
 				{
-					for(j=0;j<bf;j++)
+					// copy data into local buffer before broadcast
+					for (i=0; i<=l-1; i++)
 					{
-						lastKc[j][i]=Klocal[i][local[l-1-j]];
+						for(j=0;j<bf;j++)
+						{
+							lastKc[j][i]=Klocal[i][local[l-1-j]];
+						}
 					}
 				}
-			}
 
-			// wait until gather completed
-			//MPI_Wait(&mpi_request, &mpi_status);
-			//TODO: substitute Gather with an All-to-All
-			//MPI_Ibcast (&lastK[0][0], 2*n*bf, MPI_DOUBLE, map[l-1], comm, &mpi_request);
-			MPI_Bcast (&lastK[0][0], 2*n*bf, MPI_DOUBLE, map[l-bf], comm);
+				// wait until gather completed
+				//MPI_Wait(&mpi_request, &mpi_status);
+				//TODO: substitute Gather with an All-to-All
+				//MPI_Ibcast (&lastK[0][0], 2*n*bf, MPI_DOUBLE, map[l-1], comm, &mpi_request);
+				MPI_Bcast (&lastK[0][0], 2*n*bf, MPI_DOUBLE, map[l-bf], comm);
+			}
 		}
 	}
 
