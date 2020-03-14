@@ -19,9 +19,9 @@
  */
 result_info pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
-	result_info wall_clock;
+	result_info result;
 
-	wall_clock.total_start_time = time(NULL);
+	result.total_start_time = time(NULL);
 
     int rank, cprocs; //
     MPI_Comm_rank(comm, &rank);		//get current process id
@@ -125,7 +125,7 @@ result_info pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_
 	/*
 	 *  calc inhibition sequence
 	 */
-	wall_clock.core_start_time = time(NULL);
+	result.core_start_time = time(NULL);
 
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
@@ -248,7 +248,8 @@ result_info pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_
 
 	MPI_Wait(&mpi_request, &mpi_status);
 
-    wall_clock.core_end_time = time(NULL);
+    result.core_end_time = time(NULL);
+	result.exit_code = 0;
 
 	// collect solution
 	// MPI_IN_PLACE required for MPICH based versions
@@ -272,7 +273,7 @@ result_info pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_
 	DeallocateMatrix2D(Xlocal,n,CONTIGUOUS);
 	DeallocateMatrix2D(Klocal,n,CONTIGUOUS);
 
-	wall_clock.total_end_time = time(NULL);
+	result.total_end_time = time(NULL);
 
-	return wall_clock;
+	return result;
 }
