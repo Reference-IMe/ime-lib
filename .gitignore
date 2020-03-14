@@ -65,3 +65,4 @@ local.properties
 **/.ptp-sync-folder
 **/.gitignore
 /Default/
+/test.csv

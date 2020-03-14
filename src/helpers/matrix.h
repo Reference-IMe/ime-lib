@@ -7,6 +7,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 #include "types.h"
 
@@ -272,6 +273,11 @@ void RandomMatrix1D(double* mat, cui rows, cui cols, int seed)
 			mat[r*cols+c]=((double)rand()) / ((double)RAND_MAX);;
 		}
 	}
+}
+
+void CopyMatrix1D (double* srcmat, double* destmat, cui rows, cui cols)
+{
+  memcpy(destmat, srcmat, rows*cols*sizeof(double));
 }
 
 #endif

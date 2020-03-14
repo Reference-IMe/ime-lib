@@ -18,6 +18,8 @@ typedef struct result_info
 	time_t total_end_time;
 	time_t core_start_time;
 	time_t core_end_time;
+	int	   exit_code;
+	double norm_rel_err;
 } result_info;
 
 typedef struct duration_t
