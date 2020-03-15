@@ -19,9 +19,9 @@
  */
 result_info pviDGESV_WO_1D(int bf, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
-	result_info wall_clock;
+	result_info result;
 
-	wall_clock.total_start_time = time(NULL);
+	result.total_start_time = time(NULL);
 
     int rank, cprocs; //
     MPI_Comm_rank(comm, &rank);		//get current process id
@@ -140,7 +140,7 @@ result_info pviDGESV_WO_1D(int bf, int n, double** A, int m, double** bb, double
 	/*
 	 *  calc inhibition sequence
 	 */
-	wall_clock.core_start_time = time(NULL);
+	result.core_start_time = time(NULL);
 
 	int myKend;
 	myKend=myKcols-1;
@@ -190,21 +190,23 @@ result_info pviDGESV_WO_1D(int bf, int n, double** A, int m, double** bb, double
 			}
 		}
 
+    	MPI_Barrier(comm);
+		if (rank==0)
+		{
+			printf("\nlevel %d\n",l);
+			if (bfi==0)
+			{
+				printf("- lastK received\n");
+			}
+			else
+			{
+				printf("- lastK calculated from %d\n",l+1);
+			}
+			fflush(stdout);
+		}
 	    for (i=0;i<cprocs;i++)
 	    {
 	    	MPI_Barrier(comm);
-			if (rank==0)
-			{
-				printf("\nlevel %d\n",l);
-				if (bfi==0)
-				{
-					printf("- lastK received\n");
-				}
-				else
-				{
-					printf("- lastK calculated from %d\n",l+1);
-				}
-			}
 	    	if(rank==i)
 	    	{
 				printf("\nrank %d(%d):\n",rank,l);
@@ -215,8 +217,10 @@ result_info pviDGESV_WO_1D(int bf, int n, double** A, int m, double** bb, double
 				printf("h(%d)\n",l);
 				PrintVector(h, n);
 				printf("\n");
+				fflush(stdout);
 	    	}
 	    }
+    	MPI_Barrier(comm);
 
 	    //////////////// update T
 		// to avoid IFs: each process loops on its own set of cols, with indirect addressing
@@ -266,12 +270,19 @@ result_info pviDGESV_WO_1D(int bf, int n, double** A, int m, double** bb, double
 					printf("pre C\n");
 					PrintMatrix2D(lastKc, bf, n);
 					printf("\n");
+					fflush(stdout);
 		    	}
 		    }
 			for (j=0; j<=l-1; j++)
 			{
-				lastKc[bfi][j]=lastKc[bfi][j]*h[j]   - lastKc[bfi-1][l-1]*hh[j];
-				lastKr[bfi][j]=lastKr[bfi][j]*h[l-1] - lastKr[bfi-1][j]*hh[l-1];
+				for (i=bf-1;i>=bfi;i--)
+				{
+				//lastKc[bfi][j]=lastKc[bfi][j]*h[j]   - lastKr[bfi-1][l-1]*hh[j];
+				//lastKr[bfi][j]=lastKr[bfi][j]*h[l-1] - lastKr[bfi-1][j]*hh[l-1];
+				//TODO better indexing technique
+				lastKc[i][j]=lastKc[i][j]*h[j]   - lastKr[bfi-1][l-i+(bfi-1)]*hh[j];
+				lastKr[i][j]=lastKr[i][j]*h[l-i+(bfi-1)] - lastKr[bfi-1][j]*hh[l-i+(bfi-1)];
+				}
 			}
 		    for (i=0;i<cprocs;i++)
 		    {
@@ -282,6 +293,7 @@ result_info pviDGESV_WO_1D(int bf, int n, double** A, int m, double** bb, double
 					printf("post C\n");
 					PrintMatrix2D(lastKc, bf, n);
 					printf("\n");
+					fflush(stdout);
 		    	}
 		    }
 		}
@@ -292,10 +304,12 @@ result_info pviDGESV_WO_1D(int bf, int n, double** A, int m, double** bb, double
 
 				// collect chunks of last row of K to "future" last node
 				//MPI_Igather (&Klocal[l-1][local[0]], myKcols, MPI_DOUBLE, &lastKr[0], 1, lastKr_chunks_resized, map[l-1], comm, &mpi_request);
-
-					MPI_Gather (&Klocal[l-1][local[0]], myKcols, MPI_DOUBLE, &lastKr[0][0], 1, lastKr_chunks_resized, map[l-bf], comm);
-					MPI_Gather (&Klocal[l-2][local[0]], myKcols, MPI_DOUBLE, &lastKr[1][0], 1, lastKr_chunks_resized, map[l-bf], comm);
-
+				//TODO group in a single gather (after better indexing, see before)
+				for (i=0;i<bf;i++)
+				{
+					MPI_Gather (&Klocal[l-1-i][local[0]], myKcols, MPI_DOUBLE, &lastKr[i][0], 1, lastKr_chunks_resized, map[l-bf], comm);
+					//MPI_Gather (&Klocal[l-2][local[0]], myKcols, MPI_DOUBLE, &lastKr[1][0], 1, lastKr_chunks_resized, map[l-bf], comm);
+				}
 				//MPI_Gather (&Klocal[l-bf][local[0]], bf*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, multiple_lastKr_chunks_resized, map[l-bf], comm);
 
 				//future last node broadcasts last rows and cols of K
@@ -331,7 +345,8 @@ result_info pviDGESV_WO_1D(int bf, int n, double** A, int m, double** bb, double
 
 	//MPI_Wait(&mpi_request, &mpi_status);
 
-    wall_clock.core_end_time = time(NULL);
+    result.core_end_time = time(NULL);
+	result.exit_code = 0;
 /*
     for (i=0;i<cprocs;i++)
     {
@@ -370,10 +385,12 @@ result_info pviDGESV_WO_1D(int bf, int n, double** A, int m, double** bb, double
 
 	MPI_Gather (&Xlocal[0][0], 1, Tlocal_half, &A[0][0], 1, Thalf_interleaved_resized, 0, comm);
 
+	MPI_Barrier(comm);
 	if (rank==0 )
 	{
 		printf("\n\n Matrix X:\n");
 		PrintMatrix2D(A, n, n);
+		fflush(stdout);
 	}
 	// cleanup
 	free(local);
@@ -386,7 +403,7 @@ result_info pviDGESV_WO_1D(int bf, int n, double** A, int m, double** bb, double
 	DeallocateMatrix2D(Xlocal,n,CONTIGUOUS);
 	DeallocateMatrix2D(Klocal,n,CONTIGUOUS);
 
-	wall_clock.total_end_time = time(NULL);
+	result.total_end_time = time(NULL);
 
-	return wall_clock;
+	return result;
 }
