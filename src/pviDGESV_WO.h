@@ -122,6 +122,7 @@ result_info pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_
 	pDGEIT_WX(A, Xlocal, Klocal, lastK, n, comm, rank, cprocs, map, global, local);	// init inhibition table
     MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm);							// send all r.h.s to all procs
 
+
 	/*
 	 *  calc inhibition sequence
 	 */
