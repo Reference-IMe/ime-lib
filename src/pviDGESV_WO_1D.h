@@ -182,11 +182,11 @@ result_info pviDGESV_WO_1D(int bf, int n, double** A, int m, double** bb, double
 		// update helpers
 		for (i=0; i<=l-1; i++)
 		{
-			h[i]   = 1/(1-lastKc[bfi][i]*lastKr[bfi][i]);
-			hh[i]  = lastKc[bfi][i]*h[i];
+			h[i]   = 1/(1-lastKc[bf-1-bfi][i]*lastKr[bf-1-bfi][i]);
+			hh[i]  = lastKc[bf-1-bfi][i]*h[i];
 			for (rhs=0;rhs<m;rhs++)
 			{
-				bb[i][rhs] = bb[i][rhs]-lastKr[bfi][i]*bb[l][rhs];
+				bb[i][rhs] = bb[i][rhs]-lastKr[bf-1-bfi][i]*bb[l][rhs];
 			}
 		}
 
@@ -275,13 +275,16 @@ result_info pviDGESV_WO_1D(int bf, int n, double** A, int m, double** bb, double
 		    }
 			for (j=0; j<=l-1; j++)
 			{
-				for (i=bf-1;i>=bfi;i--)
+				//for (i=bf-1;i>=bfi;i--)
+				for (i=0;i<bf-bfi;i++)
 				{
 				//lastKc[bfi][j]=lastKc[bfi][j]*h[j]   - lastKr[bfi-1][l-1]*hh[j];
 				//lastKr[bfi][j]=lastKr[bfi][j]*h[l-1] - lastKr[bfi-1][j]*hh[l-1];
 				//TODO better indexing technique
-				lastKc[i][j]=lastKc[i][j]*h[j]   - lastKr[bfi-1][l-i+(bfi-1)]*hh[j];
-				lastKr[i][j]=lastKr[i][j]*h[l-i+(bfi-1)] - lastKr[bfi-1][j]*hh[l-i+(bfi-1)];
+				//lastKc[i][j]=lastKc[i][j]*h[j]   - lastKr[bfi-1][l-i+(bfi-1)]*hh[j];
+				//lastKr[i][j]=lastKr[i][j]*h[l-i+(bfi-1)] - lastKr[bfi-1][j]*hh[l-i+(bfi-1)];
+				lastKc[i][j]=lastKc[i][j]*h[j]   - lastKr[bf-bfi][l-bf+bfi+i]*hh[j];
+				lastKr[i][j]=lastKr[i][j]*h[l-bf+bfi+i] - lastKr[bf-bfi][j]*hh[l-bf+bfi+i];
 				}
 			}
 		    for (i=0;i<cprocs;i++)
@@ -307,7 +310,7 @@ result_info pviDGESV_WO_1D(int bf, int n, double** A, int m, double** bb, double
 				//TODO group in a single gather (after better indexing, see before)
 				for (i=0;i<bf;i++)
 				{
-					MPI_Gather (&Klocal[l-1-i][local[0]], myKcols, MPI_DOUBLE, &lastKr[i][0], 1, lastKr_chunks_resized, map[l-bf], comm);
+					MPI_Gather (&Klocal[l-1-i][local[0]], myKcols, MPI_DOUBLE, &lastKr[bf-1-i][0], 1, lastKr_chunks_resized, map[l-bf], comm);
 					//MPI_Gather (&Klocal[l-2][local[0]], myKcols, MPI_DOUBLE, &lastKr[1][0], 1, lastKr_chunks_resized, map[l-bf], comm);
 				}
 				//MPI_Gather (&Klocal[l-bf][local[0]], bf*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, multiple_lastKr_chunks_resized, map[l-bf], comm);
@@ -320,7 +323,7 @@ result_info pviDGESV_WO_1D(int bf, int n, double** A, int m, double** bb, double
 					{
 						for(j=0;j<bf;j++)
 						{
-							lastKc[j][i]=Klocal[i][local[l-1-j]];
+							lastKc[j][i]=Klocal[i][local[l-bf]+j];
 						}
 					}
 				}
