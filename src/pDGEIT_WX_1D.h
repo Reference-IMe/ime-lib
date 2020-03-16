@@ -63,16 +63,19 @@ void pDGEIT_WX_1D(double** A, double** Xlocal, double** Klocal, double** lastK, 
 	MPI_Type_commit (& K_column_contiguous_resized);
 
 
-    // prepare entire last row of K and entire diagonal of A in buffer to be sent
+    // prepare entire last rows of K and the entire diagonal of A in buffer to be sent
     if (rank==0)
     {
 		for (i=0;i<n;i++)
 		{//reuse memory
 			for (j=0;j<bf;j++)
 			{
-				lastKr[j][i]=A[i][n-1-j]/A[n-1-j][n-1-j]; // last cols of A -> last rows of K
+				// store the last rows of K in lastKr in the same order
+				// (lastKr[0] is the first one of the block of last rows of K)
+				lastKr[j][i]=A[i][n-bf+j]/A[n-bf+j][n-bf+j]; // last cols of A -> last rows of K
 			}
-			lastKc[0][i]=A[i][i]; // diagonal
+			// store the diagonal of A at the beginning of lastKc because it's contiguous to lastKr
+			lastKc[0][i]=A[i][i]; // diagonal of A
 		}
     }
 
@@ -98,19 +101,21 @@ void pDGEIT_WX_1D(double** A, double** Xlocal, double** Klocal, double** lastK, 
 		}
 	}
 
-	// prepare (copy into local buffer) last col of T (K part)
-	if (rank==map[n-1])
+	// prepare (copy into local buffer) last cols of K
+	if (rank==map[n-1]) // the process holding the last column holds the last bf columns [n-bf..n-1]
 	{
 		for (i=0; i<n; i++)
 		{
 			for (j=0;j<bf;j++)
 			{
-				lastKc[j][i]=Klocal[i][local[n-1-j]];
+				// store the last bf cols of K in lastKc in the same order, but transposed (columns stored in rows)
+				// (lastKc[0] is the first one of the block of last cols of K)
+				lastKc[j][i]=Klocal[i][local[n-bf]+j];
 			}
 		}
 	}
 
-	MPI_Bcast (&lastKc[0][0], n*bf, MPI_DOUBLE, map[n-1], comm);	// broadcast of the last cols of T (K part)
+	MPI_Bcast (&lastKc[0][0], n*bf, MPI_DOUBLE, map[n-1], comm);	// broadcast of the last cols of K
 
 }
 
