@@ -157,7 +157,9 @@ result_info pviDGESV_WO_1D(int nb, int n, double** A, int m, double** bb, double
 			}
 		}
 
-		// MPI_Wait(&mpi_request, &mpi_status);
+		// wait for new last rows and cols before computing helpers
+		MPI_Wait(&mpi_request, &mpi_status);
+		// TODO: check performance penalty by skipping MPI_wait with an 'if' for non due cases
 
 		// ALL procs
 		// update helpers
@@ -172,8 +174,61 @@ result_info pviDGESV_WO_1D(int nb, int n, double** A, int m, double** bb, double
 		}
 
 
-	    //////////////// update inhibition table
+		//////////////// update distributed inhibition table
 		// to avoid IFs: each process loops on its own set of cols, with indirect addressing
+
+		//////// K
+		// ALL procs
+		// 0 .. l-1
+		for (i=0; i<=l-1; i++)
+		{
+			for (j=0; j<=myKend; j++)
+			{
+				Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
+			}
+		}
+
+		///////// update local copy of global last rows and cols of K
+		// ALL procs
+		if (current_last>0) // block of last rows (cols) not completely scanned
+		{
+			for (j=0; j<=l-1; j++)
+			{
+				for (i=0;i<current_last;i++) // update inhibition level for the rows and cols of the block
+				{
+					lastKc[i][j]=lastKc[i][j]*h[j]   - lastKr[current_last][l-current_last+i]*hh[j];
+					lastKr[i][j]=lastKr[i][j]*h[l-current_last+i] - lastKr[current_last][j]*hh[l-current_last+i];
+				}
+			}
+			current_last--; // update counter to point to the "future" last row (col) in the block
+		}
+		else // block of last rows (cols) completely scanned
+		{
+			current_last=nb-1; // reset counter for next block (to be sent/received)
+			{
+				// collect chunks of last row of K to "future" last node
+				MPI_Igather (&Klocal[l-nb][local[0]], nb*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, multiple_lastKr_chunks_resized, map[l-nb], comm, &mpi_request);
+
+				//future last node broadcasts last rows and cols of K
+				if (rank==map[l-nb])
+				{
+					// copy data into local buffer before broadcast
+					for (i=0; i<=l-1; i++)
+					{
+						for(j=0;j<nb;j++)
+						{
+							lastKc[j][i]=Klocal[i][local[l-nb]+j];
+						}
+					}
+				}
+
+				// wait until gather completed before sending last rows and cols together
+				MPI_Wait(&mpi_request, &mpi_status);
+				MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
+
+				// TODO: check performance change by substituting gather+broadcast with allgather
+			}
+		}
 
 		//////// X
 		// ALL procs
@@ -195,59 +250,6 @@ result_info pviDGESV_WO_1D(int nb, int n, double** A, int m, double** bb, double
 			}
 		}
 
-		//////// K
-		// ALL procs
-		// 0 .. l-1
-		for (i=0; i<=l-1; i++)
-		{
-			for (j=0; j<=myKend; j++)
-			{
-				Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
-			}
-		}
-
-		//////// last rows and cols of K
-		// ALL procs
-		if (current_last>0) // block of last rows (cols) not completely scanned
-		{
-			for (j=0; j<=l-1; j++)
-			{
-				for (i=0;i<current_last;i++) // update inhibition level for the rows and cols of the block
-				{
-					lastKc[i][j]=lastKc[i][j]*h[j]   - lastKr[current_last][l-current_last+i]*hh[j];
-					lastKr[i][j]=lastKr[i][j]*h[l-current_last+i] - lastKr[current_last][j]*hh[l-current_last+i];
-				}
-			}
-			current_last--; // update counter to point to the "future" last row (col) in the block
-		}
-		else // block of last rows (cols) completely scanned
-		{
-			current_last=nb-1; // reset counter for next block (to be sent/received)
-			{
-				// collect chunks of last row of K to "future" last node
-				//MPI_Igather (&Klocal[l-1][local[0]], myKcols, MPI_DOUBLE, &lastKr[0], 1, lastKr_chunks_resized, map[l-1], comm, &mpi_request);
-				MPI_Gather (&Klocal[l-nb][local[0]], nb*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, multiple_lastKr_chunks_resized, map[l-nb], comm);
-
-				//future last node broadcasts last rows and cols of K
-				if (rank==map[l-nb])
-				{
-					// copy data into local buffer before broadcast
-					for (i=0; i<=l-1; i++)
-					{
-						for(j=0;j<nb;j++)
-						{
-							lastKc[j][i]=Klocal[i][local[l-nb]+j];
-						}
-					}
-				}
-
-				// wait until gather completed
-				//MPI_Wait(&mpi_request, &mpi_status);
-				//TODO: substitute Gather with an All-to-All
-				//MPI_Ibcast (&lastK[0][0], 2*n*bf, MPI_DOUBLE, map[l-1], comm, &mpi_request);
-				MPI_Bcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, map[l-nb], comm);
-			}
-		}
 	}
 
 	// last level (l=0)
@@ -259,7 +261,7 @@ result_info pviDGESV_WO_1D(int nb, int n, double** A, int m, double** bb, double
 		}
 	}
 
-	//MPI_Wait(&mpi_request, &mpi_status);
+	MPI_Wait(&mpi_request, &mpi_status);
 
     result.core_end_time = time(NULL);
 	result.exit_code = 0;
