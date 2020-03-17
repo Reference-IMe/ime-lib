@@ -134,8 +134,7 @@ result_info pviDGESV_WO_1D(int nb, int n, double** A, int m, double** bb, double
 	int myKend = myKcols-1;	// position of the last col of K
 	int myXmid = myXcols-1; // position of boundary between the left (simplified topological formula) and right (full formula) part of X
 	int myxxstart = myXcols-1; // beginning column position for updating the solution (begins from right)
-
-	int bfi=0;
+	int current_last=nb-1;	// index for the current last row or col of K in buffer
 
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
@@ -162,7 +161,6 @@ result_info pviDGESV_WO_1D(int nb, int n, double** A, int m, double** bb, double
 
 		// ALL procs
 		// update helpers
-		int current_last = nb-1-bfi; // index for the current last row or col of K in buffer
 		for (i=0; i<=l-1; i++)
 		{
 			h[i]   = 1/(1-lastKc[current_last][i]*lastKr[current_last][i]);
@@ -210,23 +208,22 @@ result_info pviDGESV_WO_1D(int nb, int n, double** A, int m, double** bb, double
 
 		//////// last rows and cols of K
 		// ALL procs
-		if (bfi<nb-1) //
+		if (current_last>0) // block of last rows (cols) not completely scanned
 		{
-			bfi++;
 			for (j=0; j<=l-1; j++)
 			{
-				for (i=0;i<nb-bfi;i++)
+				for (i=0;i<current_last;i++) // update inhibition level for the rows and cols of the block
 				{
-					lastKc[i][j]=lastKc[i][j]*h[j]   - lastKr[nb-bfi][l-nb+bfi+i]*hh[j];
-					lastKr[i][j]=lastKr[i][j]*h[l-nb+bfi+i] - lastKr[nb-bfi][j]*hh[l-nb+bfi+i];
+					lastKc[i][j]=lastKc[i][j]*h[j]   - lastKr[current_last][l-current_last+i]*hh[j];
+					lastKr[i][j]=lastKr[i][j]*h[l-current_last+i] - lastKr[current_last][j]*hh[l-current_last+i];
 				}
 			}
+			current_last--; // update counter to point to the "future" last row (col) in the block
 		}
-		else
+		else // block of last rows (cols) completely scanned
 		{
-			bfi=0;
+			current_last=nb-1; // reset counter for next block (to be sent/received)
 			{
-
 				// collect chunks of last row of K to "future" last node
 				//MPI_Igather (&Klocal[l-1][local[0]], myKcols, MPI_DOUBLE, &lastKr[0], 1, lastKr_chunks_resized, map[l-1], comm, &mpi_request);
 				MPI_Gather (&Klocal[l-nb][local[0]], nb*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, multiple_lastKr_chunks_resized, map[l-nb], comm);
