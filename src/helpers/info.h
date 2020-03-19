@@ -22,11 +22,13 @@ typedef struct result_info
 	double norm_rel_err;
 } result_info;
 
-typedef struct duration_t
+typedef struct run_info
 {
-	double total;
-	double core;
-} duration_t;
+	double total_time;
+	double core_time;
+	int	   exit_code;
+	double norm_rel_err;
+} run_info;
 
 
 #endif
