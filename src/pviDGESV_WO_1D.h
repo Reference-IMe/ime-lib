@@ -98,7 +98,7 @@ result_info pviDGESV_WO_1D(int nb, int n, double** A, int m, double** bb, double
      */
 	// interleaved nb chunks of a row of K, repeated for nb rows (that is: interleaved blocks of size (nb)x(nb) )
 	MPI_Datatype multiple_lastKr_chunks;
-	MPI_Type_vector (nb*myKcols, nb, nb*cprocs, MPI_DOUBLE, & multiple_lastKr_chunks );
+	MPI_Type_vector (nb*(myKcols/nb), nb, nb*cprocs, MPI_DOUBLE, & multiple_lastKr_chunks );
 	MPI_Type_commit (& multiple_lastKr_chunks);
 
 	// proper resizing for gathering
@@ -139,7 +139,7 @@ result_info pviDGESV_WO_1D(int nb, int n, double** A, int m, double** bb, double
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
 	{
-		if (rank==map[l]) // if a process contains the last row/cols, must skip it
+		if (rank==map[l]) // if a process contains the last rows/cols, must skip it
 		{
 			myKend--;
 			myXmid--;
@@ -173,6 +173,34 @@ result_info pviDGESV_WO_1D(int nb, int n, double** A, int m, double** bb, double
 			}
 		}
 
+		/*
+		if (rank==0)
+		{
+			printf("level %d\n",l);
+			printf("h\n");
+			PrintVector(h,l);
+	    	fflush(stdout);
+		}
+	    for (i=0;i<cprocs;i++)
+	    {
+	    	MPI_Barrier(comm);
+	    	if (rank==i)
+	    	{
+	    	printf("rank %d\n",rank);
+	    	printf("lastKr\n");
+	    	PrintMatrix2D(lastKr,nb,n);
+	    	printf("lastKc\n");
+	    	PrintMatrix2D(lastKc,nb,n);
+	    	printf("K\n");
+	    	PrintMatrix2D(Klocal,n,myKcols);
+	    	printf("X\n");
+	    	PrintMatrix2D(Xlocal,n,myXcols);
+	    	printf("\n");
+	    	fflush(stdout);
+	    	}
+	    	MPI_Barrier(comm);
+	    }
+	    */
 
 		//////////////// update distributed inhibition table
 		// to avoid IFs: each process loops on its own set of cols, with indirect addressing
@@ -208,6 +236,7 @@ result_info pviDGESV_WO_1D(int nb, int n, double** A, int m, double** bb, double
 			{
 				// collect chunks of last row of K to "future" last node
 				MPI_Igather (&Klocal[l-nb][local[0]], nb*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, multiple_lastKr_chunks_resized, map[l-nb], comm, &mpi_request);
+				//MPI_Wait(&mpi_request, &mpi_status);
 
 				//future last node broadcasts last rows and cols of K
 				if (rank==map[l-nb])
