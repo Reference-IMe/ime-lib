@@ -22,8 +22,8 @@
 												MPI_Reduce( &(process_info).core_time,  &(team_info).core_time,  1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD );\
 												team_info.exit_code    = info.exit_code;    \
 												team_info.norm_rel_err = info.norm_rel_err; \
-												MPI_Bcast (&(team_info).exit_code, 1, MPI_INT, 0, MPI_COMM_WORLD);       \
-												MPI_Bcast (&(team_info).norm_rel_err, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD); \
+												MPI_Bcast (&(team_info.exit_code), 1, MPI_INT, 0, MPI_COMM_WORLD);       \
+												MPI_Bcast (&(team_info.norm_rel_err), 1, MPI_DOUBLE, 0, MPI_COMM_WORLD); \
 												MPI_Barrier(MPI_COMM_WORLD);\
 											return (team_info);
 
