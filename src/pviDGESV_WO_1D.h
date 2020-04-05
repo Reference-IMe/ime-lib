@@ -1,4 +1,5 @@
 #include <mpi.h>
+#include <omp.h>
 #include <time.h>
 #include "helpers/info.h"
 #include "helpers/matrix.h"
@@ -149,6 +150,7 @@ result_info pviDGESV_WO_1D(int nb, int n, double** A, int m, double** bb, double
 		// ALL procs
 		// update solutions
 		// l .. n-1
+		#pragma omp parallel for private(i, rhs) schedule(static)
 		for (i=myxxstart; i<=local[n-1]; i++)
 		{
 			for (rhs=0;rhs<m;rhs++)
@@ -163,6 +165,7 @@ result_info pviDGESV_WO_1D(int nb, int n, double** A, int m, double** bb, double
 
 		// ALL procs
 		// update helpers
+		#pragma omp parallel for private(i, rhs) schedule(guided)
 		for (i=0; i<=l-1; i++)
 		{
 			h[i]   = 1/(1-lastKc[current_last][i]*lastKr[current_last][i]);
@@ -208,6 +211,7 @@ result_info pviDGESV_WO_1D(int nb, int n, double** A, int m, double** bb, double
 		//////// K
 		// ALL procs
 		// 0 .. l-1
+		#pragma omp parallel for private(i, j) schedule(guided)
 		for (i=0; i<=l-1; i++)
 		{
 			for (j=0; j<=myKend; j++)
@@ -220,11 +224,16 @@ result_info pviDGESV_WO_1D(int nb, int n, double** A, int m, double** bb, double
 		// ALL procs
 		if (current_last>0) // block of last rows (cols) not completely scanned
 		{
-			for (j=0; j<=l-1; j++)
+			for (i=0;i<current_last;i++)
 			{
-				for (i=0;i<current_last;i++) // update inhibition level for the rows and cols of the block
+				#pragma omp parallel for private(j) schedule(guided)
+				for (j=0; j<=l-1; j++)
 				{
 					lastKc[i][j]=lastKc[i][j]*h[j]   - lastKr[current_last][l-current_last+i]*hh[j];
+				//}
+				//#pragma omp parallel for private(j) schedule(guided)
+				//for (j=0; j<=l-1; j++)
+				//{
 					lastKr[i][j]=lastKr[i][j]*h[l-current_last+i] - lastKr[current_last][j]*hh[l-current_last+i];
 				}
 			}
@@ -242,9 +251,10 @@ result_info pviDGESV_WO_1D(int nb, int n, double** A, int m, double** bb, double
 				if (rank==map[l-nb])
 				{
 					// copy data into local buffer before broadcast
-					for (i=0; i<=l-1; i++)
+					#pragma omp parallel for private(i, j) schedule(dynamic)
+					for(j=0;j<nb;j++)
 					{
-						for(j=0;j<nb;j++)
+						for (i=0; i<=l-1; i++)
 						{
 							lastKc[j][i]=Klocal[i][local[l-nb]+j];
 						}
@@ -263,6 +273,7 @@ result_info pviDGESV_WO_1D(int nb, int n, double** A, int m, double** bb, double
 		// ALL procs
 		// calc with diagonal elements not null (left part of X)
 		// 0 .. l-1
+		#pragma omp parallel for private(i) schedule(dynamic)
 		for (i=0; i<=myXmid; i++)
 		{
 			Xlocal[global[i]][i]=Xlocal[global[i]][i]*h[global[i]];
@@ -271,6 +282,7 @@ result_info pviDGESV_WO_1D(int nb, int n, double** A, int m, double** bb, double
 		// ALL procs
 		// calc with general elements (right part of X)
 		// l .. n-1
+		#pragma omp parallel for private(i, j) schedule(dynamic)
 		for (i=0; i<=l-1; i++)
 		{
 			for (j=myXmid+1; j<=myXcols-1; j++)
@@ -282,6 +294,7 @@ result_info pviDGESV_WO_1D(int nb, int n, double** A, int m, double** bb, double
 	}
 
 	// last level (l=0)
+	#pragma omp parallel for private(i, rhs) schedule(dynamic)
 	for (i=0; i<myxxrows; i++)
 	{
 		for(rhs=0;rhs<m;rhs++)
