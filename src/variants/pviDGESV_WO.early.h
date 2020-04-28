@@ -17,9 +17,9 @@
  *	ifs removed
  *
  */
-result_info pviDGESV_WO_early(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+test_output pviDGESV_WO_early(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
-	result_info wall_clock;
+	test_output wall_clock;
 
 	wall_clock.total_start_time = time(NULL);
 

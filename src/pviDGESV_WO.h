@@ -1,4 +1,5 @@
 #include <mpi.h>
+#include <omp.h>
 #include <time.h>
 #include "helpers/info.h"
 #include "helpers/matrix.h"
@@ -17,43 +18,59 @@
  *	ifs removed
  *
  */
-result_info pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+test_output pviDGESV_WO(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
-	result_info result;
+	/*
+	 * nb	blocking factor: number of adjacent column (block width)
+	 * n	size (number of columns) of the square matrix A
+	 * m	number of rigth-hand-sides (number of columns) in bb
+	 *
+	 */
+
+	test_output result;
 
 	result.total_start_time = time(NULL);
 
     int rank, cprocs; //
-    MPI_Comm_rank(comm, &rank);		//get current process id
+    MPI_Comm_rank(comm, &rank);		// get current process id
     MPI_Comm_size(comm, &cprocs);	// get number of processes
+	MPI_Status  mpi_status;
+	MPI_Request mpi_request = MPI_REQUEST_NULL;
 
-	int i,j,l;						// indexes
-    int mycols;					// num of T cols per process
-    	mycols=2*n/cprocs;
-    int myxxrows=n/cprocs;
-    int myKcols;
-    	myKcols=mycols/2;
-	int myXcols;
-		myXcols=mycols/2;
-    int myend;						// loop boundaries on local cols =myTcols/2;
-    int mystart;
+	int i,j,l;						// general indexes
+    int mycols   = n/cprocs;;		// num of cols per process
+    int myxxrows = mycols;			// num of chunks for better code readability
+    int myKcols  = mycols;
+	int myXcols  = mycols;
+
     int rhs;
-
-    int avoidif;					// for boolean --> int conversion
 
     /*
      * local storage for a part of the input matrix (continuous columns, not interleaved)
      */
+    // X part
     double** Xlocal;
     		 Xlocal=AllocateMatrix2D(n, myXcols, CONTIGUOUS);
+    // K part
 	double** Klocal;
 			 Klocal=AllocateMatrix2D(n, myKcols, CONTIGUOUS);
+	// last rows and cols of K
 	double** lastK;
-			 lastK=AllocateMatrix2D(2,n, CONTIGUOUS);	// last col [0] and row [1] of T (K part)
-	double*  lastKc=&lastK[0][0];						// alias for last col
-	double*  lastKr=&lastK[1][0];						// alias for last row
-
-    double* h;							// helper vectors
+			 lastK=AllocateMatrix2D(2*nb, n, CONTIGUOUS);	// last rows [0 - (bf-1)] and cols [ bf - (2bf -1)] of K
+	double** lastKr;
+				lastKr=malloc(nb*sizeof(double*));
+				for(i=0;i<nb;i++)
+				{
+					lastKr[i]=lastK[i];						// alias for last row
+				}
+	double** lastKc;
+				lastKc=malloc(nb*sizeof(double*));
+				for(i=0;i<nb;i++)
+				{
+					lastKc[i]=lastK[nb+i];					// alias for last col
+				}
+	// helper vectors
+    double* h;
     		h=AllocateVector(n);
     double* hh;
 			hh=AllocateVector(n);
@@ -67,76 +84,74 @@ result_info pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_
     		map=malloc(n*sizeof(int));
 			for (i=0; i<n; i++)
 			{
-				map[i]= i % cprocs;			// who has the col i
-				local[i]=floor(i/cprocs);	// position of the column i(global) in the local matrix
+				map[i]= ((int)floor(i/nb)) % cprocs;			// who has the col i
+				local[i]=(int)floor(i/(nb*cprocs))*nb + i % nb;	// position of the column i(global) in the local matrix
 			}
     int*	global;
     		global=malloc(mycols*sizeof(int));
 			for (i=0; i<mycols; i++)
 			{
-				global[i]= i * cprocs + rank; // position of the column i(local) in the global matrix
+				global[i]= i % nb + (int)floor(i/nb)*cprocs*nb + rank*nb; // position of the column i(local) in the global matrix
 			}
-
-	MPI_Status  mpi_status;
-	MPI_Request mpi_request = MPI_REQUEST_NULL;
-
 
     /*
      * MPI derived types
      */
+	// interleaved nb chunks of a row of K, repeated for nb rows (that is: interleaved blocks of size (nb)x(nb) )
+	MPI_Datatype multiple_lastKr_chunks;
+	MPI_Type_vector (nb*(myKcols/nb), nb, nb*cprocs, MPI_DOUBLE, & multiple_lastKr_chunks );
+	MPI_Type_commit (& multiple_lastKr_chunks);
 
-	/*
-	 * option 1: derived data type, for interleaving while for gathering
-	 *           non working for some values of n and np, why? extent of derived MPI data type?
-	 */
-
-	MPI_Datatype lastKr_chunks;
-	MPI_Type_vector (myKcols, 1, cprocs, MPI_DOUBLE, & lastKr_chunks );
-	MPI_Type_commit (& lastKr_chunks);
-
-	MPI_Datatype lastKr_chunks_resized;
-	MPI_Type_create_resized (lastKr_chunks, 0, 1*sizeof(double), & lastKr_chunks_resized);
-	MPI_Type_commit (& lastKr_chunks_resized);
-
-
-	/*
-	 * option 2: standard data type, explicit loop for interleaving after gathering
-	 *           see below
-	 */
+	// proper resizing for gathering
+	MPI_Datatype multiple_lastKr_chunks_resized;
+	MPI_Type_create_resized (multiple_lastKr_chunks, 0, nb*sizeof(double), & multiple_lastKr_chunks_resized);
+	MPI_Type_commit (& multiple_lastKr_chunks_resized);
 
 	// rows of xx to be extracted
 	MPI_Datatype xx_rows_interleaved;
-	MPI_Type_vector (myxxrows, m, m*cprocs, MPI_DOUBLE, & xx_rows_interleaved );
+	MPI_Type_vector (myxxrows/nb, m*nb, nb*m*cprocs, MPI_DOUBLE, & xx_rows_interleaved );
 	MPI_Type_commit (& xx_rows_interleaved);
 
 	// rows of xx to be extracted, properly resized for gathering
 	MPI_Datatype xx_rows_interleaved_resized;
-	MPI_Type_create_resized (xx_rows_interleaved, 0, m*sizeof(double), & xx_rows_interleaved_resized);
+	MPI_Type_create_resized (xx_rows_interleaved, 0, nb*m*sizeof(double), & xx_rows_interleaved_resized);
 	MPI_Type_commit (& xx_rows_interleaved_resized);
 
 
     /*
 	 *  init inhibition table
 	 */
-	DGEZR(xx, n, m);															// init (zero) solution vectors
-	pDGEIT_WX(A, Xlocal, Klocal, lastK, n, comm, rank, cprocs, map, global, local);	// init inhibition table
-    MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm);							// send all r.h.s to all procs
-
+	DGEZR(xx, n, m);																		// init (zero) solution vectors
+	pDGEIT_WX_1D(A, Xlocal, Klocal, lastK, n, nb, comm, rank, cprocs, map, global, local);	// init inhibition table
+    MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm);										// send all r.h.s to all procs
 
 	/*
 	 *  calc inhibition sequence
 	 */
 	result.core_start_time = time(NULL);
 
+	// general bounds for the loops over the columns
+	// they differ on processes and change along the main loop over the levels
+	int myKend = myKcols-1;	// position of the last col of K
+	int myXmid = myXcols-1; // position of boundary between the left (simplified topological formula) and right (full formula) part of X
+	int myxxstart = myXcols-1; // beginning column position for updating the solution (begins from right)
+	int current_last=nb-1;	// index for the current last row or col of K in buffer
+
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
 	{
+		if (rank==map[l]) // if a process contains the last rows/cols, must skip it
+		{
+			myKend--;
+			myXmid--;
+			myxxstart--;
+		}
+
 		// ALL procs
 		// update solutions
 		// l .. n-1
-		avoidif=(rank<map[l]);
-		mystart = local[l] + avoidif;
-		for (i=mystart; i<=local[n-1]; i++)
+		#pragma omp parallel for private(i, rhs) schedule(static)
+		for (i=myxxstart; i<=local[n-1]; i++)
 		{
 			for (rhs=0;rhs<m;rhs++)
 			{
@@ -144,101 +159,142 @@ result_info pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_
 			}
 		}
 
+		// wait for new last rows and cols before computing helpers
 		MPI_Wait(&mpi_request, &mpi_status);
+		// TODO: check performance penalty by skipping MPI_wait with an 'if' for non due cases
 
 		// ALL procs
 		// update helpers
+		#pragma omp parallel for private(i, rhs) schedule(guided)
 		for (i=0; i<=l-1; i++)
 		{
-			h[i]   = 1/(1-lastKc[i]*lastKr[i]);
-			hh[i]  = lastKc[i]*h[i];
+			h[i]   = 1/(1-lastKc[current_last][i]*lastKr[current_last][i]);
+			hh[i]  = lastKc[current_last][i]*h[i];
 			for (rhs=0;rhs<m;rhs++)
 			{
-				bb[i][rhs] = bb[i][rhs]-lastKr[i]*bb[l][rhs];
+				bb[i][rhs] = bb[i][rhs]-lastKr[current_last][i]*bb[l][rhs];
 			}
 		}
 
+		/*
+		if (rank==0)
+		{
+			printf("level %d\n",l);
+			printf("h\n");
+			PrintVector(h,l);
+	    	fflush(stdout);
+		}
+	    for (i=0;i<cprocs;i++)
+	    {
+	    	MPI_Barrier(comm);
+	    	if (rank==i)
+	    	{
+	    	printf("rank %d\n",rank);
+	    	printf("lastKr\n");
+	    	PrintMatrix2D(lastKr,nb,n);
+	    	printf("lastKc\n");
+	    	PrintMatrix2D(lastKc,nb,n);
+	    	printf("K\n");
+	    	PrintMatrix2D(Klocal,n,myKcols);
+	    	printf("X\n");
+	    	PrintMatrix2D(Xlocal,n,myXcols);
+	    	printf("\n");
+	    	fflush(stdout);
+	    	}
+	    	MPI_Barrier(comm);
+	    }
+	    */
 
-		//////////////// update T
+		//////////////// update distributed inhibition table
 		// to avoid IFs: each process loops on its own set of cols, with indirect addressing
 
 		//////// K
-		// 0 .. l-1
 		// ALL procs
-		mystart=local[0];
-		avoidif=(rank>map[l-1]);
-		myend=local[l-1]-avoidif;
+		// 0 .. l-1
+		#pragma omp parallel for private(i, j) schedule(guided)
 		for (i=0; i<=l-1; i++)
 		{
-			for (j=mystart; j<=myend; j++)
+			for (j=0; j<=myKend; j++)
 			{
 				Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
 			}
 		}
 
-		// collect chunks of last row of K to "future" last node
-		MPI_Igather (&Klocal[l-1][local[0]], myKcols, MPI_DOUBLE, &lastKr[0], 1, lastKr_chunks_resized, map[l-1], comm, &mpi_request);
+		///////// update local copy of global last rows and cols of K
+		// ALL procs
+		if (current_last>0) // block of last rows (cols) not completely scanned
+		{
+			for (i=0;i<current_last;i++)
+			{
+				#pragma omp parallel for private(j) schedule(guided)
+				for (j=0; j<=l-1; j++)
+				{
+					lastKc[i][j]=lastKc[i][j]*h[j]   - lastKr[current_last][l-current_last+i]*hh[j];
+				//}
+				//#pragma omp parallel for private(j) schedule(guided)
+				//for (j=0; j<=l-1; j++)
+				//{
+					lastKr[i][j]=lastKr[i][j]*h[l-current_last+i] - lastKr[current_last][j]*hh[l-current_last+i];
+				}
+			}
+			current_last--; // update counter to point to the "future" last row (col) in the block
+		}
+		else // block of last rows (cols) completely scanned
+		{
+			current_last=nb-1; // reset counter for next block (to be sent/received)
+			{
+				// collect chunks of last row of K to "future" last node
+				MPI_Igather (&Klocal[l-nb][local[0]], nb*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, multiple_lastKr_chunks_resized, map[l-nb], comm, &mpi_request);
+				//MPI_Wait(&mpi_request, &mpi_status);
+
+				//future last node broadcasts last rows and cols of K
+				if (rank==map[l-nb])
+				{
+					// copy data into local buffer before broadcast
+					#pragma omp parallel for private(i, j) schedule(dynamic)
+					for(j=0;j<nb;j++)
+					{
+						for (i=0; i<=l-1; i++)
+						{
+							lastKc[j][i]=Klocal[i][local[l-nb]+j];
+						}
+					}
+				}
+
+				// wait until gather completed before sending last rows and cols together
+				MPI_Wait(&mpi_request, &mpi_status);
+				MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
+
+				// TODO: check performance change by substituting gather+broadcast with allgather
+			}
+		}
 
 		//////// X
-		// 0 .. l-1
 		// ALL procs
-		// processes with diagonal elements not null
-		mystart=0;
-		avoidif = (rank>map[l-1]);
-		myend = local[l-1] - avoidif;
-		for (i=mystart; i<=myend; i++)
+		// calc with diagonal elements not null (left part of X)
+		// 0 .. l-1
+		#pragma omp parallel for private(i) schedule(dynamic)
+		for (i=0; i<=myXmid; i++)
 		{
 			Xlocal[global[i]][i]=Xlocal[global[i]][i]*h[global[i]];
 		}
 
-		// l .. n-1
 		// ALL procs
-		avoidif=(rank<map[l]);
-		mystart=local[l]+avoidif;
-		myend=local[n-1];
+		// calc with general elements (right part of X)
+		// l .. n-1
+		#pragma omp parallel for private(i, j) schedule(dynamic)
 		for (i=0; i<=l-1; i++)
 		{
-			for (j=mystart; j<=myend; j++)
+			for (j=myXmid+1; j<=myXcols-1; j++)
 			{
 				Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
 			}
 		}
 
-		//future last node broadcasts last row and col of K
-		if (rank==map[l-1])
-		{
-			// copy data into local buffer before broadcast
-
-			// option 1
-
-			for (i=0; i<l-1; i++)
-			{
-				lastKc[i]=Klocal[i][local[l-1]];
-			}
-
-
-			// option 2
-			/*
-			myend=local[n+l-1];
-			for (i=0; i<myKcols; i++)
-			{
-				ii=i*cprocs;
-				for (j=0; j<cprocs; j++)
-				{
-					jj=j*myKcols+i;
-					TlastKr[ii+j]=TlastKc[jj];		// interleave columns of the last row
-					TlastKc[jj]=Tlocal[jj][myend];	// copy last column
-				}
-			}
-			*/
-		}
-		// wait until gather completed
-		MPI_Wait(&mpi_request, &mpi_status);
-		//TODO: substitute Gather with an All-to-All
-		MPI_Ibcast (&lastK[0][0], 2*n, MPI_DOUBLE, map[l-1], comm, &mpi_request);
 	}
 
 	// last level (l=0)
+	#pragma omp parallel for private(i, rhs) schedule(dynamic)
 	for (i=0; i<myxxrows; i++)
 	{
 		for(rhs=0;rhs<m;rhs++)
@@ -260,8 +316,35 @@ result_info pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_
 	}
 	else
 	{
-		MPI_Gather (&xx[rank][0], 1, xx_rows_interleaved_resized, &xx[0][0], 1, xx_rows_interleaved_resized, 0, comm);
+		MPI_Gather (&xx[rank*nb][0], 1, xx_rows_interleaved_resized, &xx[0][0], 1, xx_rows_interleaved_resized, 0, comm);
 	}
+
+	/*
+	 * control on factorization
+	 */
+	/*
+	MPI_Datatype Tlocal_half;
+	MPI_Type_vector (n*myKcols, 1, 1, MPI_DOUBLE, & Tlocal_half );
+	MPI_Type_commit (& Tlocal_half);
+
+	MPI_Datatype Thalf_interleaved;
+	MPI_Type_vector (n*myKcols/nb, nb, nb*cprocs, MPI_DOUBLE, & Thalf_interleaved );
+	MPI_Type_commit (& Thalf_interleaved);
+
+	MPI_Datatype Thalf_interleaved_resized;
+	MPI_Type_create_resized (Thalf_interleaved, 0, nb*sizeof(double), & Thalf_interleaved_resized);
+	MPI_Type_commit (& Thalf_interleaved_resized);
+
+	MPI_Gather (&Xlocal[0][0], 1, Tlocal_half, &A[0][0], 1, Thalf_interleaved_resized, 0, comm);
+
+	MPI_Barrier(comm);
+	if (rank==0 )
+	{
+		printf("\n\n Matrix X:\n");
+		PrintMatrix2D(A, n, n);
+		fflush(stdout);
+	}
+	*/
 
 	// cleanup
 	free(local);

@@ -17,9 +17,9 @@
  *
  */
 
-result_info pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm, int sprocs)
+test_output pviDGESV_WO_cs(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm, int sprocs)
 {
-	result_info wall_clock;
+	test_output wall_clock;
 
 	wall_clock.total_start_time = time(NULL);
 

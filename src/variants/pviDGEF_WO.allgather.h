@@ -16,9 +16,9 @@
  *	ifs removed
  *
  */
-result_info pviDGEF_WO_allgather(int n, double** A, double** K, MPI_Comm comm)
+test_output pviDGEF_WO_allgather(int n, double** A, double** K, MPI_Comm comm)
 {
-	result_info wall_clock;
+	test_output wall_clock;
 
 	wall_clock.total_start_time = time(NULL);
 

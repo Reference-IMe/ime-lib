@@ -4,7 +4,7 @@
 #include "helpers/matrix.h"
 #include "helpers/vector.h"
 #include "DGEZR.h"
-#include "pDGEIT_WX.h"
+#include "pDGEIT_WX_non1D.h"
 
 /*
  *	solve (SV) system with general (GE) matrix A of doubles (D)
@@ -17,44 +17,41 @@
  *	ifs removed
  *
  */
-test_output pviDGESV_WO_scalarization(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+test_output pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
-	test_output wall_clock;
+	test_output result;
 
-	wall_clock.total_start_time = time(NULL);
+	result.total_start_time = time(NULL);
 
     int rank, cprocs; //
     MPI_Comm_rank(comm, &rank);		//get current process id
     MPI_Comm_size(comm, &cprocs);	// get number of processes
 
 	int i,j,l;						// indexes
-    int Tcols=2*n;					// total num of cols (X + K)
-    int myTcols;					// num of T cols per process
-    	myTcols=Tcols/cprocs;
-    //int myAchunks;					// num of A rows/cols per process
-    //	myAchunks=n/cprocs;
+    int mycols;					// num of T cols per process
+    	mycols=2*n/cprocs;
     int myxxrows=n/cprocs;
     int myKcols;
-    	myKcols=myTcols/2;
+    	myKcols=mycols/2;
+	int myXcols;
+		myXcols=mycols/2;
     int myend;						// loop boundaries on local cols =myTcols/2;
     int mystart;
     int rhs;
 
     int avoidif;					// for boolean --> int conversion
-    int gi, li;
-    double TlastKri, Tlocali, hi, hhi;
 
-    //int myAcols=n/cprocs;
     /*
      * local storage for a part of the input matrix (continuous columns, not interleaved)
      */
-    double** Tlocal;
-    		 Tlocal=AllocateMatrix2D(n, myTcols, CONTIGUOUS);
-
-	double** TlastK;
-			 TlastK=AllocateMatrix2D(2,n, CONTIGUOUS);	// last col [0] and row [1] of T (K part)
-	double*  TlastKc=&TlastK[0][0];						// alias for last col
-	double*  TlastKr=&TlastK[1][0];						// alias for last row
+    double** Xlocal;
+    		 Xlocal=AllocateMatrix2D(n, myXcols, CONTIGUOUS);
+	double** Klocal;
+			 Klocal=AllocateMatrix2D(n, myKcols, CONTIGUOUS);
+	double** lastK;
+			 lastK=AllocateMatrix2D(2,n, CONTIGUOUS);	// last col [0] and row [1] of T (K part)
+	double*  lastKc=&lastK[0][0];						// alias for last col
+	double*  lastKr=&lastK[1][0];						// alias for last row
 
     double* h;							// helper vectors
     		h=AllocateVector(n);
@@ -65,17 +62,17 @@ test_output pviDGESV_WO_scalarization(int n, double** A, int m, double** bb, dou
 	 * map columns to process
 	 */
 	int*	local;
-    		local=malloc(Tcols*sizeof(int));
+    		local=malloc(n*sizeof(int));
     int*	map;
-    		map=malloc(Tcols*sizeof(int));
-			for (i=0; i<Tcols; i++)
+    		map=malloc(n*sizeof(int));
+			for (i=0; i<n; i++)
 			{
 				map[i]= i % cprocs;			// who has the col i
 				local[i]=floor(i/cprocs);	// position of the column i(global) in the local matrix
 			}
     int*	global;
-    		global=malloc(myTcols*sizeof(int));
-			for (i=0; i<myTcols; i++)
+    		global=malloc(mycols*sizeof(int));
+			for (i=0; i<mycols; i++)
 			{
 				global[i]= i * cprocs + rank; // position of the column i(local) in the global matrix
 			}
@@ -93,13 +90,13 @@ test_output pviDGESV_WO_scalarization(int n, double** A, int m, double** bb, dou
 	 *           non working for some values of n and np, why? extent of derived MPI data type?
 	 */
 
-	MPI_Datatype TlastKr_chunks;
-	MPI_Type_vector (n/cprocs, 1, cprocs, MPI_DOUBLE, & TlastKr_chunks );
-	MPI_Type_commit (& TlastKr_chunks);
+	MPI_Datatype lastKr_chunks;
+	MPI_Type_vector (myKcols, 1, cprocs, MPI_DOUBLE, & lastKr_chunks );
+	MPI_Type_commit (& lastKr_chunks);
 
-	MPI_Datatype TlastKr_chunks_resized;
-	MPI_Type_create_resized (TlastKr_chunks, 0, 1*sizeof(double), & TlastKr_chunks_resized);
-	MPI_Type_commit (& TlastKr_chunks_resized);
+	MPI_Datatype lastKr_chunks_resized;
+	MPI_Type_create_resized (lastKr_chunks, 0, 1*sizeof(double), & lastKr_chunks_resized);
+	MPI_Type_commit (& lastKr_chunks_resized);
 
 
 	/*
@@ -122,15 +119,14 @@ test_output pviDGESV_WO_scalarization(int n, double** A, int m, double** bb, dou
 	 *  init inhibition table
 	 */
 	DGEZR(xx, n, m);															// init (zero) solution vectors
-	pDGEIT_WX(A, Tlocal, TlastK, n, comm, rank, cprocs, map, global, local);	// init inhibition table
-	//pDGEIT_W_async(A, Tlocal, TlastK, n, comm, rank, cprocs, map, global, local);// init inhibition table
-    //MPI_Ibcast (&TlastK[0][0], n, MPI_DOUBLE, map[n-1], comm, &mpi_request);	// broadcast of the last col of T (K part)
+	pDGEIT_WX(A, Xlocal, Klocal, lastK, n, comm, rank, cprocs, map, global, local);	// init inhibition table
     MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm);							// send all r.h.s to all procs
+
 
 	/*
 	 *  calc inhibition sequence
 	 */
-	wall_clock.core_start_time = time(NULL);
+	result.core_start_time = time(NULL);
 
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
@@ -142,11 +138,9 @@ test_output pviDGESV_WO_scalarization(int n, double** A, int m, double** bb, dou
 		mystart = local[l] + avoidif;
 		for (i=mystart; i<=local[n-1]; i++)
 		{
-			gi=global[i];
-			Tlocali=Tlocal[l][i];
 			for (rhs=0;rhs<m;rhs++)
 			{
-				xx[gi][rhs]=xx[gi][rhs]+Tlocali*bb[l][rhs];
+				xx[global[i]][rhs]=xx[global[i]][rhs]+Xlocal[l][i]*bb[l][rhs];
 			}
 		}
 
@@ -156,12 +150,11 @@ test_output pviDGESV_WO_scalarization(int n, double** A, int m, double** bb, dou
 		// update helpers
 		for (i=0; i<=l-1; i++)
 		{
-			TlastKri=TlastKr[i];
-			h[i]   = 1/(1-TlastKc[i]*TlastKri);
-			hh[i]  = TlastKc[i]*h[i];
+			h[i]   = 1/(1-lastKc[i]*lastKr[i]);
+			hh[i]  = lastKc[i]*h[i];
 			for (rhs=0;rhs<m;rhs++)
 			{
-				bb[i][rhs] = bb[i][rhs]-TlastKri*bb[l][rhs];
+				bb[i][rhs] = bb[i][rhs]-lastKr[i]*bb[l][rhs];
 			}
 		}
 
@@ -170,27 +163,21 @@ test_output pviDGESV_WO_scalarization(int n, double** A, int m, double** bb, dou
 		// to avoid IFs: each process loops on its own set of cols, with indirect addressing
 
 		//////// K
-		// n .. n+l-1
+		// 0 .. l-1
 		// ALL procs
-		mystart=local[n];
-		avoidif=(rank>map[n+l-1]);
-		myend=local[n+l-1]-avoidif;
+		mystart=local[0];
+		avoidif=(rank>map[l-1]);
+		myend=local[l-1]-avoidif;
 		for (i=0; i<=l-1; i++)
 		{
-			hi=h[i];
-			hhi=hh[i];
 			for (j=mystart; j<=myend; j++)
 			{
-				Tlocal[i][j]=Tlocal[i][j]*hi - Tlocal[l][j]*hhi;
+				Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
 			}
 		}
 
 		// collect chunks of last row of K to "future" last node
-		// option 1: non working
-		MPI_Igather (&Tlocal[l-1][local[n]], myKcols, MPI_DOUBLE, &TlastKr[0], 1, TlastKr_chunks_resized, map[l-1], comm, &mpi_request);
-
-		// option 2: use last column buffer for temporary copy of non-interleaved data
-		//MPI_Gather (&Tlocal[l-1][myKcols], myKcols, MPI_DOUBLE, &TlastKc[0], myKcols, MPI_DOUBLE, map[l-1], comm);
+		MPI_Igather (&Klocal[l-1][local[0]], myKcols, MPI_DOUBLE, &lastKr[0], 1, lastKr_chunks_resized, map[l-1], comm, &mpi_request);
 
 		//////// X
 		// 0 .. l-1
@@ -201,8 +188,7 @@ test_output pviDGESV_WO_scalarization(int n, double** A, int m, double** bb, dou
 		myend = local[l-1] - avoidif;
 		for (i=mystart; i<=myend; i++)
 		{
-			gi=global[i];
-			Tlocal[gi][i]=Tlocal[gi][i]*h[gi];
+			Xlocal[global[i]][i]=Xlocal[global[i]][i]*h[global[i]];
 		}
 
 		// l .. n-1
@@ -212,11 +198,9 @@ test_output pviDGESV_WO_scalarization(int n, double** A, int m, double** bb, dou
 		myend=local[n-1];
 		for (i=0; i<=l-1; i++)
 		{
-			hi=h[i];
-			hhi=hh[i];
 			for (j=mystart; j<=myend; j++)
 			{
-				Tlocal[i][j]=Tlocal[i][j]*hi - Tlocal[l][j]*hhi;
+				Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
 			}
 		}
 
@@ -226,10 +210,10 @@ test_output pviDGESV_WO_scalarization(int n, double** A, int m, double** bb, dou
 			// copy data into local buffer before broadcast
 
 			// option 1
-			li=local[n+l-1];
+
 			for (i=0; i<l-1; i++)
 			{
-				TlastKc[i]=Tlocal[i][li];
+				lastKc[i]=Klocal[i][local[l-1]];
 			}
 
 
@@ -251,23 +235,22 @@ test_output pviDGESV_WO_scalarization(int n, double** A, int m, double** bb, dou
 		// wait until gather completed
 		MPI_Wait(&mpi_request, &mpi_status);
 		//TODO: substitute Gather with an All-to-All
-		MPI_Ibcast (&TlastK[0][0], Tcols, MPI_DOUBLE, map[l-1], comm, &mpi_request);
+		MPI_Ibcast (&lastK[0][0], 2*n, MPI_DOUBLE, map[l-1], comm, &mpi_request);
 	}
 
 	// last level (l=0)
 	for (i=0; i<myxxrows; i++)
 	{
-		gi=global[i];
-		Tlocali=Tlocal[0][i];
 		for(rhs=0;rhs<m;rhs++)
 		{
-			xx[gi][rhs]=xx[gi][rhs]+Tlocali*bb[0][rhs];
+			xx[global[i]][rhs]=xx[global[i]][rhs]+Xlocal[0][i]*bb[0][rhs];
 		}
 	}
 
 	MPI_Wait(&mpi_request, &mpi_status);
 
-    wall_clock.core_end_time = time(NULL);
+    result.core_end_time = time(NULL);
+	result.exit_code = 0;
 
 	// collect solution
 	// MPI_IN_PLACE required for MPICH based versions
@@ -285,12 +268,13 @@ test_output pviDGESV_WO_scalarization(int n, double** A, int m, double** bb, dou
 	free(global);
 	free(map);
 
-	DeallocateMatrix2D(TlastK,2,CONTIGUOUS);
+	DeallocateMatrix2D(lastK,2,CONTIGUOUS);
 	DeallocateVector(h);
 	DeallocateVector(hh);
-	DeallocateMatrix2D(Tlocal,n,CONTIGUOUS);
+	DeallocateMatrix2D(Xlocal,n,CONTIGUOUS);
+	DeallocateMatrix2D(Klocal,n,CONTIGUOUS);
 
-	wall_clock.total_end_time = time(NULL);
+	result.total_end_time = time(NULL);
 
-	return wall_clock;
+	return result;
 }
