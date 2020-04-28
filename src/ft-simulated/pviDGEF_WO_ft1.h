@@ -18,9 +18,9 @@
  *
  */
 
-result_info pviDGEF_WO_ft1_sim(int n, double** A, double** K, MPI_Comm comm, int sprocs, int failing_rank, int failing_level)
+test_output pviDGEF_WO_ft1_sim(int n, double** A, double** K, MPI_Comm comm, int sprocs, int failing_rank, int failing_level)
 {
-	result_info wall_clock;
+	test_output wall_clock;
 
 	wall_clock.total_start_time = time(NULL);
 
