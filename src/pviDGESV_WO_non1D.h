@@ -1,8 +1,8 @@
 #include <mpi.h>
 #include <time.h>
-#include "helpers/info.h"
 #include "helpers/matrix.h"
 #include "helpers/vector.h"
+#include "testers/tester_structures.h"
 #include "DGEZR.h"
 #include "pDGEIT_WX_non1D.h"
 

@@ -1,10 +1,10 @@
 #include <unistd.h>
 #include <mpi.h>
 #include <time.h>
-#include "../helpers/info.h"
 #include "../helpers/matrix.h"
 #include "../helpers/vector.h"
 #include "../DGEZR.h"
+#include "../testers/tester_structures.h"
 #include "pDGEIT_WX_ft1.h"
 
 /*
