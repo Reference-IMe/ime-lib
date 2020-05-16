@@ -7,40 +7,40 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "types.h"
+//#include "types.h"
 
 #ifndef __VECTOR_H__
 #define __VECTOR_H__
 
-double* AllocateVector(cui rows)
+double* AllocateVector(int rows)
 {
 	return(malloc(rows*sizeof(double)));
 }
 
 void DeallocateVector(double* vec)
 {
-	free(vec);
+	NULLFREE(vec);
 }
 
-void PrintVector(double* const vec, cui rows)
+void PrintVector(double* const vec, int rows)
 {
-	ui r;
+	int r;
 	for(r=0;r<rows;r++)
 		printf("%.3g\n",vec[r]);
 	//printf("\n");
 }
 
-void PrintVectorINT(int* const vec, cui rows)
+void PrintVectorINT(int* const vec, int rows)
 {
-	ui r;
+	int r;
 	for(r=0;r<rows;r++)
 		printf("%d\n",vec[r]);
 	//printf("\n");
 }
 
-void FillVector(double* vec, cui rows, double val)
+void FillVector(double* vec, int rows, double val)
 {
-	ui r;
+	int r;
 	for(r=0;r<rows;r++)
 		vec[r]=val;
 }

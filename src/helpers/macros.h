@@ -11,6 +11,7 @@
 #define MAX(a, b) (((a) > (b)) ? (a) : (b)) 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b)) 
 
+#define NULLFREE(x) if (x!=NULL) {free(x); x = NULL;}
 /*
  * calc process run time from start/end time
  * get maximum run time as process team run time
