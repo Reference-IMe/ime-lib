@@ -1,4 +1,5 @@
 #include <mpi.h>
+#include "helpers/macros.h"
 
 /*
  * 	distributed
@@ -10,7 +11,7 @@
 #ifndef __pDGEIT_WX_1D_H__
 #define __pDGEIT_WX_1D_H__
 
-void pDGEIT_WX_1D(double** A, double** Xlocal, double** Klocal, double** lastK, int n, int bf, MPI_Comm comm, int rank, int cprocs, int* map, int* global, int* local)
+void pDGEIT_WX(double** A, double** Xlocal, double** Klocal, double** lastK, int n, int bf, MPI_Comm comm, int rank, int cprocs, int* map, int* global, int* local)
 {
 	int i,j;
 
@@ -116,6 +117,9 @@ void pDGEIT_WX_1D(double** A, double** Xlocal, double** Klocal, double** lastK, 
 	}
 
 	MPI_Bcast (&lastKc[0][0], n*bf, MPI_DOUBLE, map[n-1], comm);	// broadcast of the last cols of K
+
+	NULLFREE(lastKc);
+	NULLFREE(lastKr);
 
 }
 
