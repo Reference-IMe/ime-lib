@@ -1,9 +1,6 @@
 # ---> Eclipse
 
 .metadata
-bin/
-bin.copy/
-tmp/
 *.tmp
 *.bak
 *.swp
@@ -12,6 +9,10 @@ local.properties
 .settings/
 .loadpath
 .recommenders
+/.project
+/.ptp-sync/
+/.settings/
+**/.ptp-sync-folder
 
 # External tool builders
 .externalToolBuilders/
@@ -57,12 +58,18 @@ local.properties
 .scala_dependencies
 .worksheet
 
-/.project
-/.ptp-sync/
+
 **/*.o
 **/*.oo
 **/*.a
-**/.ptp-sync-folder
+**/*.x
+
+bin/
+bin.copy/
+tmp/
+
 **/.gitignore
+!/.gitignore
+
 /Default/
 /test.csv
