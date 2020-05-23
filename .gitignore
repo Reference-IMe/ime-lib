@@ -64,6 +64,8 @@ local.properties
 **/*.a
 **/*.x
 
+*.btr
+
 bin/
 bin.copy/
 tmp/
@@ -73,3 +75,5 @@ tmp/
 
 /Default/
 /test.csv
+/tests
+
