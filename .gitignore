@@ -67,7 +67,7 @@ local.properties
 *.btr
 
 bin/
-bin.copy/
+bin.*/
 tmp/
 
 **/.gitignore
