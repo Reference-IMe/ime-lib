@@ -30,6 +30,7 @@ test_output pviDGESV_WO(int nb, int n, double** A, int m, double** bb, double** 
 
 	test_output result;
 
+	//result.norm_rel_err = -1;
 	result.total_start_time = time(NULL);
 
     int rank, cprocs; //
@@ -306,7 +307,9 @@ test_output pviDGESV_WO(int nb, int n, double** A, int m, double** bb, double** 
 
 	MPI_Wait(&mpi_request, &mpi_status);
 
-    result.core_end_time = time(NULL);
+	result.core_end_time = time(NULL);
+
+	// TODO: add checking on exit code
 	result.exit_code = 0;
 
 	// collect solution
