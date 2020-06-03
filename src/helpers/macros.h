@@ -26,3 +26,9 @@
 														MPI_Barrier(MPI_COMM_WORLD);\
 											return team_info;
 #endif
+
+#define IS_MULT(a, b) ((a % b)==0)
+
+#define DISPLAY_MSG(routine_name, text) printf("     %s %s\n", routine_name, text);
+#define DISPLAY_ERR(routine_name, text) printf("ERR: %s %s\n", routine_name, text);
+#define DISPLAY_WRN(routine_name, text) printf("WRN: %s %s\n", routine_name, text);
