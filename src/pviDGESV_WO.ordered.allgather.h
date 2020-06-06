@@ -19,7 +19,7 @@
  *	ifs removed
  *
  */
-test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+test_output pviDGESV_WO_oa(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
 	/*
 	 * nb	blocking factor: number of adjacent column (block width)
@@ -246,8 +246,7 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 			current_last=nb-1; // reset counter for next block (to be sent/received)
 			{
 				// collect chunks of last row of K to "future" last node
-				MPI_Igather (&Klocal[l-nb][local[0]], nb*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, multiple_lastKr_chunks_resized, map[l-nb], comm, &mpi_request);
-				//MPI_Wait(&mpi_request, &mpi_status);
+				MPI_Iallgather (&Klocal[l-nb][local[0]], nb*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, multiple_lastKr_chunks_resized, comm, &mpi_request);
 
 				//future last node broadcasts last rows and cols of K
 				if (rank==map[l-nb])
@@ -265,7 +264,7 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 
 				// wait until gather completed before sending last rows and cols together
 				MPI_Wait(&mpi_request, &mpi_status);
-				MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
+				MPI_Ibcast (&lastKc[0][0], 1*n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
 			}
 		}
 
