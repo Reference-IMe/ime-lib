@@ -71,13 +71,11 @@ test_output pviDGESV_WO(int nb, int n, double** A, int m, double** bb, double** 
 				{
 					lastKc[i]=lastK[nb+i];					// alias for last col
 				}
-	// helper vectors
-/*
-    double* h;
-    		h=AllocateVector(n);
-    double* hh;
-			hh=AllocateVector(n);
-*/
+	// helper vectors (matrices indeed, one row for each level inside the block (of the blocking factor)
+	double** h_block;
+			 h_block=AllocateMatrix2D(nb,n,CONTIGUOUS);
+	double** hh_block;
+			 hh_block=AllocateMatrix2D(nb,n,CONTIGUOUS);
 	/*
 	 * map columns to process
 	 */
@@ -140,31 +138,7 @@ test_output pviDGESV_WO(int nb, int n, double** A, int m, double** bb, double** 
 	int myxxstart = myXcols-1; // beginning column position for updating the solution (begins from right)
 	int current_last=nb-1;	// index for the current last row or col of K in buffer
 
-	// MY last rows and cols of K
-	/*
-	double** my_lastK;
-			 my_lastK=AllocateMatrix2D(2*nb, n, CONTIGUOUS);	// last rows [0 - (bf-1)] and cols [ bf - (2bf -1)] of K
-	double** my_lastKr;
-				my_lastKr=malloc(nb*sizeof(double*));
-				for(i=0;i<nb;i++)
-				{
-					my_lastKr[i]=my_lastK[i];						// alias for last row
-				}
-	double** my_lastKc;
-				my_lastKc=malloc(nb*sizeof(double*));
-				for(i=0;i<nb;i++)
-				{
-					my_lastKc[i]=my_lastK[nb+i];					// alias for last col
-				}
-	*/
-	// helper vectors
-    double** my_h;
-    		my_h=AllocateMatrix2D(nb,n,CONTIGUOUS);
-    double** my_hh;
-    		my_hh=AllocateMatrix2D(nb,n,CONTIGUOUS);
-
-			int my_current_last;
-			int my_l;
+	int l_block;
 
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
@@ -194,37 +168,35 @@ test_output pviDGESV_WO(int nb, int n, double** A, int m, double** bb, double** 
 		MPI_Wait(&mpi_request, &mpi_status);
 		// TODO: check performance penalty by skipping MPI_wait with an 'if' for non due cases (inside the blocking factor)
 
-		// *** //
 		if (current_last==nb-1)
 		{
-			my_l=l;
-			for (my_current_last=current_last; my_current_last>=0; my_current_last--) // for every row in the block
+			l_block=l;
+			int cl;
+			for (cl=current_last; cl>=0; cl--) // for every row in the block
 			{
-				// calcola my_h
-				for (i=0; i<=my_l-1; i++)
+				// update helpers
+				for (i=0; i<=l_block-1; i++)
 				{
-					my_h[my_current_last][i]   = 1/(1-lastKc[my_current_last][i]*lastKr[my_current_last][i]);
-					my_hh[my_current_last][i]  = lastKc[my_current_last][i]*my_h[my_current_last][i];
+					h_block[cl][i]   = 1/(1-lastKc[cl][i]*lastKr[cl][i]);
+					hh_block[cl][i]  = lastKc[cl][i]*h_block[cl][i];
 				}
-				for (i=0;i<my_current_last;i++) // not executed for row 0
+				for (i=0;i<cl;i++) // not executed for row 0
 				{
-					for (j=0; j<=my_l-1; j++)
+					for (j=0; j<=l_block-1; j++)
 					{
-						lastKc[i][j]=lastKc[i][j]*my_h[my_current_last][j]                      - lastKr[my_current_last][my_l-my_current_last+i]*my_hh[my_current_last][j];
-						lastKr[i][j]=lastKr[i][j]*my_h[my_current_last][my_l-my_current_last+i] - lastKr[my_current_last][j]                     *my_hh[my_current_last][my_l-my_current_last+i];
+						lastKc[i][j]=lastKc[i][j]*h_block[cl][j]                      - lastKr[cl][l_block-cl+i]*hh_block[cl][j];
+						lastKr[i][j]=lastKr[i][j]*h_block[cl][l_block-cl+i] - lastKr[cl][j]                     *hh_block[cl][l_block-cl+i];
 					}
 				}
-				my_l--;
+				l_block--;
 			}
 		}
 
 		// ALL procs
-		// update helpers
+		// update solutions
 		#pragma omp parallel for private(i, rhs) schedule(guided)
 		for (i=0; i<=l-1; i++)
 		{
-			//h[i]   = 1/(1-lastKc[current_last][i]*lastKr[current_last][i]);
-			//hh[i]  = lastKc[current_last][i]*h[i];
 			for (rhs=0;rhs<m;rhs++)
 			{
 				bb[i][rhs] = bb[i][rhs]-lastKr[current_last][i]*bb[l][rhs];
@@ -271,7 +243,7 @@ test_output pviDGESV_WO(int nb, int n, double** A, int m, double** bb, double** 
 		{
 			for (j=0; j<=myKend; j++)
 			{
-				Klocal[i][j]=Klocal[i][j]*my_h[current_last][i] - Klocal[l][j]*my_hh[current_last][i];
+				Klocal[i][j]=Klocal[i][j]*h_block[current_last][i] - Klocal[l][j]*hh_block[current_last][i];
 			}
 		}
 
@@ -282,7 +254,7 @@ test_output pviDGESV_WO(int nb, int n, double** A, int m, double** bb, double** 
 		#pragma omp parallel for private(i) schedule(dynamic)
 		for (i=0; i<=myXmid; i++)
 		{
-			Xlocal[global[i]][i]=Xlocal[global[i]][i]*my_h[current_last][global[i]];
+			Xlocal[global[i]][i]=Xlocal[global[i]][i]*h_block[current_last][global[i]];
 		}
 
 		// ALL procs
@@ -293,7 +265,7 @@ test_output pviDGESV_WO(int nb, int n, double** A, int m, double** bb, double** 
 		{
 			for (j=myXmid+1; j<=myXcols-1; j++)
 			{
-				Xlocal[i][j]=Xlocal[i][j]*my_h[current_last][i] - Xlocal[l][j]*my_hh[current_last][i];
+				Xlocal[i][j]=Xlocal[i][j]*h_block[current_last][i] - Xlocal[l][j]*hh_block[current_last][i];
 			}
 		}
 
@@ -392,8 +364,8 @@ test_output pviDGESV_WO(int nb, int n, double** A, int m, double** bb, double** 
 	NULLFREE(map);
 
 	DeallocateMatrix2D(lastK,2*nb,CONTIGUOUS);
-	DeallocateMatrix2D(my_h,nb,CONTIGUOUS);
-	DeallocateMatrix2D(my_hh,nb,CONTIGUOUS);
+	DeallocateMatrix2D(h_block,nb,CONTIGUOUS);
+	DeallocateMatrix2D(hh_block,nb,CONTIGUOUS);
 	DeallocateMatrix2D(Xlocal,n,CONTIGUOUS);
 	DeallocateMatrix2D(Klocal,n,CONTIGUOUS);
 
