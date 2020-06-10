@@ -30,10 +30,9 @@ test_output pviDGESV_WO(int nb, int n, double** A, int m, double** bb, double** 
 
 	test_output result;
 
-	//result.norm_rel_err = -1;
 	result.total_start_time = time(NULL);
 
-    int rank, cprocs; //
+    int rank, cprocs;
     MPI_Comm_rank(comm, &rank);		// get current process id
     MPI_Comm_size(comm, &cprocs);	// get number of processes
 	MPI_Status  mpi_status;
@@ -133,18 +132,16 @@ test_output pviDGESV_WO(int nb, int n, double** A, int m, double** bb, double** 
 
 	// general bounds for the loops over the columns
 	// they differ on processes and change along the main loop over the levels
-	int myKend = myKcols-1;	// position of the last col of K
-	int myXmid = myXcols-1; // position of boundary between the left (simplified topological formula) and right (full formula) part of X
-	int myxxstart = myXcols-1; // beginning column position for updating the solution (begins from right)
-	int current_last=nb-1;	// index for the current last row or col of K in buffer
+	int myKend = myKcols-1;		// position of the last col of K
+	int myXmid = myXcols-1;		// position of boundary between the left (simplified topological formula) and right (full formula) part of X
+	int myxxstart = myXcols-1;	// beginning column position for updating the solution (begins from right)
+	int current_last=nb-1;		// index for the current last row or col of K in buffer
 
-	int l_block;
+	int l_block;				// inhibition level inside the block (of the blocking factor)
 
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
 	{
-
-
 		if (rank==map[l]) // if a process contains the last rows/cols, must skip it
 		{
 			myKend--;
@@ -155,7 +152,6 @@ test_output pviDGESV_WO(int nb, int n, double** A, int m, double** bb, double** 
 		// ALL procs
 		// update solutions
 		// l .. n-1
-		#pragma omp parallel for private(i, rhs) schedule(static)
 		for (i=myxxstart; i<=local[n-1]; i++)
 		{
 			for (rhs=0;rhs<m;rhs++)
@@ -180,6 +176,14 @@ test_output pviDGESV_WO(int nb, int n, double** A, int m, double** bb, double** 
 					h_block[cl][i]   = 1/(1-lastKc[cl][i]*lastKr[cl][i]);
 					hh_block[cl][i]  = lastKc[cl][i]*h_block[cl][i];
 				}
+				// update auxiliary quantities
+				for (i=0; i<=l_block-1; i++)
+				{
+					for (rhs=0;rhs<m;rhs++)
+					{
+						bb[i][rhs] = bb[i][rhs]-lastKr[cl][i]*bb[l_block][rhs];
+					}
+				}
 				for (i=0;i<cl;i++) // not executed for row 0
 				{
 					for (j=0; j<=l_block-1; j++)
@@ -192,75 +196,55 @@ test_output pviDGESV_WO(int nb, int n, double** A, int m, double** bb, double** 
 			}
 		}
 
-		// ALL procs
-		// update solutions
-		#pragma omp parallel for private(i, rhs) schedule(guided)
-		for (i=0; i<=l-1; i++)
+		//////// K
+		//// 0 .. l-1 (reversed)
+		// separating last nb rows (to be sent) from the remainder
+		if ( (l-nb) >= 0 ) // it's not the last block (=> gathering required)
 		{
-			for (rhs=0;rhs<m;rhs++)
+			// local last nb rows of K
+			for (i=l-1; i>=l-nb; i--)
 			{
-				bb[i][rhs] = bb[i][rhs]-lastKr[current_last][i]*bb[l][rhs];
+				for (j=0; j<=myKend; j++)
+				{
+					Klocal[i][j]=Klocal[i][j]*h_block[current_last][i] - Klocal[l][j]*hh_block[current_last][i];
+				}
+			}
+
+			// early gathering of last nb rows of K
+			if (current_last == 0) // if the block of nb rows has been completely scanned
+			{
+				MPI_Iallgather (&Klocal[l-nb][local[0]], nb*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, multiple_lastKr_chunks_resized, comm, &mpi_request);
+			}
+
+			// local remaining rows of K
+			for (i=l-nb-1; i>=0; i--) // not executed if the end (beginning) of the block coincide with the end (beginning) of the matrix
+			{
+				for (j=0; j<=myKend; j++)
+				{
+					Klocal[i][j]=Klocal[i][j]*h_block[current_last][i] - Klocal[l][j]*hh_block[current_last][i];
+				}
 			}
 		}
-
-		/*
-		if (rank==0)
+		else // it's the last block (=> gathering not required)
 		{
-			printf("level %d\n",l);
-			printf("h\n");
-			PrintVector(h,l);
-	    	fflush(stdout);
-		}
-	    for (i=0;i<cprocs;i++)
-	    {
-	    	MPI_Barrier(comm);
-	    	if (rank==i)
-	    	{
-	    	printf("rank %d\n",rank);
-	    	printf("lastKr\n");
-	    	PrintMatrix2D(lastKr,nb,n);
-	    	printf("lastKc\n");
-	    	PrintMatrix2D(lastKc,nb,n);
-	    	printf("K\n");
-	    	PrintMatrix2D(Klocal,n,myKcols);
-	    	printf("X\n");
-	    	PrintMatrix2D(Xlocal,n,myXcols);
-	    	printf("\n");
-	    	fflush(stdout);
-	    	}
-	    	MPI_Barrier(comm);
-	    }
-	   	*/
-
-		//////////////// update distributed inhibition table
-		// to avoid IFs: each process loops on its own set of cols, with indirect addressing
-
-		//////// K
-		// ALL procs
-		// 0 .. l-1
-		#pragma omp parallel for private(i, j) schedule(guided)
-		for (i=0; i<=l-1; i++)
-		{
-			for (j=0; j<=myKend; j++)
+			for (i=l-1; i>=0; i--)
 			{
-				Klocal[i][j]=Klocal[i][j]*h_block[current_last][i] - Klocal[l][j]*hh_block[current_last][i];
+				for (j=0; j<=myKend; j++)
+				{
+					Klocal[i][j]=Klocal[i][j]*h_block[current_last][i] - Klocal[l][j]*hh_block[current_last][i];
+				}
 			}
 		}
 
 		//////// X
-		// ALL procs
+		//// 0 .. l-1
 		// calc with diagonal elements not null (left part of X)
-		// 0 .. l-1
-		#pragma omp parallel for private(i) schedule(dynamic)
 		for (i=0; i<=myXmid; i++)
 		{
 			Xlocal[global[i]][i]=Xlocal[global[i]][i]*h_block[current_last][global[i]];
 		}
-
-		// ALL procs
+		//// l .. n-1
 		// calc with general elements (right part of X)
-		// l .. n-1
-		#pragma omp parallel for private(i, j) schedule(dynamic)
 		for (i=0; i<=l-1; i++)
 		{
 			for (j=myXmid+1; j<=myXcols-1; j++)
@@ -269,37 +253,30 @@ test_output pviDGESV_WO(int nb, int n, double** A, int m, double** bb, double** 
 			}
 		}
 
-		///////// update local copy of global last rows and cols of K
-		// ALL procs
-		if (current_last>0) // block of last rows (cols) not completely scanned
+		if (current_last == 0) // if the block of nb rows has been completely scanned
 		{
-			current_last--; // update counter to point to the "future" last row (col) in the block
-		}
-		else // block of last rows (cols) completely scanned
-		{
-			current_last=nb-1; // reset counter for next block (to be sent/received)
+			//future last node broadcasts last rows and cols of K
+			if (rank==map[l-nb])
 			{
-				// collect chunks of last row of K to "future" last node
-				MPI_Igather (&Klocal[l-nb][local[0]], nb*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, multiple_lastKr_chunks_resized, map[l-nb], comm, &mpi_request);
-
-				//future last node broadcasts last rows and cols of K
-				if (rank==map[l-nb])
+				// copy data into local buffer before broadcast
+				#pragma omp parallel for private(i, j) schedule(dynamic)
+				for(j=0;j<nb;j++)
 				{
-					// copy data into local buffer before broadcast
-					#pragma omp parallel for private(i, j) schedule(dynamic)
-					for(j=0;j<nb;j++)
+					for (i=0; i<=l-1; i++)
 					{
-						for (i=0; i<=l-1; i++)
-						{
-							lastKc[j][i]=Klocal[i][local[l-nb]+j];
-						}
+						lastKc[j][i]=Klocal[i][local[l-nb]+j];
 					}
 				}
-
-				// wait until gather completed before sending last rows and cols together
-				MPI_Wait(&mpi_request, &mpi_status);
-				MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
 			}
+			// wait until gather completed before sending last rows and cols together
+			MPI_Wait(&mpi_request, &mpi_status);
+			MPI_Ibcast (&lastKc[0][0], 2*n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
+
+			current_last=nb-1;
+		}
+		else // block of last rows (cols) not completely scanned
+		{
+			current_last--; // update counter to point to the "future" last row (col) in the block
 		}
 	}
 

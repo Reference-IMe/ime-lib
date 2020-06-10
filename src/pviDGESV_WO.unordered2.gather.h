@@ -30,7 +30,6 @@ test_output pviDGESV_WO_u2g(int nb, int n, double** A, int m, double** bb, doubl
 
 	test_output result;
 
-	//result.norm_rel_err = -1;
 	result.total_start_time = time(NULL);
 
     int rank, cprocs; //
@@ -149,10 +148,8 @@ test_output pviDGESV_WO_u2g(int nb, int n, double** A, int m, double** bb, doubl
 			myxxstart--;
 		}
 
-		// ALL procs
 		// update solutions
 		// l .. n-1
-		#pragma omp parallel for private(i, rhs) schedule(static)
 		for (i=myxxstart; i<=local[n-1]; i++)
 		{
 			for (rhs=0;rhs<m;rhs++)
@@ -165,9 +162,7 @@ test_output pviDGESV_WO_u2g(int nb, int n, double** A, int m, double** bb, doubl
 		MPI_Wait(&mpi_request, &mpi_status);
 		// TODO: check performance penalty by skipping MPI_wait with an 'if' for non due cases (inside the blocking factor)
 
-		// ALL procs
 		// update helpers
-		#pragma omp parallel for private(i, rhs) schedule(guided)
 		for (i=0; i<=l-1; i++)
 		{
 			h[i]   = 1/(1-lastKc[current_last][i]*lastKr[current_last][i]);
@@ -178,42 +173,8 @@ test_output pviDGESV_WO_u2g(int nb, int n, double** A, int m, double** bb, doubl
 			}
 		}
 
-		/*
-		if (rank==0)
-		{
-			printf("level %d\n",l);
-			printf("h\n");
-			PrintVector(h,l);
-	    	fflush(stdout);
-		}
-	    for (i=0;i<cprocs;i++)
-	    {
-	    	MPI_Barrier(comm);
-	    	if (rank==i)
-	    	{
-	    	printf("rank %d\n",rank);
-	    	printf("lastKr\n");
-	    	PrintMatrix2D(lastKr,nb,n);
-	    	printf("lastKc\n");
-	    	PrintMatrix2D(lastKc,nb,n);
-	    	printf("K\n");
-	    	PrintMatrix2D(Klocal,n,myKcols);
-	    	printf("X\n");
-	    	PrintMatrix2D(Xlocal,n,myXcols);
-	    	printf("\n");
-	    	fflush(stdout);
-	    	}
-	    	MPI_Barrier(comm);
-	    }
-	    */
-
-		//////////////// update distributed inhibition table
-		// to avoid IFs: each process loops on its own set of cols, with indirect addressing
-
 		//////// K
-		// ALL procs
-		// 0 .. l-1
-		#pragma omp parallel for private(i, j) schedule(guided)
+		//// 0 .. l-1
 		for (i=0; i<=l-1; i++)
 		{
 			for (j=0; j<=myKend; j++)
@@ -224,41 +185,29 @@ test_output pviDGESV_WO_u2g(int nb, int n, double** A, int m, double** bb, doubl
 
 		///////// update local copy of global last rows and cols of K
 		///////// and then calc X
-		// ALL procs
 		if (current_last>0) // block of last rows (cols) not completely scanned
 		{
 			// update local copy of global last rows and cols of K
 			for (i=0;i<current_last;i++)
 			{
-				#pragma omp parallel for private(j) schedule(guided)
 				for (j=0; j<=l-1; j++)
 				{
 					lastKc[i][j]=lastKc[i][j]*h[j]   - lastKr[current_last][l-current_last+i]*hh[j];
-				//}
-				//#pragma omp parallel for private(j) schedule(guided)
-				//for (j=0; j<=l-1; j++)
-				//{
 					lastKr[i][j]=lastKr[i][j]*h[l-current_last+i] - lastKr[current_last][j]*hh[l-current_last+i];
 				}
 			}
 			current_last--; // update counter to point to the "future" last row (col) in the block
 
-			// calc X
-
 			//////// X
-			// ALL procs
+			//// 0 .. l-1
 			// calc with diagonal elements not null (left part of X)
-			// 0 .. l-1
-			#pragma omp parallel for private(i) schedule(dynamic)
 			for (i=0; i<=myXmid; i++)
 			{
 				Xlocal[global[i]][i]=Xlocal[global[i]][i]*h[global[i]];
 			}
 
-			// ALL procs
+			//// l .. n-1
 			// calc with general elements (right part of X)
-			// l .. n-1
-			#pragma omp parallel for private(i, j) schedule(dynamic)
 			for (i=0; i<=l-1; i++)
 			{
 				for (j=myXmid+1; j<=myXcols-1; j++)
@@ -279,7 +228,6 @@ test_output pviDGESV_WO_u2g(int nb, int n, double** A, int m, double** bb, doubl
 				if (rank==map[l-nb])
 				{
 					// copy data into local buffer before broadcast
-					#pragma omp parallel for private(i, j) schedule(dynamic)
 					for(j=0;j<nb;j++)
 					{
 						for (i=0; i<=l-1; i++)
@@ -291,10 +239,8 @@ test_output pviDGESV_WO_u2g(int nb, int n, double** A, int m, double** bb, doubl
 
 				// but still calc X
 
-				// ALL procs
+				//// l .. n-1
 				// calc with general elements (right part of X)
-				// l .. n-1
-				#pragma omp parallel for private(i, j) schedule(dynamic)
 				for (i=0; i<=l-1; i++)
 				{
 					for (j=myXmid+1; j<=myXcols-1; j++)
@@ -303,21 +249,17 @@ test_output pviDGESV_WO_u2g(int nb, int n, double** A, int m, double** bb, doubl
 					}
 				}
 
+				// wait until gather completed before sending last rows and cols together
+				if (rank==map[l-nb]) MPI_Wait(&mpi_request, &mpi_status);
+				MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
+
 				//////// X
-				// ALL procs
+				//// 0 .. l-1
 				// calc with diagonal elements not null (left part of X)
-				// 0 .. l-1
-				#pragma omp parallel for private(i) schedule(dynamic)
 				for (i=0; i<=myXmid; i++)
 				{
 					Xlocal[global[i]][i]=Xlocal[global[i]][i]*h[global[i]];
 				}
-
-				// variant 1: wait+broadcast in between
-				// variant 2: wait+broadcast at the end
-				// wait until gather completed before sending last rows and cols together
-				if (rank==map[l-nb]) MPI_Wait(&mpi_request, &mpi_status);
-				MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
 			}
 		}
 
@@ -326,7 +268,6 @@ test_output pviDGESV_WO_u2g(int nb, int n, double** A, int m, double** bb, doubl
 	}
 
 	// last level (l=0)
-	#pragma omp parallel for private(i, rhs) schedule(dynamic)
 	for (i=0; i<myxxrows; i++)
 	{
 		for(rhs=0;rhs<m;rhs++)

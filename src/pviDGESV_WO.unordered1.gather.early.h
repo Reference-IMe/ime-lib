@@ -19,7 +19,7 @@
  *	ifs removed
  *
  */
-test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+test_output pviDGESV_WO_u1ge(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
 	/*
 	 * nb	blocking factor: number of adjacent column (block width)
@@ -32,7 +32,7 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 
 	result.total_start_time = time(NULL);
 
-    int rank, cprocs; //
+    int rank, cprocs;
     MPI_Comm_rank(comm, &rank);		// get current process id
     MPI_Comm_size(comm, &cprocs);	// get number of processes
 	MPI_Status  mpi_status;
@@ -70,12 +70,11 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 				{
 					lastKc[i]=lastK[nb+i];					// alias for last col
 				}
-	// helper vectors
-    double* h;
-    		h=AllocateVector(n);
-    double* hh;
-			hh=AllocateVector(n);
-
+	// helper vectors (matrices indeed, one row for each level inside the block (of the blocking factor)
+	double** h_block;
+			 h_block=AllocateMatrix2D(nb,n,CONTIGUOUS);
+	double** hh_block;
+			 hh_block=AllocateMatrix2D(nb,n,CONTIGUOUS);
 	/*
 	 * map columns to process
 	 */
@@ -133,10 +132,12 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 
 	// general bounds for the loops over the columns
 	// they differ on processes and change along the main loop over the levels
-	int myKend = myKcols-1;	// position of the last col of K
-	int myXmid = myXcols-1; // position of boundary between the left (simplified topological formula) and right (full formula) part of X
-	int myxxstart = myXcols-1; // beginning column position for updating the solution (begins from right)
-	int current_last=nb-1;	// index for the current last row or col of K in buffer
+	int myKend = myKcols-1;		// position of the last col of K
+	int myXmid = myXcols-1;		// position of boundary between the left (simplified topological formula) and right (full formula) part of X
+	int myxxstart = myXcols-1;	// beginning column position for updating the solution (begins from right)
+	int current_last=nb-1;		// index for the current last row or col of K in buffer
+
+	int l_block;				// inhibition level inside the block (of the blocking factor)
 
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
@@ -162,65 +163,75 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 		MPI_Wait(&mpi_request, &mpi_status);
 		// TODO: check performance penalty by skipping MPI_wait with an 'if' for non due cases (inside the blocking factor)
 
-		// update helpers
-		for (i=0; i<=l-1; i++)
+		if (current_last==nb-1)
 		{
-			h[i]   = 1/(1-lastKc[current_last][i]*lastKr[current_last][i]);
-			hh[i]  = lastKc[current_last][i]*h[i];
-			for (rhs=0;rhs<m;rhs++)
+			l_block=l;
+			int cl;
+			for (cl=current_last; cl>=0; cl--) // for every row in the block
 			{
-				bb[i][rhs] = bb[i][rhs]-lastKr[current_last][i]*bb[l][rhs];
+				// update helpers
+				for (i=0; i<=l_block-1; i++)
+				{
+					h_block[cl][i]   = 1/(1-lastKc[cl][i]*lastKr[cl][i]);
+					hh_block[cl][i]  = lastKc[cl][i]*h_block[cl][i];
+				}
+				// update auxiliary quantities
+				for (i=0; i<=l_block-1; i++)
+				{
+					for (rhs=0;rhs<m;rhs++)
+					{
+						bb[i][rhs] = bb[i][rhs]-lastKr[cl][i]*bb[l_block][rhs];
+					}
+				}
+				for (i=0;i<cl;i++) // not executed for row 0
+				{
+					for (j=0; j<=l_block-1; j++)
+					{
+						lastKc[i][j]=lastKc[i][j]*h_block[cl][j]                      - lastKr[cl][l_block-cl+i]*hh_block[cl][j];
+						lastKr[i][j]=lastKr[i][j]*h_block[cl][l_block-cl+i] - lastKr[cl][j]                     *hh_block[cl][l_block-cl+i];
+					}
+				}
+				l_block--;
 			}
 		}
 
 		//////// K
-		// 0 .. l-1
-		for (i=0; i<=l-1; i++)
+		//// 0 .. l-1 (reversed)
+		// separating last nb rows (to be sent) from the remainder
+		if ( (l-nb) >= 0 ) // it's not the last block (=> gathering required)
 		{
-			for (j=0; j<=myKend; j++)
+			// local last nb rows of K
+			for (i=l-1; i>=l-nb; i--)
 			{
-				Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
-			}
-		}
-
-		///////// update local copy of global last rows and cols of K
-		if (current_last>0) // block of last rows (cols) not completely scanned
-		{
-			for (i=0;i<current_last;i++)
-			{
-				#pragma omp parallel for private(j) schedule(guided)
-				for (j=0; j<=l-1; j++)
+				for (j=0; j<=myKend; j++)
 				{
-					lastKc[i][j]=lastKc[i][j]*h[j]   - lastKr[current_last][l-current_last+i]*hh[j];
-					lastKr[i][j]=lastKr[i][j]*h[l-current_last+i] - lastKr[current_last][j]*hh[l-current_last+i];
+					Klocal[i][j]=Klocal[i][j]*h_block[current_last][i] - Klocal[l][j]*hh_block[current_last][i];
 				}
 			}
-			current_last--; // update counter to point to the "future" last row (col) in the block
-		}
-		else // block of last rows (cols) completely scanned
-		{
-			current_last=nb-1; // reset counter for next block (to be sent/received)
+
+			// early gathering of last nb rows of K
+			if (current_last == 0) // if the block of nb rows has been completely scanned
 			{
-				// collect chunks of last row of K to "future" last node
 				MPI_Igather (&Klocal[l-nb][local[0]], nb*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, multiple_lastKr_chunks_resized, map[l-nb], comm, &mpi_request);
+			}
 
-				//future last node broadcasts last rows and cols of K
-				if (rank==map[l-nb])
+			// local remaining rows of K
+			for (i=l-nb-1; i>=0; i--) // not executed if the end (beginning) of the block coincide with the end (beginning) of the matrix
+			{
+				for (j=0; j<=myKend; j++)
 				{
-					// copy data into local buffer before broadcast
-					#pragma omp parallel for private(i, j) schedule(dynamic)
-					for(j=0;j<nb;j++)
-					{
-						for (i=0; i<=l-1; i++)
-						{
-							lastKc[j][i]=Klocal[i][local[l-nb]+j];
-						}
-					}
+					Klocal[i][j]=Klocal[i][j]*h_block[current_last][i] - Klocal[l][j]*hh_block[current_last][i];
 				}
-
-				// wait until gather completed before sending last rows and cols together
-				MPI_Wait(&mpi_request, &mpi_status);
-				MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
+			}
+		}
+		else // it's the last block (=> gathering not required)
+		{
+			for (i=l-1; i>=0; i--)
+			{
+				for (j=0; j<=myKend; j++)
+				{
+					Klocal[i][j]=Klocal[i][j]*h_block[current_last][i] - Klocal[l][j]*hh_block[current_last][i];
+				}
 			}
 		}
 
@@ -229,17 +240,41 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 		// calc with diagonal elements not null (left part of X)
 		for (i=0; i<=myXmid; i++)
 		{
-			Xlocal[global[i]][i]=Xlocal[global[i]][i]*h[global[i]];
+			Xlocal[global[i]][i]=Xlocal[global[i]][i]*h_block[current_last][global[i]];
 		}
-
-		// l .. n-1
+		//// l .. n-1
 		// calc with general elements (right part of X)
 		for (i=0; i<=l-1; i++)
 		{
 			for (j=myXmid+1; j<=myXcols-1; j++)
 			{
-				Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
+				Xlocal[i][j]=Xlocal[i][j]*h_block[current_last][i] - Xlocal[l][j]*hh_block[current_last][i];
 			}
+		}
+
+		if (current_last == 0) // if the block of nb rows has been completely scanned
+		{
+			//future last node broadcasts last rows and cols of K
+			if (rank==map[l-nb])
+			{
+				// copy data into local buffer before broadcast
+				for(j=0;j<nb;j++)
+				{
+					for (i=0; i<=l-1; i++)
+					{
+						lastKc[j][i]=Klocal[i][local[l-nb]+j];
+					}
+				}
+			}
+			// wait until gather completed before sending last rows and cols together
+			MPI_Wait(&mpi_request, &mpi_status);
+			MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
+
+			current_last=nb-1;
+		}
+		else // block of last rows (cols) not completely scanned
+		{
+			current_last--; // update counter to point to the "future" last row (col) in the block
 		}
 	}
 
@@ -302,9 +337,9 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 	NULLFREE(global);
 	NULLFREE(map);
 
-	DeallocateMatrix2D(lastK,2,CONTIGUOUS);
-	DeallocateVector(h);
-	DeallocateVector(hh);
+	DeallocateMatrix2D(lastK,2*nb,CONTIGUOUS);
+	DeallocateMatrix2D(h_block,nb,CONTIGUOUS);
+	DeallocateMatrix2D(hh_block,nb,CONTIGUOUS);
 	DeallocateMatrix2D(Xlocal,n,CONTIGUOUS);
 	DeallocateMatrix2D(Klocal,n,CONTIGUOUS);
 
