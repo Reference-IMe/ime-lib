@@ -19,7 +19,7 @@
  *	ifs removed
  *
  */
-test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+test_output pviDGESV_WO_u3a(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
 	/*
 	 * nb	blocking factor: number of adjacent column (block width)
@@ -32,7 +32,7 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 
 	result.total_start_time = time(NULL);
 
-    int rank, cprocs; //
+    int rank, cprocs;
     MPI_Comm_rank(comm, &rank);		// get current process id
     MPI_Comm_size(comm, &cprocs);	// get number of processes
 	MPI_Status  mpi_status;
@@ -174,7 +174,7 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 		}
 
 		//////// K
-		// 0 .. l-1
+		//// 0 .. l-1
 		for (i=0; i<=l-1; i++)
 		{
 			for (j=0; j<=myKend; j++)
@@ -184,11 +184,12 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 		}
 
 		///////// update local copy of global last rows and cols of K
+		///////// and then calc X
 		if (current_last>0) // block of last rows (cols) not completely scanned
 		{
+			// update local copy of global last rows and cols of K
 			for (i=0;i<current_last;i++)
 			{
-				#pragma omp parallel for private(j) schedule(guided)
 				for (j=0; j<=l-1; j++)
 				{
 					lastKc[i][j]=lastKc[i][j]*h[j]   - lastKr[current_last][l-current_last+i]*hh[j];
@@ -196,19 +197,37 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 				}
 			}
 			current_last--; // update counter to point to the "future" last row (col) in the block
+
+			//////// X
+			//// 0 .. l-1
+			// calc with diagonal elements not null (left part of X)
+			for (i=0; i<=myXmid; i++)
+			{
+				Xlocal[global[i]][i]=Xlocal[global[i]][i]*h[global[i]];
+			}
+
+			//// l .. n-1
+			// calc with general elements (right part of X)
+			for (i=0; i<=l-1; i++)
+			{
+				for (j=myXmid+1; j<=myXcols-1; j++)
+				{
+					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
+				}
+			}
 		}
 		else // block of last rows (cols) completely scanned
 		{
+			// do NOT update local copy of global last rows and cols of K
 			current_last=nb-1; // reset counter for next block (to be sent/received)
 			{
 				// collect chunks of last row of K to "future" last node
-				MPI_Igather (&Klocal[l-nb][local[0]], nb*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, multiple_lastKr_chunks_resized, map[l-nb], comm, &mpi_request);
+				MPI_Iallgather (&Klocal[l-nb][local[0]], nb*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, multiple_lastKr_chunks_resized, comm, &mpi_request);
 
 				//future last node broadcasts last rows and cols of K
 				if (rank==map[l-nb])
 				{
 					// copy data into local buffer before broadcast
-					#pragma omp parallel for private(i, j) schedule(dynamic)
 					for(j=0;j<nb;j++)
 					{
 						for (i=0; i<=l-1; i++)
@@ -218,29 +237,34 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 					}
 				}
 
+				// but still calc X
+
+				//// l .. n-1
+				// calc with general elements (right part of X)
+				for (i=0; i<=l-1; i++)
+				{
+					for (j=myXmid+1; j<=myXcols-1; j++)
+					{
+						Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
+					}
+				}
+
 				// wait until gather completed before sending last rows and cols together
 				MPI_Wait(&mpi_request, &mpi_status);
-				MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
+				MPI_Ibcast (&lastKc[0][0], 1*n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
+
+				//////// X
+				//// 0 .. l-1
+				// calc with diagonal elements not null (left part of X)
+				for (i=0; i<=myXmid; i++)
+				{
+					Xlocal[global[i]][i]=Xlocal[global[i]][i]*h[global[i]];
+				}
 			}
 		}
 
-		//////// X
-		//// 0 .. l-1
-		// calc with diagonal elements not null (left part of X)
-		for (i=0; i<=myXmid; i++)
-		{
-			Xlocal[global[i]][i]=Xlocal[global[i]][i]*h[global[i]];
-		}
+		// calculation of X removed from here and duplicated into the two branches in the IF above
 
-		// l .. n-1
-		// calc with general elements (right part of X)
-		for (i=0; i<=l-1; i++)
-		{
-			for (j=myXmid+1; j<=myXcols-1; j++)
-			{
-				Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
-			}
-		}
 	}
 
 	// last level (l=0)

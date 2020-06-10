@@ -19,7 +19,7 @@
  *	ifs removed
  *
  */
-test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+test_output pviDGESV_WO_u3g(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
 	/*
 	 * nb	blocking factor: number of adjacent column (block width)
@@ -174,7 +174,8 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 		}
 
 		//////// K
-		// 0 .. l-1
+		//// 0 .. l-1
+		#pragma omp parallel for private(i, j) schedule(guided)
 		for (i=0; i<=l-1; i++)
 		{
 			for (j=0; j<=myKend; j++)
@@ -184,8 +185,10 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 		}
 
 		///////// update local copy of global last rows and cols of K
+		///////// and then calc X
 		if (current_last>0) // block of last rows (cols) not completely scanned
 		{
+			// update local copy of global last rows and cols of K
 			for (i=0;i<current_last;i++)
 			{
 				#pragma omp parallel for private(j) schedule(guided)
@@ -196,9 +199,28 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 				}
 			}
 			current_last--; // update counter to point to the "future" last row (col) in the block
+
+			//////// X
+			//// 0 .. l-1
+			// calc with diagonal elements not null (left part of X)
+			for (i=0; i<=myXmid; i++)
+			{
+				Xlocal[global[i]][i]=Xlocal[global[i]][i]*h[global[i]];
+			}
+
+			//// l .. n-1
+			// calc with general elements (right part of X)
+			for (i=0; i<=l-1; i++)
+			{
+				for (j=myXmid+1; j<=myXcols-1; j++)
+				{
+					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
+				}
+			}
 		}
 		else // block of last rows (cols) completely scanned
 		{
+			// do NOT update local copy of global last rows and cols of K
 			current_last=nb-1; // reset counter for next block (to be sent/received)
 			{
 				// collect chunks of last row of K to "future" last node
@@ -208,7 +230,6 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 				if (rank==map[l-nb])
 				{
 					// copy data into local buffer before broadcast
-					#pragma omp parallel for private(i, j) schedule(dynamic)
 					for(j=0;j<nb;j++)
 					{
 						for (i=0; i<=l-1; i++)
@@ -218,29 +239,34 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 					}
 				}
 
+				// but still calc X
+
+				//// l .. n-1
+				// calc with general elements (right part of X)
+				for (i=0; i<=l-1; i++)
+				{
+					for (j=myXmid+1; j<=myXcols-1; j++)
+					{
+						Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
+					}
+				}
+
 				// wait until gather completed before sending last rows and cols together
-				MPI_Wait(&mpi_request, &mpi_status);
+				if (rank==map[l-nb]) MPI_Wait(&mpi_request, &mpi_status);
 				MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
+
+				//////// X
+				// 0 .. l-1
+				// calc with diagonal elements not null (left part of X)
+				for (i=0; i<=myXmid; i++)
+				{
+					Xlocal[global[i]][i]=Xlocal[global[i]][i]*h[global[i]];
+				}
 			}
 		}
 
-		//////// X
-		//// 0 .. l-1
-		// calc with diagonal elements not null (left part of X)
-		for (i=0; i<=myXmid; i++)
-		{
-			Xlocal[global[i]][i]=Xlocal[global[i]][i]*h[global[i]];
-		}
+		// calculation of X removed from here and duplicated into the two branches in the IF above
 
-		// l .. n-1
-		// calc with general elements (right part of X)
-		for (i=0; i<=l-1; i++)
-		{
-			for (j=myXmid+1; j<=myXcols-1; j++)
-			{
-				Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
-			}
-		}
 	}
 
 	// last level (l=0)
