@@ -363,6 +363,9 @@ test_output pviDGESV_WO_u2ge(int nb, int n, double** A, int m, double** bb, doub
 	DeallocateMatrix2D(Xlocal,n,CONTIGUOUS);
 	DeallocateMatrix2D(Klocal,n,CONTIGUOUS);
 
+	NULLFREE(lastKc);
+	NULLFREE(lastKr);
+
 	result.total_end_time = time(NULL);
 
 	return result;
