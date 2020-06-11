@@ -259,7 +259,7 @@ test_output pviDGESV_WO_u1a(int nb, int n, double** A, int m, double** bb, doubl
 
 				// wait until gather completed before sending last rows and cols together
 				MPI_Wait(&mpi_request, &mpi_status);
-				MPI_Ibcast (&lastKc[0][0], 1*n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
+				MPI_Ibcast (&lastKc[0][0], n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
 			}
 		}
 
@@ -332,6 +332,9 @@ test_output pviDGESV_WO_u1a(int nb, int n, double** A, int m, double** bb, doubl
 	DeallocateVector(hh);
 	DeallocateMatrix2D(Xlocal,n,CONTIGUOUS);
 	DeallocateMatrix2D(Klocal,n,CONTIGUOUS);
+
+	NULLFREE(lastKc);
+	NULLFREE(lastKr);
 
 	result.total_end_time = time(NULL);
 
