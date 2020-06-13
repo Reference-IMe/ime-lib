@@ -35,8 +35,10 @@ test_output pviDGESV_WO_u1ae(int nb, int n, double** A, int m, double** bb, doub
     int rank, cprocs;
     MPI_Comm_rank(comm, &rank);		// get current process id
     MPI_Comm_size(comm, &cprocs);	// get number of processes
-	MPI_Status  mpi_status;
-	MPI_Request mpi_request = MPI_REQUEST_NULL;
+	MPI_Status  mpi_status[2];
+	MPI_Request mpi_request[2];
+				mpi_request[0] = MPI_REQUEST_NULL; // req. for allgather
+				mpi_request[1] = MPI_REQUEST_NULL; // req. for broadcast
 
 	int i,j,l;						// general indexes
     int mycols   = n/cprocs;;		// num of cols per process
@@ -160,11 +162,12 @@ test_output pviDGESV_WO_u1ae(int nb, int n, double** A, int m, double** bb, doub
 		}
 
 		// wait for new last rows and cols before computing helpers
-		MPI_Wait(&mpi_request, &mpi_status);
-		// TODO: check performance penalty by skipping MPI_wait with an 'if' for non due cases (inside the blocking factor)
+		//MPI_Wait(&mpi_request, &mpi_status);
 
 		if (current_last==nb-1)
 		{
+			MPI_Waitall(2, mpi_request, mpi_status);
+
 			l_block=l;
 			int cl;
 			for (cl=current_last; cl>=0; cl--) // for every row in the block
@@ -212,7 +215,7 @@ test_output pviDGESV_WO_u1ae(int nb, int n, double** A, int m, double** bb, doub
 			// early gathering of last nb rows of K
 			if (current_last == 0) // if the block of nb rows has been completely scanned
 			{
-				MPI_Iallgather (&Klocal[l-nb][local[0]], nb*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, multiple_lastKr_chunks_resized, comm, &mpi_request);
+				MPI_Iallgather (&Klocal[l-nb][local[0]], nb*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, multiple_lastKr_chunks_resized, comm, &mpi_request[0]);
 			}
 
 			// local remaining rows of K
@@ -266,9 +269,9 @@ test_output pviDGESV_WO_u1ae(int nb, int n, double** A, int m, double** bb, doub
 					}
 				}
 			}
-			// wait until gather completed before sending last rows and cols together
-			MPI_Wait(&mpi_request, &mpi_status);
-			MPI_Ibcast (&lastKc[0][0], n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
+			// do not wait for allgather: last rows are already broadcasted
+			//MPI_Wait(&mpi_request, &mpi_status);
+			MPI_Ibcast (&lastKc[0][0], n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request[1]);
 
 			current_last=nb-1;
 		}
@@ -287,7 +290,7 @@ test_output pviDGESV_WO_u1ae(int nb, int n, double** A, int m, double** bb, doub
 		}
 	}
 
-	MPI_Wait(&mpi_request, &mpi_status);
+	//MPI_Wait(&mpi_request, &mpi_status);
 
 	result.core_end_time = time(NULL);
 
