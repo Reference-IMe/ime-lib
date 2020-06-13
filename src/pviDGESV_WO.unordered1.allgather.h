@@ -203,7 +203,6 @@ test_output pviDGESV_WO_u1a(int nb, int n, double** A, int m, double** bb, doubl
 			//////// X
 			// 0 .. l-1
 			// calc with diagonal elements not null (left part of X)
-			#pragma omp parallel for private(i) schedule(dynamic)
 			for (i=0; i<=myXmid; i++)
 			{
 				Xlocal[global[i]][i]=Xlocal[global[i]][i]*h[global[i]];

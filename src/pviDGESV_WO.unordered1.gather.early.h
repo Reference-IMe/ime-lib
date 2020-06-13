@@ -160,11 +160,12 @@ test_output pviDGESV_WO_u1ge(int nb, int n, double** A, int m, double** bb, doub
 		}
 
 		// wait for new last rows and cols before computing helpers
-		MPI_Wait(&mpi_request, &mpi_status);
-		// TODO: check performance penalty by skipping MPI_wait with an 'if' for non due cases (inside the blocking factor)
+		//MPI_Wait(&mpi_request, &mpi_status);
 
 		if (current_last==nb-1)
 		{
+			MPI_Wait(&mpi_request, &mpi_status);
+
 			l_block=l;
 			int cl;
 			for (cl=current_last; cl>=0; cl--) // for every row in the block
@@ -265,10 +266,12 @@ test_output pviDGESV_WO_u1ge(int nb, int n, double** A, int m, double** bb, doub
 						lastKc[j][i]=Klocal[i][local[l-nb]+j];
 					}
 				}
+				// wait for gathering to complete
+				MPI_Wait(&mpi_request, &mpi_status);
 			}
-			// wait until gather completed before sending last rows and cols together
-			MPI_Wait(&mpi_request, &mpi_status);
-			MPI_Ibcast (&lastKc[0][0], n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
+			// do not wait all for gather: only who has to broadcast
+			//MPI_Wait(&mpi_request, &mpi_status);
+			MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
 
 			current_last=nb-1;
 		}
@@ -287,7 +290,7 @@ test_output pviDGESV_WO_u1ge(int nb, int n, double** A, int m, double** bb, doub
 		}
 	}
 
-	MPI_Wait(&mpi_request, &mpi_status);
+	//MPI_Wait(&mpi_request, &mpi_status);
 
 	result.core_end_time = time(NULL);
 
