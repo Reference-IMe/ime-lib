@@ -259,7 +259,6 @@ test_output pviDGESV_WO(int nb, int n, double** A, int m, double** bb, double** 
 			if (rank==map[l-nb])
 			{
 				// copy data into local buffer before broadcast
-				#pragma omp parallel for private(i, j) schedule(dynamic)
 				for(j=0;j<nb;j++)
 				{
 					for (i=0; i<=l-1; i++)
@@ -281,7 +280,6 @@ test_output pviDGESV_WO(int nb, int n, double** A, int m, double** bb, double** 
 	}
 
 	// last level (l=0)
-	#pragma omp parallel for private(i, rhs) schedule(dynamic)
 	for (i=0; i<myxxrows; i++)
 	{
 		for(rhs=0;rhs<m;rhs++)

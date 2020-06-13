@@ -159,8 +159,8 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 		}
 
 		// wait for new last rows and cols before computing helpers
-		MPI_Wait(&mpi_request, &mpi_status);
-		// TODO: check performance penalty by skipping MPI_wait with an 'if' for non due cases (inside the blocking factor)
+		if (current_last==nb-1) MPI_Wait(&mpi_request, &mpi_status);
+		// TODO: check performance penalty by skipping MPI_wait with an 'if' for non due cases (inside the blocking factor) or not
 
 		// update helpers
 		for (i=0; i<=l-1; i++)
@@ -188,7 +188,6 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 		{
 			for (i=0;i<current_last;i++)
 			{
-				#pragma omp parallel for private(j) schedule(guided)
 				for (j=0; j<=l-1; j++)
 				{
 					lastKc[i][j]=lastKc[i][j]*h[j]   - lastKr[current_last][l-current_last+i]*hh[j];
@@ -208,7 +207,6 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 				if (rank==map[l-nb])
 				{
 					// copy data into local buffer before broadcast
-					#pragma omp parallel for private(i, j) schedule(dynamic)
 					for(j=0;j<nb;j++)
 					{
 						for (i=0; i<=l-1; i++)
@@ -216,10 +214,11 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 							lastKc[j][i]=Klocal[i][local[l-nb]+j];
 						}
 					}
+					// wait for gathering to complete
+					MPI_Wait(&mpi_request, &mpi_status);
 				}
-
-				// wait until gather completed before sending last rows and cols together
-				MPI_Wait(&mpi_request, &mpi_status);
+				// do not wait all for gather: only who has to broadcast
+				//MPI_Wait(&mpi_request, &mpi_status);
 				MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
 			}
 		}
@@ -252,7 +251,7 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 		}
 	}
 
-	MPI_Wait(&mpi_request, &mpi_status);
+	//MPI_Wait(&mpi_request, &mpi_status);
 
 	result.core_end_time = time(NULL);
 
