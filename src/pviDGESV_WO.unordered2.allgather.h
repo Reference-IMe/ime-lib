@@ -35,8 +35,10 @@ test_output pviDGESV_WO_u2a(int nb, int n, double** A, int m, double** bb, doubl
     int rank, cprocs; //
     MPI_Comm_rank(comm, &rank);		// get current process id
     MPI_Comm_size(comm, &cprocs);	// get number of processes
-	MPI_Status  mpi_status;
-	MPI_Request mpi_request = MPI_REQUEST_NULL;
+	MPI_Status  mpi_status[2];
+	MPI_Request mpi_request[2];
+				mpi_request[0] = MPI_REQUEST_NULL; // req. for allgather
+				mpi_request[1] = MPI_REQUEST_NULL; // req. for broadcast
 
 	int i,j,l;						// general indexes
     int mycols   = n/cprocs;;		// num of cols per process
@@ -159,8 +161,8 @@ test_output pviDGESV_WO_u2a(int nb, int n, double** A, int m, double** bb, doubl
 		}
 
 		// wait for new last rows and cols before computing helpers
-		MPI_Wait(&mpi_request, &mpi_status);
-		// TODO: check performance penalty by skipping MPI_wait with an 'if' for non due cases (inside the blocking factor)
+		if (current_last==nb-1) MPI_Waitall(2, mpi_request, mpi_status);
+		// TODO: check performance penalty by skipping MPI_wait with an 'if' for non due cases (inside the blocking factor) or not
 
 		// update helpers
 		for (i=0; i<=l-1; i++)
@@ -222,7 +224,7 @@ test_output pviDGESV_WO_u2a(int nb, int n, double** A, int m, double** bb, doubl
 			current_last=nb-1; // reset counter for next block (to be sent/received)
 			{
 				// collect chunks of last row of K to "future" last node
-				MPI_Iallgather (&Klocal[l-nb][local[0]], nb*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, multiple_lastKr_chunks_resized, comm, &mpi_request);
+				MPI_Iallgather (&Klocal[l-nb][local[0]], nb*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, multiple_lastKr_chunks_resized, comm, &mpi_request[0]);
 
 				//future last node broadcasts last rows and cols of K
 				if (rank==map[l-nb])
@@ -249,9 +251,9 @@ test_output pviDGESV_WO_u2a(int nb, int n, double** A, int m, double** bb, doubl
 					}
 				}
 
-				// wait until gather completed before sending last rows and cols together
-				MPI_Wait(&mpi_request, &mpi_status);
-				MPI_Ibcast (&lastKc[0][0], n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
+				// do not wait for allgather: last rows are already broadcasted
+				//MPI_Wait(&mpi_request, &mpi_status);
+				MPI_Ibcast (&lastKc[0][0], n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request[1]);
 
 				//////// X
 				//// 0 .. l-1
@@ -276,7 +278,7 @@ test_output pviDGESV_WO_u2a(int nb, int n, double** A, int m, double** bb, doubl
 		}
 	}
 
-	MPI_Wait(&mpi_request, &mpi_status);
+	//MPI_Wait(&mpi_request, &mpi_status);
 
 	result.core_end_time = time(NULL);
 
