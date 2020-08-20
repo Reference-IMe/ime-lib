@@ -215,10 +215,10 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 						}
 					}
 					// wait for gathering to complete
-					MPI_Wait(&mpi_request, &mpi_status);
+					//MPI_Wait(&mpi_request, &mpi_status);
 				}
 				// do not wait all for gather: only who has to broadcast
-				//MPI_Wait(&mpi_request, &mpi_status);
+				MPI_Wait(&mpi_request, &mpi_status);
 				MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
 			}
 		}
@@ -296,19 +296,20 @@ test_output pviDGESV_WO_og(int nb, int n, double** A, int m, double** bb, double
 	}
 	*/
 
+	MPI_Barrier(MPI_COMM_WORLD);
+
 	// cleanup
 	NULLFREE(local);
 	NULLFREE(global);
 	NULLFREE(map);
+	NULLFREE(lastKc);
+	NULLFREE(lastKr);
 
-	DeallocateMatrix2D(lastK,2,CONTIGUOUS);
+	DeallocateMatrix2D(lastK,2*nb,CONTIGUOUS);
 	DeallocateVector(h);
 	DeallocateVector(hh);
 	DeallocateMatrix2D(Xlocal,n,CONTIGUOUS);
 	DeallocateMatrix2D(Klocal,n,CONTIGUOUS);
-
-	NULLFREE(lastKc);
-	NULLFREE(lastKr);
 
 	result.total_end_time = time(NULL);
 

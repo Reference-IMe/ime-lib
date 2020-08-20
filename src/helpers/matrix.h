@@ -46,18 +46,20 @@ void DeallocateMatrix2D(double** mat, int rows, int allocation_type)
 {
 	int r;
 
-	if (allocation_type==NONCONTIGUOUS)
+	if (mat!=NULL)
 	{
-		for(r=0;r<rows;r++)
-			NULLFREE(mat[r]);
-		NULLFREE(mat);
+		if (allocation_type==NONCONTIGUOUS)
+		{
+			for(r=0;r<rows;r++)
+				NULLFREE(mat[r]);
+			NULLFREE(mat);
+		}
+		else
+		{
+			NULLFREE(mat[0]);
+			NULLFREE(mat);
+		}
 	}
-	else
-	{
-		NULLFREE(mat[0]);
-		NULLFREE(mat);
-	}
-
 }
 
 void PrintMatrix2D(double** const mat, int rows, int cols)

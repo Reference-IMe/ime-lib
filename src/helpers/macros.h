@@ -24,11 +24,24 @@
 														team_info.exit_code    = routine_info.exit_code;    \
 														team_info.norm_rel_err = process_info.norm_rel_err; \
 														MPI_Barrier(MPI_COMM_WORLD);\
-											return team_info;
-#endif
+														return team_info;
+
+#define MAIN_CLEANUP(mpi_rank)	if (mpi_rank==0)								\
+								{												\
+									if (output_to_file || input_from_file)		\
+									{											\
+										if (fp != NULL) fclose(fp);				\
+									}											\
+									DeallocateMatrix1D(A_ref);					\
+									DeallocateVector(b_ref);					\
+									DeallocateVector(x_ref);					\
+								}												\
+								sdsfree(test_output_file_name);
 
 #define IS_MULT(a, b) ((a % b)==0)
 
 #define DISPLAY_MSG(routine_name, text) printf("     %s %s\n", routine_name, text);
 #define DISPLAY_ERR(routine_name, text) printf("ERR: %s %s\n", routine_name, text);
 #define DISPLAY_WRN(routine_name, text) printf("WRN: %s %s\n", routine_name, text);
+
+#endif

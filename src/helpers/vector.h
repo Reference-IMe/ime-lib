@@ -14,7 +14,7 @@
 
 double* AllocateVector(int rows)
 {
-	return(malloc(rows*sizeof(double)));
+	return malloc(rows*sizeof(double));
 }
 
 void DeallocateVector(double* vec)
