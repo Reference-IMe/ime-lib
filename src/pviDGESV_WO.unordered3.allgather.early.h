@@ -355,6 +355,8 @@ test_output pviDGESV_WO_u3ae(int nb, int n, double** A, int m, double** bb, doub
 	}
 	*/
 
+	MPI_Barrier(MPI_COMM_WORLD);
+
 	// cleanup
 	NULLFREE(local);
 	NULLFREE(global);

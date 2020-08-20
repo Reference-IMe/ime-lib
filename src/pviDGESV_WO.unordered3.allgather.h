@@ -323,12 +323,14 @@ test_output pviDGESV_WO_u3a(int nb, int n, double** A, int m, double** bb, doubl
 	}
 	*/
 
+	MPI_Barrier(MPI_COMM_WORLD);
+
 	// cleanup
 	NULLFREE(local);
 	NULLFREE(global);
 	NULLFREE(map);
 
-	DeallocateMatrix2D(lastK,2,CONTIGUOUS);
+	DeallocateMatrix2D(lastK,2*nb,CONTIGUOUS);
 	DeallocateVector(h);
 	DeallocateVector(hh);
 	DeallocateMatrix2D(Xlocal,n,CONTIGUOUS);

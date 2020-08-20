@@ -39,10 +39,14 @@ test_output pviDGESV_WO_u2g(int nb, int n, double** A, int m, double** bb, doubl
 	MPI_Request mpi_request = MPI_REQUEST_NULL;
 
 	int i,j,l;						// general indexes
-    int mycols   = n/cprocs;;		// num of cols per process
-    int myxxrows = mycols;			// num of chunks for better code readability
-    int myKcols  = mycols;
-	int myXcols  = mycols;
+	int mycols;
+		mycols = (int)(n/cprocs);			// num of cols per process
+	int myxxrows;
+		myxxrows = mycols;			// num of chunks for better code readability
+	int myKcols;
+		myKcols = mycols;
+	int myXcols;
+		myXcols = mycols;
 
     int rhs;
 
@@ -321,6 +325,8 @@ test_output pviDGESV_WO_u2g(int nb, int n, double** A, int m, double** bb, doubl
 		fflush(stdout);
 	}
 	*/
+
+	MPI_Barrier(MPI_COMM_WORLD);
 
 	// cleanup
 	NULLFREE(local);

@@ -148,7 +148,7 @@ test_output pviDGESV_WO_oae(int nb, int n, double** A, int m, double** bb, doubl
 		{
 			myKend--;
 			myXmid--;
-			myxxstart--;
+			if (myxxstart>0) myxxstart--;
 		}
 
 		// update solutions
@@ -354,19 +354,20 @@ test_output pviDGESV_WO_oae(int nb, int n, double** A, int m, double** bb, doubl
 	}
 	*/
 
+	MPI_Barrier(MPI_COMM_WORLD);
+
 	// cleanup
 	NULLFREE(local);
 	NULLFREE(global);
 	NULLFREE(map);
+	NULLFREE(lastKc);
+	NULLFREE(lastKr);
 
 	DeallocateMatrix2D(lastK,2*nb,CONTIGUOUS);
 	DeallocateMatrix2D(h_block,nb,CONTIGUOUS);
 	DeallocateMatrix2D(hh_block,nb,CONTIGUOUS);
 	DeallocateMatrix2D(Xlocal,n,CONTIGUOUS);
 	DeallocateMatrix2D(Klocal,n,CONTIGUOUS);
-
-	NULLFREE(lastKc);
-	NULLFREE(lastKr);
 
 	result.total_end_time = time(NULL);
 
