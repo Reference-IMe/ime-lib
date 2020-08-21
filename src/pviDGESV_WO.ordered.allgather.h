@@ -148,7 +148,6 @@ test_output pviDGESV_WO_oa(int nb, int n, double** A, int m, double** bb, double
 			myKend--;
 			myXmid--;
 			if (myxxstart>0) myxxstart--;
-			//myxxstart--;
 		}
 
 		// update solutions

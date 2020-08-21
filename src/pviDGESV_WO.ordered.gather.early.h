@@ -146,7 +146,7 @@ test_output pviDGESV_WO_oge(int nb, int n, double** A, int m, double** bb, doubl
 		{
 			myKend--;
 			myXmid--;
-			myxxstart--;
+			if (myxxstart>0) myxxstart--;
 		}
 
 		// update solutions
