@@ -137,10 +137,10 @@ test_output pviDGESV_CO_og(int nb, int n, double** A, int m, double** bb, double
 
 	// general bounds for the loops over the columns
 	// they differ on processes and change along the main loop over the levels
-	int myKend = myKcols-1;	// position of the last col of K
-	int myXmid = myXcols-1; // position of boundary between the left (simplified topological formula) and right (full formula) part of X
-	int myxxstart = myXcols-1; // beginning column position for updating the solution (begins from right)
-	int current_last=nb-1;	// index for the current last row or col of K in buffer
+	int myKend = myKcols-1;		// position of the last col of K
+	int myXmid = myXcols-1; 	// position of boundary between the left (simplified topological formula) and right (full formula) part of X
+	int myxxstart = myXcols;	// beginning column position for updating the solution (begins from right)
+	int current_last=nb-1;		// index for the current last row or col of K in buffer
 
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
@@ -162,7 +162,7 @@ test_output pviDGESV_CO_og(int nb, int n, double** A, int m, double** bb, double
 		{
 			myKend--;
 			myXmid--;
-			if (myxxstart>0) myxxstart--;
+			myxxstart--;
 		}
 
 		// update solutions
@@ -172,7 +172,8 @@ test_output pviDGESV_CO_og(int nb, int n, double** A, int m, double** bb, double
 			for (rhs=0;rhs<m;rhs++)
 			{
 				// on column < l X is null and not stored in T
-				if (global[i]>=l) xx[global[i]][rhs]=xx[global[i]][rhs]+Xlocal[l][i]*bb[l][rhs];
+				//if (global[i]>=l) xx[global[i]][rhs]=xx[global[i]][rhs]+Xlocal[l][i]*bb[l][rhs];
+				xx[global[i]][rhs]=xx[global[i]][rhs]+Xlocal[l][i]*bb[l][rhs];
 			}
 		}
 
