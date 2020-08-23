@@ -133,10 +133,10 @@ test_output pviDGESV_WO_u3g(int nb, int n, double** A, int m, double** bb, doubl
 
 	// general bounds for the loops over the columns
 	// they differ on processes and change along the main loop over the levels
-	int myKend = myKcols-1;	// position of the last col of K
-	int myXmid = myXcols-1; // position of boundary between the left (simplified topological formula) and right (full formula) part of X
-	int myxxstart = myXcols-1; // beginning column position for updating the solution (begins from right)
-	int current_last=nb-1;	// index for the current last row or col of K in buffer
+	int myKend = myKcols-1;		// position of the last col of K
+	int myXmid = myXcols-1; 	// position of boundary between the left (simplified topological formula) and right (full formula) part of X
+	int myxxstart = myXcols;	// beginning column position for updating the solution (begins from right)
+	int current_last=nb-1;		// index for the current last row or col of K in buffer
 
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
@@ -145,11 +145,12 @@ test_output pviDGESV_WO_u3g(int nb, int n, double** A, int m, double** bb, doubl
 		{
 			myKend--;
 			myXmid--;
-			if (myxxstart>0) myxxstart--;
+			myxxstart--;
 		}
 
 		// update solutions
 		// l .. n-1
+		// if myxxstart==myXcols, skip the loop
 		for (i=myxxstart; i<=local[n-1]; i++)
 		{
 			for (rhs=0;rhs<m;rhs++)

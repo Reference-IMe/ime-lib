@@ -39,14 +39,10 @@ test_output pviDGESV_WO_u2g(int nb, int n, double** A, int m, double** bb, doubl
 	MPI_Request mpi_request = MPI_REQUEST_NULL;
 
 	int i,j,l;						// general indexes
-	int mycols;
-		mycols = (int)(n/cprocs);			// num of cols per process
-	int myxxrows;
-		myxxrows = mycols;			// num of chunks for better code readability
-	int myKcols;
-		myKcols = mycols;
-	int myXcols;
-		myXcols = mycols;
+	int mycols   = n/cprocs;			// num of cols per process
+	int myxxrows = mycols;			// num of chunks for better code readability
+	int myKcols  = mycols;
+	int myXcols  = mycols;
 
     int rhs;
 
@@ -137,10 +133,10 @@ test_output pviDGESV_WO_u2g(int nb, int n, double** A, int m, double** bb, doubl
 
 	// general bounds for the loops over the columns
 	// they differ on processes and change along the main loop over the levels
-	int myKend = myKcols-1;	// position of the last col of K
-	int myXmid = myXcols-1; // position of boundary between the left (simplified topological formula) and right (full formula) part of X
-	int myxxstart = myXcols-1; // beginning column position for updating the solution (begins from right)
-	int current_last=nb-1;	// index for the current last row or col of K in buffer
+	int myKend = myKcols-1;		// position of the last col of K
+	int myXmid = myXcols-1; 	// position of boundary between the left (simplified topological formula) and right (full formula) part of X
+	int myxxstart = myXcols;	// beginning column position for updating the solution (begins from right)
+	int current_last=nb-1;		// index for the current last row or col of K in buffer
 
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
@@ -149,11 +145,12 @@ test_output pviDGESV_WO_u2g(int nb, int n, double** A, int m, double** bb, doubl
 		{
 			myKend--;
 			myXmid--;
-			if (myxxstart>0) myxxstart--;
+			myxxstart--;
 		}
 
 		// update solutions
 		// l .. n-1
+		// if myxxstart==myXcols, skip the loop
 		for (i=myxxstart; i<=local[n-1]; i++)
 		{
 			for (rhs=0;rhs<m;rhs++)
