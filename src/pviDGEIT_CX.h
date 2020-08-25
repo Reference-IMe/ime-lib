@@ -8,10 +8,10 @@
  *
  */
 
-#ifndef __pDGEIT_CX_H__
-#define __pDGEIT_CX_H__
+#ifndef __pviDGEIT_CX_H__
+#define __pviDGEIT_CX_H__
 
-void pDGEIT_CX(double** A, double** Tlocal, double** lastK, int n, int bf, MPI_Comm comm, int rank, int cprocs, int* map, int* global, int* local)
+void pviDGEIT_CX(double** A, double** Tlocal, double** lastK, int n, int bf, MPI_Comm comm, int rank, int cprocs, int* map, int* global, int* local)
 {
 	int i,j;
 
