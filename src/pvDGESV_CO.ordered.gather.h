@@ -6,7 +6,7 @@
 #include "helpers/vector.h"
 #include "testers/tester_structures.h"
 #include "DGEZR.h"
-#include "pviDGEIT_CX.h"
+#include "pvDGEIT_CX.h"
 
 /*
  *	solve (SV) system with general (GE) matrix A of doubles (D)
@@ -18,7 +18,7 @@
  *	optimized loops
  *
  */
-test_output pviDGESV_CO_og(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+test_output pvDGESV_CO(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
 	/*
 	 * nb	blocking factor: number of adjacent column (block width)
@@ -88,15 +88,31 @@ test_output pviDGESV_CO_og(int nb, int n, double** A, int m, double** bb, double
     		map=malloc(n*sizeof(int));
 			for (i=0; i<n; i++)
 			{
-				map[i]= ((int)floor(i/nb)) % cprocs;			// who has the col i
-				local[i]=(int)floor(i/(nb*cprocs))*nb + i % nb;	// position of the column i(global) in the local matrix
+				map[i]   = ((int)floor(i/mycols));	// who has the col i
+				local[i] = i-map[i]*mycols;			// position of the column i(global) in the local matrix
+				//if (rank==0) printf("%d: %d %d\n",i,map[i],local[i]);
 			}
     int*	global;
     		global=malloc(mycols*sizeof(int));
 			for (i=0; i<mycols; i++)
 			{
-				global[i]= i % nb + (int)floor(i/nb)*cprocs*nb + rank*nb; // position of the column i(local) in the global matrix
+				global[i]= i + rank*mycols; // position of the column i(local) in the global matrix
 			}
+
+			/*
+			MPI_Barrier(MPI_COMM_WORLD);
+			for (i=0; i<cprocs; i++)
+			{
+				if (rank==i)
+				{
+					for (j=0; j<mycols; j++)
+					{
+						printf(">%d< %d: %d\n",rank,j,global[j]);
+					}
+				}
+				MPI_Barrier(MPI_COMM_WORLD);
+			}
+			*/
 
     /*
      * MPI derived types
@@ -125,8 +141,21 @@ test_output pviDGESV_CO_og(int nb, int n, double** A, int m, double** bb, double
     /*
 	 *  init inhibition table
 	 */
-	DGEZR(xx, n, m);																// init (zero) solution vectors
-	pviDGEIT_CX(A, Tlocal, lastK, n, nb, comm, rank, cprocs, map, global, local);		// init inhibition table
+	DGEZR(xx, n, m);																	// init (zero) solution vectors
+	pvDGEIT_CX(A, Tlocal, lastK, n, nb, comm, rank, cprocs, map, global, local);	// init inhibition table
+
+	/*
+	MPI_Barrier(MPI_COMM_WORLD);
+	for (i=0; i<cprocs; i++)
+	{
+		if (rank==i)
+		{
+			printf("%d-%d:\n",l,rank);
+			PrintMatrix2D(Tlocal, n, mycols);
+		}
+		MPI_Barrier(MPI_COMM_WORLD);
+	}
+	*/
 
 	MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm);								// send all r.h.s to all procs
 
@@ -145,14 +174,16 @@ test_output pviDGESV_CO_og(int nb, int n, double** A, int m, double** bb, double
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
 	{
+
 		/*
 		MPI_Barrier(MPI_COMM_WORLD);
-		for (i=0; i<cprocs; i++)
+		for (i=0; i<1; i++)
 		{
-			if (rank==i)
+			if (rank==1)
 			{
 				printf("%d-%d:\n",l,rank);
 				PrintMatrix2D(Tlocal, n, mycols);
+				fflush(stdout);
 			}
 			MPI_Barrier(MPI_COMM_WORLD);
 		}
@@ -221,7 +252,7 @@ test_output pviDGESV_CO_og(int nb, int n, double** A, int m, double** bb, double
 			current_last=nb-1; // reset counter for next block (to be sent/received)
 			{
 				// collect chunks of last row of K to "future" last node
-				MPI_Igather (&Klocal[l-nb][local[0]], nb*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, multiple_lastKr_chunks_resized, map[l-nb], comm, &mpi_request);
+				MPI_Igather (&Klocal[l-nb][local[0]], nb*myKcols, MPI_DOUBLE, &lastKr[0][0], nb*myKcols, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
 
 				//future last node broadcasts last rows and cols of K
 				if (rank==map[l-nb])
@@ -316,11 +347,11 @@ test_output pviDGESV_CO_og(int nb, int n, double** A, int m, double** bb, double
 	// MPI_IN_PLACE required for MPICH based versions
 	if (rank==0)
 	{
-		MPI_Gather (MPI_IN_PLACE, 1, xx_rows_interleaved_resized, &xx[0][0], 1, xx_rows_interleaved_resized, 0, comm);
+		MPI_Gather (MPI_IN_PLACE, m*myxxrows, MPI_DOUBLE, &xx[0][0], m*myxxrows, MPI_DOUBLE, 0, comm);
 	}
 	else
 	{
-		MPI_Gather (&xx[rank*nb][0], 1, xx_rows_interleaved_resized, &xx[0][0], 1, xx_rows_interleaved_resized, 0, comm);
+		MPI_Gather (&xx[rank*myxxrows][0], m*myxxrows, MPI_DOUBLE, &xx[0][0], m*myxxrows, MPI_DOUBLE, 0, comm);
 	}
 
 	/*
