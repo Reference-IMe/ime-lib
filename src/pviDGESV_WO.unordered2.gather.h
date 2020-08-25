@@ -323,6 +323,7 @@ test_output pviDGESV_WO_u2g(int nb, int n, double** A, int m, double** bb, doubl
 	}
 	*/
 
+	MPI_Wait(&mpi_request, &mpi_status);
 	MPI_Barrier(MPI_COMM_WORLD);
 
 	// cleanup
