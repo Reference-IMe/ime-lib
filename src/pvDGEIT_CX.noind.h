@@ -121,7 +121,7 @@ void pvDGEIT_CX_noind(double** A, double** Tlocal, double** lastK, int n, int bf
 	}
 
 	//MPI_Bcast (&lastKc[0][0], n*bf, MPI_DOUBLE, map[n-1], comm);	// broadcast of the last cols of K
-	printf("%d\n",PVMAP(n-1, myKcols));
+	//printf("%d\n",PVMAP(n-1, myKcols));
 	MPI_Bcast (&lastKc[0][0], n*bf, MPI_DOUBLE, PVMAP(n-1, myKcols), comm);	// broadcast of the last cols of K
 
 	NULLFREE(lastKc);

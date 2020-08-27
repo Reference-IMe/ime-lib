@@ -40,6 +40,9 @@ test_output pvDGESV_CO_og_noind(int nb, int n, double** A, int m, double** bb, d
 	int i,j,l;						// general indexes
     int mycols   = n/cprocs;;		// num of cols per process
     int myxxrows = mycols;			// num of chunks for better code readability
+    int myKcols  = mycols;
+	int myXcols  = mycols;
+
     int rhs;
 
     /*
@@ -47,7 +50,7 @@ test_output pvDGESV_CO_og_noind(int nb, int n, double** A, int m, double** bb, d
      */
     double** Tlocal;
 			 Tlocal=AllocateMatrix2D(n, mycols, CONTIGUOUS);
-	// aliases for better code readability
+	// aliases
     // X part
     double** Xlocal;
     		 Xlocal=Tlocal;
@@ -81,12 +84,12 @@ test_output pvDGESV_CO_og_noind(int nb, int n, double** A, int m, double** bb, d
      */
 	// interleaved nb chunks of a row of K, repeated for nb rows (that is: interleaved blocks of size (nb)x(nb) )
 	MPI_Datatype lastKr_chunk;
-	MPI_Type_vector (nb, mycols, n, MPI_DOUBLE, & lastKr_chunk );
+	MPI_Type_vector (nb, myKcols, n, MPI_DOUBLE, & lastKr_chunk );
 	MPI_Type_commit (& lastKr_chunk);
 
 	// proper resizing for gathering
 	MPI_Datatype lastKr_chunk_resized;
-	MPI_Type_create_resized (lastKr_chunk, 0, mycols*sizeof(double), & lastKr_chunk_resized);
+	MPI_Type_create_resized (lastKr_chunk, 0, myKcols*sizeof(double), & lastKr_chunk_resized);
 	MPI_Type_commit (& lastKr_chunk_resized);
 
 	// rows of xx to be extracted
@@ -128,22 +131,23 @@ test_output pvDGESV_CO_og_noind(int nb, int n, double** A, int m, double** bb, d
 
 	// general bounds for the loops over the columns
 	// they differ on processes and change along the main loop over the levels
-	int myxxstart = mycols;		// beginning column position for updating the solution (begins from right)
+	int myKend = myKcols-1;		// position of the last col of K
+	int myXmid = myXcols-1; 	// position of boundary between the left (simplified topological formula) and right (full formula) part of X
+	int myxxstart = myXcols;	// beginning column position for updating the solution (begins from right)
 	int current_last=nb-1;		// index for the current last row or col of K in buffer
-	int firstdiag=rank*mycols;	// (global) position of the first diagonal element on this rank
-	int l_col;					// (local) position of the column l
-	int l_owner;				// rank holding the column l
-	int gi;						// global index
 
+	int gi;
+	int talker;
 
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
 	{
+
 		/*
 		MPI_Barrier(MPI_COMM_WORLD);
 		for (i=0; i<1; i++)
 		{
-			if (rank==0)
+			if (rank==1)
 			{
 				printf("%d-%d:\n",l,rank);
 				PrintMatrix2D(Tlocal, n, mycols);
@@ -155,6 +159,8 @@ test_output pvDGESV_CO_og_noind(int nb, int n, double** A, int m, double** bb, d
 
 		if (rank==PVMAP(l, mycols)) // if a process contains the last rows/cols, must skip it
 		{
+			myKend--;
+			myXmid--;
 			myxxstart--;
 		}
 
@@ -186,124 +192,52 @@ test_output pvDGESV_CO_og_noind(int nb, int n, double** A, int m, double** bb, d
 			}
 		}
 
-
-		l_col=PVLOCAL(l, mycols);
-
-		// must differentiate topological formula on special column l
-		//
-		if (rank==PVMAP(l, mycols))			// proc. containing column l
-		{//rows:
-			// before first diagonal element
-			for (i=0; i<firstdiag; i++)
-			{//columns:
-				// before column l (K values)
-				for (j=0; j<l_col; j++)
-				{
-					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
-				}
-
-				// column l (X value)
-				Xlocal[i][l_col]= - Xlocal[l][l_col]*hh[i];
-
-				// after column l (X values)
-				for (j=l_col+1; j<mycols; j++)
-				{
-					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
-				}
-			}
-			// containing first diagonal element
-			for (i=firstdiag; i<firstdiag+mycols; i++)
-			{//columns:
-				// before diagonal element (K values)
-				for (j=0; j<(i-firstdiag); j++)
-				{
-					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
-				}
-
-				// diagonal element (X value)
-				Xlocal[i][i-firstdiag]=Xlocal[i][i-firstdiag]*h[i];
-
-				// // after diagonal element and before column l (K values)
-				for (j=i-firstdiag+1; j<l_col; j++)
-				{
-					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
-				}
-
-				// column l (X value)
-				Xlocal[i][l_col]= - Xlocal[l][l_col]*hh[i];
-
-				// after column l (X values)
-				for (j=l_col+1; j<mycols; j++)
-				{
-					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
-				}
-
-			}
-			// remaining
-			for (i=firstdiag+mycols; i<=l-1; i++)
+		//////// K
+		// 0 .. l-1
+		for (i=0; i<=l-1; i++)
+		{
+			for (j=0; j<=myKend; j++)
 			{
-				// before column l (K values)
-				for (j=0; j<l_col; j++)
+				// on the diagonal T stores X values
+				gi=PVGLOBAL(j, mycols, rank);
+				if (gi!=i) Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
+			}
+		}
+
+		//////// X
+		//// 0 .. l-1
+		// calc with diagonal elements not null (left part of X)
+		for (i=0; i<=myXmid; i++)
+		{
+			gi=PVGLOBAL(i, mycols, rank);
+			Xlocal[gi][i]=Xlocal[gi][i]*h[gi];
+		}
+
+		// l .. n-1
+		// calc with general elements (right part of X)
+		// must differentiate topological formula on special column l
+		if (rank==PVMAP(l, myKcols))
+		{
+			for (i=0; i<=l-1; i++)
+			{
+				j=myXmid+1;
 				{
-					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
+					Xlocal[i][j]= - Xlocal[l][j]*hh[i];
 				}
-
-				// column l (X value)
-				Xlocal[i][l_col]= - Xlocal[l][l_col]*hh[i];
-
-				// after column l (X values)
-				for (j=l_col+1; j<mycols; j++)
+			}
+			for (i=0; i<=l-1; i++)
+			{
+				for (j=myXmid+2; j<=myXcols-1; j++)
 				{
 					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
 				}
 			}
 		}
-		else										// proc. NOT containing column l
-		{//rows:
-			// before first diagonal element
-			for (i=0; i<firstdiag; i++)
-			{//columns:
-				// before column l (K values)
-				for (j=0; j<l_col; j++)
-				{
-					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
-				}
-
-				// after column l (X values)
-				for (j=l_col; j<mycols; j++)
-				{
-					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
-				}
-			}
-			// containing first diagonal element
-			for (i=firstdiag; i<firstdiag+mycols; i++)
-			{//columns:
-				// before diagonal element (K values)
-				for (j=0; j<(i-firstdiag); j++)
-				{
-					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
-				}
-
-				// diagonal element (X value)
-				Xlocal[i][i-firstdiag]=Xlocal[i][i-firstdiag]*h[i];
-
-				// after diagonal element (K values)
-				for (j=i-firstdiag+1; j<mycols; j++)
-				{
-					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
-				}
-			}
-			// remaining
-			for (i=firstdiag+mycols; i<=l-1; i++)
+		else
+		{
+			for (i=0; i<=l-1; i++)
 			{
-				// before column l (K values)
-				for (j=0; j<l_col; j++)
-				{
-					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
-				}
-
-				// after column l (X values)
-				for (j=l_col; j<mycols; j++)
+				for (j=myXmid+1; j<=myXcols-1; j++)
 				{
 					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
 				}
@@ -327,19 +261,19 @@ test_output pvDGESV_CO_og_noind(int nb, int n, double** A, int m, double** bb, d
 		{
 			current_last=nb-1; // reset counter for next block (to be sent/received)
 			{
-				l_owner = PVMAP(l-nb, mycols);
+				talker = PVMAP(l-nb, myKcols);
 				// collect chunks of last row of K to "future" last node
-				MPI_Igather (&Klocal[l-nb][PVLOCAL(0, mycols)], nb*mycols, MPI_DOUBLE, &lastKr[0][0], 1, lastKr_chunk_resized, l_owner, comm, &mpi_request);
+				MPI_Igather (&Klocal[l-nb][PVLOCAL(0, myKcols)], nb*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, lastKr_chunk_resized, talker, comm, &mpi_request);
 
 				//future last node broadcasts last rows and cols of K
-				if (rank==l_owner)
+				if (rank==talker)
 				{
 					// copy data into local buffer before broadcast
 					for(j=0;j<nb;j++)
 					{
 						for (i=0; i<=l-1; i++)
 						{
-							lastKc[j][i]=Klocal[i][PVLOCAL(l-nb, mycols)+j];
+							lastKc[j][i]=Klocal[i][PVLOCAL(l-nb, myKcols)+j];
 						}
 					}
 					// wait for gathering to complete
@@ -347,7 +281,7 @@ test_output pvDGESV_CO_og_noind(int nb, int n, double** A, int m, double** bb, d
 				}
 				// do not wait all for gather: only who has to broadcast
 				//MPI_Wait(&mpi_request, &mpi_status);
-				MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, l_owner, comm, &mpi_request);
+				MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, talker, comm, &mpi_request);
 			}
 		}
 	}
@@ -392,6 +326,33 @@ test_output pvDGESV_CO_og_noind(int nb, int n, double** A, int m, double** bb, d
 	{
 		MPI_Gather (&xx[rank*myxxrows][0], m*myxxrows, MPI_DOUBLE, &xx[0][0], m*myxxrows, MPI_DOUBLE, 0, comm);
 	}
+
+	/*
+	 * control on factorization
+	 */
+	/*
+	MPI_Datatype Tlocal_half;
+	MPI_Type_vector (n*myKcols, 1, 1, MPI_DOUBLE, & Tlocal_half );
+	MPI_Type_commit (& Tlocal_half);
+
+	MPI_Datatype Thalf_interleaved;
+	MPI_Type_vector (n*myKcols/nb, nb, nb*cprocs, MPI_DOUBLE, & Thalf_interleaved );
+	MPI_Type_commit (& Thalf_interleaved);
+
+	MPI_Datatype Thalf_interleaved_resized;
+	MPI_Type_create_resized (Thalf_interleaved, 0, nb*sizeof(double), & Thalf_interleaved_resized);
+	MPI_Type_commit (& Thalf_interleaved_resized);
+
+	MPI_Gather (&Xlocal[0][0], 1, Tlocal_half, &A[0][0], 1, Thalf_interleaved_resized, 0, comm);
+
+	MPI_Barrier(comm);
+	if (rank==0 )
+	{
+		printf("\n\n Matrix X:\n");
+		PrintMatrix2D(A, n, n);
+		fflush(stdout);
+	}
+	*/
 
 	MPI_Wait(&mpi_request, &mpi_status);
 	MPI_Barrier(MPI_COMM_WORLD);
