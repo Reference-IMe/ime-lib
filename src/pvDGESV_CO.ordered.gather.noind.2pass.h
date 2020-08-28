@@ -13,12 +13,13 @@
  *	of order n and with m r.h.s in matrix bb[n,m] and solutions in xx[n,m]
  *	with:
  *	compact overwrite (CO) memory model
- *	parallelized in interleaved columns (pvi) over cprocs calculating processors
+ *	parallelized in NON-interleaved columns (pv) over cprocs calculating processors
  *	parallelized initialization
- *	optimized loops
+ *	non-optimized loops
+ *	some overlapping calc/comm
  *
  */
-test_output pvDGESV_CO_og_noind(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+test_output pvDGESV_CO_og_noind_2pass(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
 	/*
 	 * nb	blocking factor: number of adjacent column (block width)
@@ -204,45 +205,6 @@ test_output pvDGESV_CO_og_noind(int nb, int n, double** A, int m, double** bb, d
 			}
 		}
 
-		//////// X
-		//// 0 .. l-1
-		// calc with diagonal elements not null (left part of X)
-		for (i=0; i<=myXmid; i++)
-		{
-			gi=PVGLOBAL(i, mycols, rank);
-			Xlocal[gi][i]=Xlocal[gi][i]*h[gi];
-		}
-
-		// l .. n-1
-		// calc with general elements (right part of X)
-		// must differentiate topological formula on special column l
-		if (rank==PVMAP(l, myKcols))
-		{
-			for (i=0; i<=l-1; i++)
-			{
-				j=myXmid+1;
-				{
-					Xlocal[i][j]= - Xlocal[l][j]*hh[i];
-				}
-			}
-			for (i=0; i<=l-1; i++)
-			{
-				for (j=myXmid+2; j<=myXcols-1; j++)
-				{
-					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
-				}
-			}
-		}
-		else
-		{
-			for (i=0; i<=l-1; i++)
-			{
-				for (j=myXmid+1; j<=myXcols-1; j++)
-				{
-					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
-				}
-			}
-		}
 
 		///////// update local copy of global last rows and cols of K
 		if (current_last>0) // block of last rows (cols) not completely scanned
@@ -282,6 +244,46 @@ test_output pvDGESV_CO_og_noind(int nb, int n, double** A, int m, double** bb, d
 				// do not wait all for gather: only who has to broadcast
 				//MPI_Wait(&mpi_request, &mpi_status);
 				MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, talker, comm, &mpi_request);
+			}
+		}
+
+		//////// X
+		//// 0 .. l-1
+		// calc with diagonal elements not null (left part of X)
+		for (i=0; i<=myXmid; i++)
+		{
+			gi=PVGLOBAL(i, mycols, rank);
+			Xlocal[gi][i]=Xlocal[gi][i]*h[gi];
+		}
+
+		// l .. n-1
+		// calc with general elements (right part of X)
+		// must differentiate topological formula on special column l
+		if (rank==PVMAP(l, myKcols))
+		{
+			for (i=0; i<=l-1; i++)
+			{
+				j=myXmid+1;
+				{
+					Xlocal[i][j]= - Xlocal[l][j]*hh[i];
+				}
+			}
+			for (i=0; i<=l-1; i++)
+			{
+				for (j=myXmid+2; j<=myXcols-1; j++)
+				{
+					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
+				}
+			}
+		}
+		else
+		{
+			for (i=0; i<=l-1; i++)
+			{
+				for (j=myXmid+1; j<=myXcols-1; j++)
+				{
+					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
+				}
 			}
 		}
 	}

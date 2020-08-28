@@ -13,12 +13,13 @@
  *	of order n and with m r.h.s in matrix bb[n,m] and solutions in xx[n,m]
  *	with:
  *	compact overwrite (CO) memory model
- *	parallelized in interleaved columns (pvi) over cprocs calculating processors
+ *	parallelized in NON-interleaved columns (pv) over cprocs calculating processors
  *	parallelized initialization
  *	optimized loops
+ *	poor overlapping calc/comm
  *
  */
-test_output pvDGESV_CO_og_noind(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+test_output pvDGESV_CO_og_noind_smaller(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
 	/*
 	 * nb	blocking factor: number of adjacent column (block width)
@@ -79,7 +80,11 @@ test_output pvDGESV_CO_og_noind(int nb, int n, double** A, int m, double** bb, d
     /*
      * MPI derived types
      */
-	// interleaved nb chunks of a row of K, repeated for nb rows (that is: interleaved blocks of size (nb)x(nb) )
+	//
+	MPI_Datatype s_lastKr_chunk;
+	MPI_Type_vector (nb, mycols, mycols, MPI_DOUBLE, & s_lastKr_chunk );
+	MPI_Type_commit (& s_lastKr_chunk);
+
 	MPI_Datatype lastKr_chunk;
 	MPI_Type_vector (nb, mycols, n, MPI_DOUBLE, & lastKr_chunk );
 	MPI_Type_commit (& lastKr_chunk);
@@ -99,7 +104,17 @@ test_output pvDGESV_CO_og_noind(int nb, int n, double** A, int m, double** bb, d
 	MPI_Type_create_resized (xx_chunk, 0, nb*m*sizeof(double), & xx_chunk_resized);
 	MPI_Type_commit (& xx_chunk_resized);
 
+	int* gather_count;
+		 gather_count=malloc(cprocs*sizeof(int));
 
+	int* gather_displacement;
+		 gather_displacement=malloc(cprocs*sizeof(int));
+
+		 for (i=0; i<cprocs; i++)
+		 {
+			gather_displacement[i]=i;
+			gather_count[i]=1;
+		 }
     /*
 	 *  init inhibition table
 	 */
@@ -134,7 +149,7 @@ test_output pvDGESV_CO_og_noind(int nb, int n, double** A, int m, double** bb, d
 	int l_col;					// (local) position of the column l
 	int l_owner;				// rank holding the column l
 	int gi;						// global index
-
+	//TODO: pre-calc other values..
 
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
@@ -153,6 +168,7 @@ test_output pvDGESV_CO_og_noind(int nb, int n, double** A, int m, double** bb, d
 		}
 		*/
 
+		//TODO: avoid if?
 		if (rank==PVMAP(l, mycols)) // if a process contains the last rows/cols, must skip it
 		{
 			myxxstart--;
@@ -310,6 +326,7 @@ test_output pvDGESV_CO_og_noind(int nb, int n, double** A, int m, double** bb, d
 			}
 		}
 
+
 		///////// update local copy of global last rows and cols of K
 		if (current_last>0) // block of last rows (cols) not completely scanned
 		{
@@ -326,29 +343,36 @@ test_output pvDGESV_CO_og_noind(int nb, int n, double** A, int m, double** bb, d
 		else // block of last rows (cols) completely scanned
 		{
 			current_last=nb-1; // reset counter for next block (to be sent/received)
-			{
-				l_owner = PVMAP(l-nb, mycols);
-				// collect chunks of last row of K to "future" last node
-				MPI_Igather (&Klocal[l-nb][PVLOCAL(0, mycols)], nb*mycols, MPI_DOUBLE, &lastKr[0][0], 1, lastKr_chunk_resized, l_owner, comm, &mpi_request);
 
-				//future last node broadcasts last rows and cols of K
-				if (rank==l_owner)
+			l_owner = PVMAP(l-nb, mycols);
+			// collect chunks of last row of K to "future" last node
+			//MPI_Igather (&Klocal[l-nb][0], nb*mycols, MPI_DOUBLE, &lastKr[0][0], 1, lastKr_chunk_resized, l_owner, comm, &mpi_request);
+			MPI_Igatherv (&Klocal[l-nb][0], gather_count[rank], s_lastKr_chunk, &lastKr[0][0], gather_count, gather_displacement, lastKr_chunk_resized, l_owner, comm, &mpi_request);
+
+
+			//future last node broadcasts last rows and cols of K
+			if (rank==l_owner)
+			{
+				// copy data into local buffer before broadcast
+				for(j=0;j<nb;j++)
 				{
-					// copy data into local buffer before broadcast
-					for(j=0;j<nb;j++)
+					for (i=0; i<=l-1; i++)
 					{
-						for (i=0; i<=l-1; i++)
-						{
-							lastKc[j][i]=Klocal[i][PVLOCAL(l-nb, mycols)+j];
-						}
+						lastKc[j][i]=Klocal[i][PVLOCAL(l-nb, mycols)+j];
 					}
-					// wait for gathering to complete
-					MPI_Wait(&mpi_request, &mpi_status);
 				}
-				// do not wait all for gather: only who has to broadcast
-				//MPI_Wait(&mpi_request, &mpi_status);
-				MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, l_owner, comm, &mpi_request);
+				// wait for gathering to complete
+				MPI_Wait(&mpi_request, &mpi_status);
 			}
+			// do not wait all for gather: only who has to broadcast
+			//MPI_Wait(&mpi_request, &mpi_status);
+			MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, l_owner, comm, &mpi_request);
+
+			if (l % mycols == 0)
+			{
+				gather_count[l_owner+1]=0;
+			}
+
 		}
 	}
 
@@ -399,6 +423,8 @@ test_output pvDGESV_CO_og_noind(int nb, int n, double** A, int m, double** bb, d
 	// cleanup
 	NULLFREE(lastKc);
 	NULLFREE(lastKr);
+	NULLFREE(gather_displacement);
+	NULLFREE(gather_count);
 
 	DeallocateMatrix2D(lastK,2*nb,CONTIGUOUS);
 	DeallocateVector(h);
