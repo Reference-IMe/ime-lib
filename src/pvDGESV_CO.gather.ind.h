@@ -6,7 +6,7 @@
 #include "helpers/vector.h"
 #include "testers/tester_structures.h"
 #include "DGEZR.h"
-#include "pvDGEIT_CX.noind.h"
+#include "pvDGEIT_CX.ind.h"
 
 /*
  *	solve (SV) system with general (GE) matrix A of doubles (D)
@@ -19,7 +19,7 @@
  *	some overlapping calc/comm
  *
  */
-test_output pvDGESV_CO_og_noind_2pass(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+test_output pvDGESV_CO_g_ind(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
 	/*
 	 * nb	blocking factor: number of adjacent column (block width)
@@ -80,6 +80,43 @@ test_output pvDGESV_CO_og_noind_2pass(int nb, int n, double** A, int m, double**
     double* hh;
 			hh=AllocateVector(n);
 
+	/*
+	 * map columns to process
+	 */
+
+	int*	local;
+    		local=malloc(n*sizeof(int));
+    int*	map;
+    		map=malloc(n*sizeof(int));
+			for (i=0; i<n; i++)
+			{
+				map[i]   = ((int)floor(i/mycols));	// who has the col i
+				local[i] = i-map[i]*mycols;			// position of the column i(global) in the local matrix
+				//if (rank==0) printf("%d: %d %d\n",i,map[i],local[i]);
+			}
+    int*	global;
+    		global=malloc(mycols*sizeof(int));
+			for (i=0; i<mycols; i++)
+			{
+				global[i]= i + rank*mycols; // position of the column i(local) in the global matrix
+			}
+
+
+			/*
+			MPI_Barrier(MPI_COMM_WORLD);
+			for (i=0; i<cprocs; i++)
+			{
+				if (rank==i)
+				{
+					for (j=0; j<mycols; j++)
+					{
+						printf(">%d< %d: %d\n",rank,j,global[j]);
+					}
+				}
+				MPI_Barrier(MPI_COMM_WORLD);
+			}
+			*/
+
     /*
      * MPI derived types
      */
@@ -107,8 +144,8 @@ test_output pvDGESV_CO_og_noind_2pass(int nb, int n, double** A, int m, double**
     /*
 	 *  init inhibition table
 	 */
-	DGEZR(xx, n, m);												// init (zero) solution vectors
-	pvDGEIT_CX_noind(A, Tlocal, lastK, n, nb, comm, rank, cprocs);	// init inhibition table
+	DGEZR(xx, n, m);																	// init (zero) solution vectors
+	pvDGEIT_CX_ind(A, Tlocal, lastK, n, nb, comm, rank, cprocs, map, global, local);	// init inhibition table
 
 	/*
 	MPI_Barrier(MPI_COMM_WORLD);
@@ -137,13 +174,9 @@ test_output pvDGESV_CO_og_noind_2pass(int nb, int n, double** A, int m, double**
 	int myxxstart = myXcols;	// beginning column position for updating the solution (begins from right)
 	int current_last=nb-1;		// index for the current last row or col of K in buffer
 
-	int gi;
-	int talker;
-
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
 	{
-
 		/*
 		MPI_Barrier(MPI_COMM_WORLD);
 		for (i=0; i<1; i++)
@@ -158,7 +191,7 @@ test_output pvDGESV_CO_og_noind_2pass(int nb, int n, double** A, int m, double**
 		}
 		*/
 
-		if (rank==PVMAP(l, mycols)) // if a process contains the last rows/cols, must skip it
+		if (rank==map[l]) // if a process contains the last rows/cols, must skip it
 		{
 			myKend--;
 			myXmid--;
@@ -167,20 +200,20 @@ test_output pvDGESV_CO_og_noind_2pass(int nb, int n, double** A, int m, double**
 
 		// update solutions
 		// l .. n-1
-		for (i=myxxstart; i<=PVLOCAL(n-1, mycols); i++)
+		for (i=myxxstart; i<=local[n-1]; i++)
 		{
-			gi=PVGLOBAL(i, mycols, rank);
 			for (rhs=0;rhs<m;rhs++)
 			{
 				// on column < l X is null and not stored in T
 				//if (global[i]>=l) xx[global[i]][rhs]=xx[global[i]][rhs]+Xlocal[l][i]*bb[l][rhs];
-				xx[gi][rhs]=xx[gi][rhs]+Xlocal[l][i]*bb[l][rhs];
+				xx[global[i]][rhs]=xx[global[i]][rhs]+Xlocal[l][i]*bb[l][rhs];
 			}
 		}
 
 		// wait for new last rows and cols before computing helpers
 		if (current_last==nb-1) MPI_Wait(&mpi_request, &mpi_status);
 		// TODO: check performance penalty by skipping MPI_wait with an 'if' for non due cases (inside the blocking factor) or not
+		// MPI_Wait(&mpi_request, &mpi_status);
 
 		// update helpers
 		for (i=0; i<=l-1; i++)
@@ -200,8 +233,7 @@ test_output pvDGESV_CO_og_noind_2pass(int nb, int n, double** A, int m, double**
 			for (j=0; j<=myKend; j++)
 			{
 				// on the diagonal T stores X values
-				gi=PVGLOBAL(j, mycols, rank);
-				if (gi!=i) Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
+				if (global[j]!=i) Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
 			}
 		}
 
@@ -223,19 +255,18 @@ test_output pvDGESV_CO_og_noind_2pass(int nb, int n, double** A, int m, double**
 		{
 			current_last=nb-1; // reset counter for next block (to be sent/received)
 			{
-				talker = PVMAP(l-nb, myKcols);
 				// collect chunks of last row of K to "future" last node
-				MPI_Igather (&Klocal[l-nb][PVLOCAL(0, myKcols)], nb*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, lastKr_chunk_resized, talker, comm, &mpi_request);
+				MPI_Igather (&Klocal[l-nb][local[0]], nb*myKcols, MPI_DOUBLE, &lastKr[0][0], 1, lastKr_chunk_resized, map[l-nb], comm, &mpi_request);
 
 				//future last node broadcasts last rows and cols of K
-				if (rank==talker)
+				if (rank==map[l-nb])
 				{
 					// copy data into local buffer before broadcast
 					for(j=0;j<nb;j++)
 					{
 						for (i=0; i<=l-1; i++)
 						{
-							lastKc[j][i]=Klocal[i][PVLOCAL(l-nb, myKcols)+j];
+							lastKc[j][i]=Klocal[i][local[l-nb]+j];
 						}
 					}
 					// wait for gathering to complete
@@ -243,7 +274,7 @@ test_output pvDGESV_CO_og_noind_2pass(int nb, int n, double** A, int m, double**
 				}
 				// do not wait all for gather: only who has to broadcast
 				//MPI_Wait(&mpi_request, &mpi_status);
-				MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, talker, comm, &mpi_request);
+				MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, map[l-nb], comm, &mpi_request);
 			}
 		}
 
@@ -252,14 +283,13 @@ test_output pvDGESV_CO_og_noind_2pass(int nb, int n, double** A, int m, double**
 		// calc with diagonal elements not null (left part of X)
 		for (i=0; i<=myXmid; i++)
 		{
-			gi=PVGLOBAL(i, mycols, rank);
-			Xlocal[gi][i]=Xlocal[gi][i]*h[gi];
+			Xlocal[global[i]][i]=Xlocal[global[i]][i]*h[global[i]];
 		}
 
 		// l .. n-1
 		// calc with general elements (right part of X)
 		// must differentiate topological formula on special column l
-		if (rank==PVMAP(l, myKcols))
+		if (rank==map[l])
 		{
 			for (i=0; i<=l-1; i++)
 			{
@@ -304,10 +334,9 @@ test_output pvDGESV_CO_og_noind_2pass(int nb, int n, double** A, int m, double**
 	// last level (l=0)
 	for (i=0; i<myxxrows; i++)
 	{
-		gi=PVGLOBAL(i, mycols, rank);
 		for(rhs=0;rhs<m;rhs++)
 		{
-			xx[gi][rhs]=xx[gi][rhs]+Xlocal[0][i]*bb[0][rhs];
+			xx[global[i]][rhs]=xx[global[i]][rhs]+Xlocal[0][i]*bb[0][rhs];
 		}
 	}
 
@@ -360,6 +389,9 @@ test_output pvDGESV_CO_og_noind_2pass(int nb, int n, double** A, int m, double**
 	MPI_Barrier(MPI_COMM_WORLD);
 
 	// cleanup
+	NULLFREE(local);
+	NULLFREE(global);
+	NULLFREE(map);
 	NULLFREE(lastKc);
 	NULLFREE(lastKr);
 

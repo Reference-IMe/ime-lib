@@ -6,8 +6,10 @@
 #include "helpers/vector.h"
 #include "testers/tester_structures.h"
 
+#include "pvDGESV_CO.dev.h"
 
-extern test_output pvDGESV_CO_og_noind_smallest(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm);
+//extern test_output pvDGESV_CO_og_noind_smallest(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm);
+
 /*
  *	solve (SV) system with general (GE) matrix A of doubles (D)
  *	of order n and with m r.h.s in matrix bb[n,m] and solutions in xx[n,m]
@@ -21,5 +23,6 @@ extern test_output pvDGESV_CO_og_noind_smallest(int nb, int n, double** A, int m
  */
 test_output pvDGESV_CO_default(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
-	return pvDGESV_CO_og_noind_smallest(nb, n, A, m, bb, xx, comm);
+	//return pvDGESV_CO_og_noind_smallest(nb, n, A, m, bb, xx, comm);
+	return pvDGESV_CO_dev(nb, n, A, m, bb, xx, comm);
 }

@@ -18,7 +18,7 @@
  *	optimized loops
  *
  */
-test_output pviDGESV_CO_og(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+test_output pviDGESV_CO_g(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
 	/*
 	 * nb	blocking factor: number of adjacent column (block width)

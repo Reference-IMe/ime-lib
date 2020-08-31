@@ -8,11 +8,10 @@
  *
  */
 
-#ifndef __pvDGEIT_CX_NOIND_H__
-#define __pvDGEIT_CX_NOIND_H__
+#ifndef __pvDGEIT_CX_IND_H__
+#define __pvDGEIT_CX_IND_H__
 
-//void pvDGEIT_CX(double** A, double** Tlocal, double** lastK, int n, int bf, MPI_Comm comm, int rank, int cprocs, int* map, int* global, int* local)
-void pvDGEIT_CX_noind(double** A, double** Tlocal, double** lastK, int n, int bf, MPI_Comm comm, int rank, int cprocs)
+void pvDGEIT_CX_ind(double** A, double** Tlocal, double** lastK, int n, int bf, MPI_Comm comm, int rank, int cprocs, int* map, int* global, int* local)
 {
 	int i,j;
 
@@ -89,7 +88,7 @@ void pvDGEIT_CX_noind(double** A, double** Tlocal, double** lastK, int n, int bf
 		for (j=0;j<myArows;j++)
 		{
 			// X part
-			if (i==PVGLOBAL(j, myArows, rank)) //global[j])
+			if (i==global[j])
 			{
 				Tlocal[i][j]=1/lastKc[0][i];
 			}
@@ -104,8 +103,7 @@ void pvDGEIT_CX_noind(double** A, double** Tlocal, double** lastK, int n, int bf
 	}
 
 	// prepare (copy into local buffer) last cols of K
-	//if (rank==map[n-1]) // the process holding the last column holds the last bf columns [n-bf..n-1]
-	if (rank==PVMAP(n-1,myKcols)) // the process holding the last column holds the last bf columns [n-bf..n-1]
+	if (rank==map[n-1]) // the process holding the last column holds the last bf columns [n-bf..n-1]
 	{
 		for (i=0; i<n; i++)
 		{
@@ -113,16 +111,12 @@ void pvDGEIT_CX_noind(double** A, double** Tlocal, double** lastK, int n, int bf
 			{
 				// store the last bf cols of K in lastKc in the same order, but transposed (columns stored in rows)
 				// (lastKc[0] is the first one of the block of last cols of K)
-				//lastKc[j][i]=Tlocal[i][local[n-bf]+j];
-				lastKc[j][i]=Tlocal[i][PVLOCAL(n-bf, myArows)+j];
-
+				lastKc[j][i]=Tlocal[i][local[n-bf]+j];
 			}
 		}
 	}
 
-	//MPI_Bcast (&lastKc[0][0], n*bf, MPI_DOUBLE, map[n-1], comm);	// broadcast of the last cols of K
-	//printf("%d\n",PVMAP(n-1, myKcols));
-	MPI_Bcast (&lastKc[0][0], n*bf, MPI_DOUBLE, PVMAP(n-1, myKcols), comm);	// broadcast of the last cols of K
+	MPI_Bcast (&lastKc[0][0], n*bf, MPI_DOUBLE, map[n-1], comm);	// broadcast of the last cols of K
 
 	NULLFREE(lastKc);
 	NULLFREE(lastKr);
