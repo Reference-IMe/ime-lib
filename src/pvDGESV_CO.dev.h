@@ -6,7 +6,7 @@
 #include "helpers/vector.h"
 #include "testers/tester_structures.h"
 #include "DGEZR.h"
-#include "pvDGEIT_CX.noind.h"
+#include "pvDGEIT_CX.h"
 
 /*
  *	solve (SV) system with general (GE) matrix A of doubles (D)
@@ -19,7 +19,7 @@
  *	poor overlapping calc/comm
  *
  */
-test_output pvDGESV_CO_og_noind_smallest(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
 	/*
 	 * nb	blocking factor: number of adjacent column (block width)
@@ -35,8 +35,12 @@ test_output pvDGESV_CO_og_noind_smallest(int nb, int n, double** A, int m, doubl
     int rank, cprocs; //
     MPI_Comm_rank(comm, &rank);		// get current process id
     MPI_Comm_size(comm, &cprocs);	// get number of processes
-	MPI_Status  mpi_status;
-	MPI_Request mpi_request = MPI_REQUEST_NULL;
+	//MPI_Status  mpi_status;
+	//MPI_Request mpi_request = MPI_REQUEST_NULL;
+	MPI_Status  mpi_status[2];
+	MPI_Request mpi_request[2];
+				mpi_request[0] = MPI_REQUEST_NULL; // req. for allgather
+				mpi_request[1] = MPI_REQUEST_NULL; // req. for broadcast
 
 	int i,j,l;						// general indexes
     int mycols   = n/cprocs;;		// num of cols per process
@@ -82,20 +86,16 @@ test_output pvDGESV_CO_og_noind_smallest(int nb, int n, double** A, int m, doubl
      */
 	//
 	MPI_Datatype s_lastKr_chunk;
-	MPI_Type_vector (nb, 1, mycols, MPI_DOUBLE, & s_lastKr_chunk );
+	MPI_Type_vector (nb, mycols, mycols, MPI_DOUBLE, & s_lastKr_chunk );
 	MPI_Type_commit (& s_lastKr_chunk);
 
 	MPI_Datatype lastKr_chunk;
-	MPI_Type_vector (nb, 1, n, MPI_DOUBLE, & lastKr_chunk );
+	MPI_Type_vector (nb, mycols, n, MPI_DOUBLE, & lastKr_chunk );
 	MPI_Type_commit (& lastKr_chunk);
 
 	// proper resizing for gathering
-	MPI_Datatype s_lastKr_chunk_resized;
-	MPI_Type_create_resized (s_lastKr_chunk, 0, 1*sizeof(double), & s_lastKr_chunk_resized);
-	MPI_Type_commit (& s_lastKr_chunk_resized);
-
 	MPI_Datatype lastKr_chunk_resized;
-	MPI_Type_create_resized (lastKr_chunk, 0, 1*sizeof(double), & lastKr_chunk_resized);
+	MPI_Type_create_resized (lastKr_chunk, 0, mycols*sizeof(double), & lastKr_chunk_resized);
 	MPI_Type_commit (& lastKr_chunk_resized);
 
 	// rows of xx to be extracted
@@ -108,6 +108,9 @@ test_output pvDGESV_CO_og_noind_smallest(int nb, int n, double** A, int m, doubl
 	MPI_Type_create_resized (xx_chunk, 0, nb*m*sizeof(double), & xx_chunk_resized);
 	MPI_Type_commit (& xx_chunk_resized);
 
+	int* s_gather_count;
+		 s_gather_count=malloc(cprocs*sizeof(int));
+
 	int* gather_count;
 		 gather_count=malloc(cprocs*sizeof(int));
 
@@ -116,18 +119,15 @@ test_output pvDGESV_CO_og_noind_smallest(int nb, int n, double** A, int m, doubl
 
 		 for (i=0; i<cprocs; i++)
 		 {
-			gather_displacement[i]=i*mycols;
-			gather_count[i]=mycols;
+			gather_displacement[i]=i;
+			gather_count[i]=1;
+			s_gather_count[i]=nb*mycols;
 		 }
     /*
 	 *  init inhibition table
 	 */
 	DGEZR(xx, n, m);												// init (zero) solution vectors
-	pvDGEIT_CX_noind(A, Tlocal, lastK, n, nb, comm, rank, cprocs);	// init inhibition table
-
-	// last proc has already sent a full chunk of lastKr
-	// decrease chunk size by nb for next sending
-	gather_count[cprocs-1]=mycols-nb;
+	pvDGEIT_CX(A, Tlocal, lastK, n, nb, comm, rank, cprocs);	// init inhibition table
 
 	/*
 	MPI_Barrier(MPI_COMM_WORLD);
@@ -162,11 +162,12 @@ test_output pvDGESV_CO_og_noind_smallest(int nb, int n, double** A, int m, doubl
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
 	{
+
 		/*
 		MPI_Barrier(MPI_COMM_WORLD);
 		for (i=0; i<1; i++)
 		{
-			if (rank==0)
+			if (rank==1)
 			{
 				printf("%d-%d:\n",l,rank);
 				PrintMatrix2D(Tlocal, n, mycols);
@@ -196,7 +197,7 @@ test_output pvDGESV_CO_og_noind_smallest(int nb, int n, double** A, int m, doubl
 		}
 
 		// wait for new last rows and cols before computing helpers
-		if (current_last==nb-1) MPI_Wait(&mpi_request, &mpi_status);
+		if (current_last==nb-1) MPI_Waitall(2, mpi_request, mpi_status);
 		// TODO: check performance penalty by skipping MPI_wait with an 'if' for non due cases (inside the blocking factor) or not
 
 		// update helpers
@@ -353,10 +354,9 @@ test_output pvDGESV_CO_og_noind_smallest(int nb, int n, double** A, int m, doubl
 			current_last=nb-1; // reset counter for next block (to be sent/received)
 
 			l_owner = PVMAP(l-nb, mycols);
-
 			// collect chunks of last row of K to "future" last node
-			// "current" last node sends smaller chunks until 0
-			MPI_Igatherv (&Klocal[l-nb][0], gather_count[rank], s_lastKr_chunk_resized, &lastKr[0][0], gather_count, gather_displacement, lastKr_chunk_resized, l_owner, comm, &mpi_request);
+			//MPI_Igather (&Klocal[l-nb][0], nb*mycols, MPI_DOUBLE, &lastKr[0][0], 1, lastKr_chunk_resized, l_owner, comm, &mpi_request);
+			MPI_Iallgatherv (&Klocal[l-nb][0], s_gather_count[rank], MPI_DOUBLE, &lastKr[0][0], gather_count, gather_displacement, lastKr_chunk_resized, comm, &mpi_request[0]);
 
 
 			//future last node broadcasts last rows and cols of K
@@ -371,14 +371,18 @@ test_output pvDGESV_CO_og_noind_smallest(int nb, int n, double** A, int m, doubl
 					}
 				}
 				// wait for gathering to complete
-				MPI_Wait(&mpi_request, &mpi_status);
+				//MPI_Wait(&mpi_request, &mpi_status);
 			}
 			// do not wait all for gather: only who has to broadcast
 			//MPI_Wait(&mpi_request, &mpi_status);
-			MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, l_owner, comm, &mpi_request);
+			MPI_Ibcast (&lastKc[0][0], n*nb, MPI_DOUBLE, l_owner, comm, &mpi_request[1]);
 
-			// decrease the size of next chunk from "current" last node
-			gather_count[l_owner]=gather_count[l_owner]-nb;
+			if (l % mycols == 0)
+			{
+				gather_count[l_owner+1]=0;
+				s_gather_count[l_owner+1]=0;
+			}
+
 		}
 	}
 
@@ -423,7 +427,7 @@ test_output pvDGESV_CO_og_noind_smallest(int nb, int n, double** A, int m, doubl
 		MPI_Gather (&xx[rank*myxxrows][0], m*myxxrows, MPI_DOUBLE, &xx[0][0], m*myxxrows, MPI_DOUBLE, 0, comm);
 	}
 
-	MPI_Wait(&mpi_request, &mpi_status);
+	MPI_Waitall(2, mpi_request, mpi_status);
 	MPI_Barrier(MPI_COMM_WORLD);
 
 	// cleanup
