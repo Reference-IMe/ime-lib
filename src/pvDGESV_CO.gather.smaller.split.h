@@ -19,7 +19,7 @@
  *	poor overlapping calc/comm
  *
  */
-test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm world_comm)
+test_output pvDGESV_CO_g_smaller_split(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm world_comm)
 {
 	/*
 	 * nb	blocking factor: number of adjacent column (block width)

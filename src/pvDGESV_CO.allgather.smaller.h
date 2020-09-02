@@ -19,7 +19,7 @@
  *	poor overlapping calc/comm
  *
  */
-test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm world_comm)
+test_output pvDGESV_CO_a_smaller(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
 	/*
 	 * nb	blocking factor: number of adjacent column (block width)
@@ -33,23 +33,14 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 	result.total_start_time = time(NULL);
 
     int rank, cprocs; //
-    MPI_Comm_rank(world_comm, &rank);		// get current process id
-    MPI_Comm_size(world_comm, &cprocs);	// get number of processes
-	MPI_Status  mpi_status;
-	MPI_Request mpi_request = MPI_REQUEST_NULL;
-
-	MPI_Comm comm;
-
-	int last_to_gather=cprocs-1;
-
-	if (rank<=last_to_gather)
-	{
-		MPI_Comm_split(world_comm, 0, rank, &comm);
-	}
-	else
-	{
-		MPI_Comm_split(world_comm, MPI_UNDEFINED, MPI_UNDEFINED, &comm);
-	}
+    MPI_Comm_rank(comm, &rank);		// get current process id
+    MPI_Comm_size(comm, &cprocs);	// get number of processes
+	//MPI_Status  mpi_status;
+	//MPI_Request mpi_request = MPI_REQUEST_NULL;
+	MPI_Status  mpi_status[2];
+	MPI_Request mpi_request[2];
+				mpi_request[0] = MPI_REQUEST_NULL; // req. for allgather
+				mpi_request[1] = MPI_REQUEST_NULL; // req. for broadcast
 
 	int i,j,l;						// general indexes
     int mycols   = n/cprocs;;		// num of cols per process
@@ -93,12 +84,7 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
     /*
      * MPI derived types
      */
-	// last cols of K
-	MPI_Datatype lastKc_col;
-	MPI_Type_vector (2*nb, 1, n, MPI_DOUBLE, & lastKc_col );
-	MPI_Type_commit (& lastKc_col);
-
-	// last rows of K (different type for s-end and r-eceive)
+	//
 	MPI_Datatype s_lastKr_chunk;
 	MPI_Type_vector (nb, mycols, mycols, MPI_DOUBLE, & s_lastKr_chunk );
 	MPI_Type_commit (& s_lastKr_chunk);
@@ -108,10 +94,6 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 	MPI_Type_commit (& r_lastKr_chunk);
 
 	// proper resizing for gathering
-	MPI_Datatype lastKc_col_resized;
-	MPI_Type_create_resized (lastKc_col, 0, 1*sizeof(double), & lastKc_col_resized);
-	MPI_Type_commit (& lastKc_col_resized);
-
 	MPI_Datatype r_lastKr_chunk_resized;
 	MPI_Type_create_resized (r_lastKr_chunk, 0, mycols*sizeof(double), & r_lastKr_chunk_resized);
 	MPI_Type_commit (& r_lastKr_chunk_resized);
@@ -126,11 +108,26 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 	MPI_Type_create_resized (xx_chunk, 0, nb*m*sizeof(double), & xx_chunk_resized);
 	MPI_Type_commit (& xx_chunk_resized);
 
+	int* s_gather_count;
+		 s_gather_count=malloc(cprocs*sizeof(int));
+
+	int* gather_count;
+		 gather_count=malloc(cprocs*sizeof(int));
+
+	int* gather_displacement;
+		 gather_displacement=malloc(cprocs*sizeof(int));
+
+		 for (i=0; i<cprocs; i++)
+		 {
+			gather_displacement[i]=i;
+			gather_count[i]=1;
+			s_gather_count[i]=nb*mycols;
+		 }
     /*
 	 *  init inhibition table
 	 */
 	DGEZR(xx, n, m);												// init (zero) solution vectors
-	pvDGEIT_CX(A, Tlocal, lastK, n, nb, world_comm, rank, cprocs);	// init inhibition table
+	pvDGEIT_CX(A, Tlocal, lastK, n, nb, comm, rank, cprocs);	// init inhibition table
 
 	/*
 	MPI_Barrier(MPI_COMM_WORLD);
@@ -161,8 +158,6 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 	int l_owner;				// rank holding the column l
 	int gi;						// global index
 	//TODO: pre-calc other values..
-
-
 
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
@@ -202,7 +197,7 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 		}
 
 		// wait for new last rows and cols before computing helpers
-		if (current_last==nb-1) MPI_Wait(&mpi_request, &mpi_status);
+		if (current_last==nb-1) MPI_Waitall(2, mpi_request, mpi_status);
 		// TODO: check performance penalty by skipping MPI_wait with an 'if' for non due cases (inside the blocking factor) or not
 
 		// update helpers
@@ -359,19 +354,9 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 			current_last=nb-1; // reset counter for next block (to be sent/received)
 
 			l_owner = PVMAP(l-nb, mycols);
-			// collect chunks of last row of K to "future" last node
-			//MPI_Igather (&Klocal[l-nb][0], nb*mycols, MPI_DOUBLE, &lastKr[0][0], 1, r_lastKr_chunk_resized, l_owner, comm, &mpi_request);
-			//MPI_Iallgatherv (&Klocal[l-nb][0], s_gather_count[rank], MPI_DOUBLE, &lastKr[0][0], gather_count, gather_displacement, lastKr_chunk_resized, comm, &mpi_request[0]);
-			if (rank<=last_to_gather)
-			{
-				//printf("%d<=%d:%d\n",rank,last_to_gather,l);
-				MPI_Igather (&Klocal[l-nb][0], nb*mycols, MPI_DOUBLE, &lastKr[0][0], 1, r_lastKr_chunk_resized, l_owner, comm, &mpi_request);
-			}
-			else
-			{
-				mpi_request=MPI_REQUEST_NULL;
-			}
 
+			// collect chunks of last row of K to "future" last node
+			MPI_Iallgatherv (&Klocal[l-nb][0], s_gather_count[rank], MPI_DOUBLE, &lastKr[0][0], gather_count, gather_displacement, r_lastKr_chunk_resized, comm, &mpi_request[0]);
 
 			//future last node broadcasts last rows and cols of K
 			if (rank==l_owner)
@@ -384,24 +369,15 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 						lastKc[j][i]=Klocal[i][PVLOCAL(l-nb, mycols)+j];
 					}
 				}
-				// wait for gathering to complete
-				//MPI_Wait(&mpi_request, &mpi_status);
 			}
 			// do not wait all for gather: only who has to broadcast
-			MPI_Wait(&mpi_request, &mpi_status);
-			MPI_Ibcast (&lastK[0][0], l-1, lastKc_col_resized, l_owner, world_comm, &mpi_request);
+			//MPI_Wait(&mpi_request, &mpi_status);
+			MPI_Ibcast (&lastKc[0][0], n*nb, MPI_DOUBLE, l_owner, comm, &mpi_request[1]);
 
 			if (l % mycols == 0)
 			{
-				if (rank<last_to_gather)
-				{
-					MPI_Comm_split(world_comm, 0, rank, &comm);
-				}
-				else
-				{
-					MPI_Comm_split(world_comm, MPI_UNDEFINED, MPI_UNDEFINED, &comm);
-				}
-				last_to_gather--;
+				gather_count[l_owner+1]=0;
+				s_gather_count[l_owner+1]=0;
 			}
 
 		}
@@ -441,19 +417,21 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 	// MPI_IN_PLACE required for MPICH based versions
 	if (rank==0)
 	{
-		MPI_Gather (MPI_IN_PLACE, m*myxxrows, MPI_DOUBLE, &xx[0][0], m*myxxrows, MPI_DOUBLE, 0, world_comm);
+		MPI_Gather (MPI_IN_PLACE, m*myxxrows, MPI_DOUBLE, &xx[0][0], m*myxxrows, MPI_DOUBLE, 0, comm);
 	}
 	else
 	{
-		MPI_Gather (&xx[rank*myxxrows][0], m*myxxrows, MPI_DOUBLE, &xx[0][0], m*myxxrows, MPI_DOUBLE, 0, world_comm);
+		MPI_Gather (&xx[rank*myxxrows][0], m*myxxrows, MPI_DOUBLE, &xx[0][0], m*myxxrows, MPI_DOUBLE, 0, comm);
 	}
 
-	MPI_Wait(&mpi_request, &mpi_status);
+	MPI_Waitall(2, mpi_request, mpi_status);
 	MPI_Barrier(MPI_COMM_WORLD);
 
 	// cleanup
 	NULLFREE(lastKc);
 	NULLFREE(lastKr);
+	NULLFREE(gather_displacement);
+	NULLFREE(gather_count);
 
 	DeallocateMatrix2D(lastK,2*nb,CONTIGUOUS);
 	DeallocateVector(h);

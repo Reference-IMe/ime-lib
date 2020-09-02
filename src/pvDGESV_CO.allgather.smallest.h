@@ -35,8 +35,6 @@ test_output pvDGESV_CO_a_smallest(int nb, int n, double** A, int m, double** bb,
     int rank, cprocs; //
     MPI_Comm_rank(comm, &rank);		// get current process id
     MPI_Comm_size(comm, &cprocs);	// get number of processes
-	//MPI_Status  mpi_status;
-	//MPI_Request mpi_request = MPI_REQUEST_NULL;
 	MPI_Status  mpi_status[2];
 	MPI_Request mpi_request[2];
 				mpi_request[0] = MPI_REQUEST_NULL; // req. for allgather
@@ -83,31 +81,32 @@ test_output pvDGESV_CO_a_smallest(int nb, int n, double** A, int m, double** bb,
     /*
      * MPI derived types
      */
+	// last cols of K
+	MPI_Datatype lastKc_col;
+	MPI_Type_vector (nb, 1, n, MPI_DOUBLE, & lastKc_col );
+	MPI_Type_commit (& lastKc_col);
 
-	MPI_Datatype lastK_payload;
-	MPI_Type_vector (nb, 1, n, MPI_DOUBLE, & lastK_payload );
-	MPI_Type_commit (& lastK_payload);
-	//
+	// last rows of K (different type for s-end and r-eceive)
 	MPI_Datatype s_lastKr_chunk;
 	MPI_Type_vector (nb, 1, mycols, MPI_DOUBLE, & s_lastKr_chunk );
 	MPI_Type_commit (& s_lastKr_chunk);
 
-	MPI_Datatype lastKr_chunk;
-	MPI_Type_vector (nb, 1, n, MPI_DOUBLE, & lastKr_chunk );
-	MPI_Type_commit (& lastKr_chunk);
+	MPI_Datatype r_lastKr_chunk;
+	MPI_Type_vector (nb, 1, n, MPI_DOUBLE, & r_lastKr_chunk );
+	MPI_Type_commit (& r_lastKr_chunk);
 
 	// proper resizing for gathering
-	MPI_Datatype lastK_payload_resized;
-	MPI_Type_create_resized (lastK_payload, 0, 1*sizeof(double), & lastK_payload_resized);
-	MPI_Type_commit (& lastK_payload_resized);
+	MPI_Datatype lastKc_col_resized;
+	MPI_Type_create_resized (lastKc_col, 0, 1*sizeof(double), & lastKc_col_resized);
+	MPI_Type_commit (& lastKc_col_resized);
 
 	MPI_Datatype s_lastKr_chunk_resized;
 	MPI_Type_create_resized (s_lastKr_chunk, 0, 1*sizeof(double), & s_lastKr_chunk_resized);
 	MPI_Type_commit (& s_lastKr_chunk_resized);
 
-	MPI_Datatype lastKr_chunk_resized;
-	MPI_Type_create_resized (lastKr_chunk, 0, 1*sizeof(double), & lastKr_chunk_resized);
-	MPI_Type_commit (& lastKr_chunk_resized);
+	MPI_Datatype r_lastKr_chunk_resized;
+	MPI_Type_create_resized (r_lastKr_chunk, 0, 1*sizeof(double), & r_lastKr_chunk_resized);
+	MPI_Type_commit (& r_lastKr_chunk_resized);
 
 	// rows of xx to be extracted
 	MPI_Datatype xx_chunk;
@@ -368,7 +367,7 @@ test_output pvDGESV_CO_a_smallest(int nb, int n, double** A, int m, double** bb,
 
 			// collect chunks of last row of K to "future" last node
 			// "current" last node sends smaller chunks until 0
-			MPI_Iallgatherv (&Klocal[l-nb][0], gather_count[rank], s_lastKr_chunk_resized, &lastKr[0][0], gather_count, gather_displacement, lastKr_chunk_resized, comm, &mpi_request[0]);
+			MPI_Iallgatherv (&Klocal[l-nb][0], gather_count[rank], s_lastKr_chunk_resized, &lastKr[0][0], gather_count, gather_displacement, r_lastKr_chunk_resized, comm, &mpi_request[0]);
 
 
 			//future last node broadcasts last rows and cols of K
@@ -382,12 +381,10 @@ test_output pvDGESV_CO_a_smallest(int nb, int n, double** A, int m, double** bb,
 						lastKc[j][i]=Klocal[i][PVLOCAL(l-nb, mycols)+j];
 					}
 				}
-				// wait for gathering to complete
-				//MPI_Wait(&mpi_request, &mpi_status);
 			}
 			// do not wait all for gather: only who has to broadcast
 			//MPI_Wait(&mpi_request, &mpi_status);
-			MPI_Ibcast (&lastKc[0][0], l-1, lastK_payload_resized, l_owner, comm, &mpi_request[1]);
+			MPI_Ibcast (&lastKc[0][0], l-1, lastKc_col_resized, l_owner, comm, &mpi_request[1]);
 
 			// decrease the size of next chunk from "current" last node
 			gather_count[l_owner]=gather_count[l_owner]-nb;
