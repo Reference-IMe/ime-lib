@@ -228,7 +228,7 @@ test_output pvDGESV_CO_g_smaller(int nb, int n, double** A, int m, double** bb, 
 				}
 			}
 			// containing first diagonal element
-			for (i=firstdiag; i<firstdiag+mycols; i++)
+			for (i=firstdiag; i<firstdiag+l_col; i++)
 			{//columns:
 				// before diagonal element (K values)
 				for (j=0; j<(i-firstdiag); j++)
@@ -256,7 +256,7 @@ test_output pvDGESV_CO_g_smaller(int nb, int n, double** A, int m, double** bb, 
 
 			}
 			// remaining
-			for (i=firstdiag+mycols; i<=l-1; i++)
+			for (i=firstdiag+l_col; i<=l-1; i++)
 			{
 				// before column l (K values)
 				for (j=0; j<l_col; j++)
@@ -276,8 +276,11 @@ test_output pvDGESV_CO_g_smaller(int nb, int n, double** A, int m, double** bb, 
 		}
 		else										// proc. NOT containing column l
 		{//rows:
+			int very_last_row;
+			very_last_row=MIN((firstdiag+mycols),l);
+
 			// before first diagonal element
-			for (i=0; i<firstdiag; i++)
+			for (i=0; i<MIN(firstdiag,l); i++)
 			{//columns:
 				// before column l (K values)
 				for (j=0; j<l_col; j++)
@@ -292,7 +295,7 @@ test_output pvDGESV_CO_g_smaller(int nb, int n, double** A, int m, double** bb, 
 				}
 			}
 			// containing first diagonal element
-			for (i=firstdiag; i<firstdiag+mycols; i++)
+			for (i=firstdiag; i<very_last_row; i++)
 			{//columns:
 				// before diagonal element (K values)
 				for (j=0; j<(i-firstdiag); j++)
@@ -310,7 +313,7 @@ test_output pvDGESV_CO_g_smaller(int nb, int n, double** A, int m, double** bb, 
 				}
 			}
 			// remaining
-			for (i=firstdiag+mycols; i<=l-1; i++)
+			for (i=very_last_row; i<=l-1; i++)
 			{
 				// before column l (K values)
 				for (j=0; j<l_col; j++)

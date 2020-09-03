@@ -39,7 +39,7 @@
 								sdsfree(test_output_file_name);
 
 #define PVLOCAL(col_index, num_of_cols) col_index-((col_index)/(num_of_cols))*(num_of_cols)
-#define PVMAP(col_index, num_of_cols) (col_index)/(num_of_cols)
+#define PVMAP(col_index, num_of_cols) ((col_index)/(num_of_cols))
 #define PVGLOBAL(col_index, num_of_cols, mpi_rank) col_index+(num_of_cols)*(mpi_rank)
 
 #define IS_MULT(a, b) ((a % b)==0)

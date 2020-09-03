@@ -19,7 +19,7 @@
  *	poor overlapping calc/comm
  *
  */
-test_output pvDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
 	/*
 	 * nb	blocking factor: number of adjacent column (block width)
@@ -35,9 +35,10 @@ test_output pvDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
     int rank, cprocs; //
     MPI_Comm_rank(comm, &rank);		// get current process id
     MPI_Comm_size(comm, &cprocs);	// get number of processes
-	MPI_Status  mpi_status;
-	MPI_Request mpi_request = MPI_REQUEST_NULL;
-
+	MPI_Status  mpi_status[2];
+	MPI_Request mpi_request[2];
+				mpi_request[0] = MPI_REQUEST_NULL; // req. for allgather
+				mpi_request[1] = MPI_REQUEST_NULL; // req. for broadcast
 	int i,j,l;						// general indexes
     int mycols   = n/cprocs;;		// num of cols per process
     int myxxrows = mycols;			// num of chunks for better code readability
@@ -80,23 +81,32 @@ test_output pvDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
     /*
      * MPI derived types
      */
-	//
+	// last cols of K
+	MPI_Datatype lastKc_col;
+	MPI_Type_vector (nb, 1, n, MPI_DOUBLE, & lastKc_col );
+	MPI_Type_commit (& lastKc_col);
+
+	// last rows of K (different type for s-end and r-eceive)
 	MPI_Datatype s_lastKr_chunk;
 	MPI_Type_vector (nb, 1, mycols, MPI_DOUBLE, & s_lastKr_chunk );
 	MPI_Type_commit (& s_lastKr_chunk);
 
-	MPI_Datatype lastKr_chunk;
-	MPI_Type_vector (nb, 1, n, MPI_DOUBLE, & lastKr_chunk );
-	MPI_Type_commit (& lastKr_chunk);
+	MPI_Datatype r_lastKr_chunk;
+	MPI_Type_vector (nb, 1, n, MPI_DOUBLE, & r_lastKr_chunk );
+	MPI_Type_commit (& r_lastKr_chunk);
 
 	// proper resizing for gathering
+	MPI_Datatype lastKc_col_resized;
+	MPI_Type_create_resized (lastKc_col, 0, 1*sizeof(double), & lastKc_col_resized);
+	MPI_Type_commit (& lastKc_col_resized);
+
 	MPI_Datatype s_lastKr_chunk_resized;
 	MPI_Type_create_resized (s_lastKr_chunk, 0, 1*sizeof(double), & s_lastKr_chunk_resized);
 	MPI_Type_commit (& s_lastKr_chunk_resized);
 
-	MPI_Datatype lastKr_chunk_resized;
-	MPI_Type_create_resized (lastKr_chunk, 0, 1*sizeof(double), & lastKr_chunk_resized);
-	MPI_Type_commit (& lastKr_chunk_resized);
+	MPI_Datatype r_lastKr_chunk_resized;
+	MPI_Type_create_resized (r_lastKr_chunk, 0, 1*sizeof(double), & r_lastKr_chunk_resized);
+	MPI_Type_commit (& r_lastKr_chunk_resized);
 
 	// rows of xx to be extracted
 	MPI_Datatype xx_chunk;
@@ -155,7 +165,8 @@ test_output pvDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 	int current_last=nb-1;		// index for the current last row or col of K in buffer
 	int firstdiag=rank*mycols;	// (global) position of the first diagonal element on this rank
 	int l_col;					// (local) position of the column l
-	int l_owner;				// rank holding the column l
+	int l_rank_future;			// rank holding the next (in future) block of last nb column
+	int l_rank;					// rank holdinh the current l column
 	int gi;						// global index
 	//TODO: pre-calc other values..
 
@@ -176,11 +187,14 @@ test_output pvDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 		}
 		*/
 
-		//TODO: avoid if?
-		if (rank==PVMAP(l, mycols)) // if a process contains the last rows/cols, must skip it
+		l_col  = PVLOCAL(l, mycols);
+		l_rank = PVMAP(l, mycols);
+
+		if (rank==l_rank) // if a process contains the last rows/cols, must skip it
 		{
 			myxxstart--;
 		}
+		//TODO: avoid if?
 
 		// update solutions
 		// l .. n-1
@@ -196,7 +210,7 @@ test_output pvDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 		}
 
 		// wait for new last rows and cols before computing helpers
-		if (current_last==nb-1) MPI_Wait(&mpi_request, &mpi_status);
+		if (current_last==nb-1) MPI_Waitall(2, mpi_request, mpi_status);
 		// TODO: check performance penalty by skipping MPI_wait with an 'if' for non due cases (inside the blocking factor) or not
 
 		// update helpers
@@ -210,16 +224,13 @@ test_output pvDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 			}
 		}
 
-
-		l_col=PVLOCAL(l, mycols);
-
 		// must differentiate topological formula on special column l
 		//
-		if (rank==PVMAP(l, mycols))			// proc. containing column l
+		if (rank==l_rank)			// proc. containing column l
 		{//rows:
-			// before first diagonal element
-			for (i=0; i<firstdiag; i++)
-			{//columns:
+			// remaining
+			for (i=firstdiag+l_col; i<=l-1; i++)
+			{
 				// before column l (K values)
 				for (j=0; j<l_col; j++)
 				{
@@ -247,7 +258,7 @@ test_output pvDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 				// diagonal element (X value)
 				Xlocal[i][i-firstdiag]=Xlocal[i][i-firstdiag]*h[i];
 
-				// // after diagonal element and before column l (K values)
+				// after diagonal element and before column l (K values)
 				for (j=i-firstdiag+1; j<l_col; j++)
 				{
 					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
@@ -261,11 +272,10 @@ test_output pvDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 				{
 					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
 				}
-
 			}
-			// remaining
-			for (i=firstdiag+l_col; i<=l-1; i++)
-			{
+			// before first diagonal element
+			for (i=0; i<firstdiag; i++)
+			{//columns:
 				// before column l (K values)
 				for (j=0; j<l_col; j++)
 				{
@@ -287,9 +297,9 @@ test_output pvDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 			int very_last_row;
 			very_last_row=MIN((firstdiag+mycols),l);
 
-			// before first diagonal element
-			for (i=0; i<MIN(firstdiag,l); i++)
-			{//columns:
+			// remaining
+			for (i=very_last_row; i<=l-1; i++)
+			{
 				// before column l (K values)
 				for (j=0; j<l_col; j++)
 				{
@@ -320,9 +330,9 @@ test_output pvDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
 				}
 			}
-			// remaining
-			for (i=very_last_row; i<=l-1; i++)
-			{
+			// before first diagonal element
+			for (i=0; i<firstdiag; i++)
+			{//columns:
 				// before column l (K values)
 				for (j=0; j<l_col; j++)
 				{
@@ -336,7 +346,6 @@ test_output pvDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 				}
 			}
 		}
-
 
 		///////// update local copy of global last rows and cols of K
 		if (current_last>0) // block of last rows (cols) not completely scanned
@@ -353,17 +362,18 @@ test_output pvDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 		}
 		else // block of last rows (cols) completely scanned
 		{
+			//TODO: re-shuffle lines for a minimal ovarlap calc/comm
 			current_last=nb-1; // reset counter for next block (to be sent/received)
 
-			l_owner = PVMAP(l-nb, mycols);
+			l_rank_future = PVMAP(l-nb, mycols);
 
 			// collect chunks of last row of K to "future" last node
 			// "current" last node sends smaller chunks until 0
-			MPI_Igatherv (&Klocal[l-nb][0], gather_count[rank], s_lastKr_chunk_resized, &lastKr[0][0], gather_count, gather_displacement, lastKr_chunk_resized, l_owner, comm, &mpi_request);
+			MPI_Iallgatherv (&Klocal[l-nb][0], gather_count[rank], s_lastKr_chunk_resized, &lastKr[0][0], gather_count, gather_displacement, r_lastKr_chunk_resized, comm, &mpi_request[0]);
 
 
 			//future last node broadcasts last rows and cols of K
-			if (rank==l_owner)
+			if (rank==l_rank_future)
 			{
 				// copy data into local buffer before broadcast
 				for(j=0;j<nb;j++)
@@ -373,15 +383,13 @@ test_output pvDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 						lastKc[j][i]=Klocal[i][PVLOCAL(l-nb, mycols)+j];
 					}
 				}
-				// wait for gathering to complete
-				MPI_Wait(&mpi_request, &mpi_status);
 			}
 			// do not wait all for gather: only who has to broadcast
 			//MPI_Wait(&mpi_request, &mpi_status);
-			MPI_Ibcast (&lastK[0][0], 2*n*nb, MPI_DOUBLE, l_owner, comm, &mpi_request);
+			MPI_Ibcast (&lastKc[0][0], l-1, lastKc_col_resized, l_rank_future, comm, &mpi_request[1]);
 
 			// decrease the size of next chunk from "current" last node
-			gather_count[l_owner]=gather_count[l_owner]-nb;
+			gather_count[l_rank_future]=gather_count[l_rank_future]-nb;
 		}
 	}
 
@@ -426,7 +434,7 @@ test_output pvDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 		MPI_Gather (&xx[rank*myxxrows][0], m*myxxrows, MPI_DOUBLE, &xx[0][0], m*myxxrows, MPI_DOUBLE, 0, comm);
 	}
 
-	MPI_Wait(&mpi_request, &mpi_status);
+	MPI_Waitall(2, mpi_request, mpi_status);
 	MPI_Barrier(MPI_COMM_WORLD);
 
 	// cleanup
