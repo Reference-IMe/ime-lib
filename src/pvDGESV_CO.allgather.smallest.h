@@ -165,7 +165,8 @@ test_output pvDGESV_CO_a_smallest(int nb, int n, double** A, int m, double** bb,
 	int current_last=nb-1;		// index for the current last row or col of K in buffer
 	int firstdiag=rank*mycols;	// (global) position of the first diagonal element on this rank
 	int l_col;					// (local) position of the column l
-	int l_owner;				// rank holding the column l
+	int l_rank_future;			// rank holding the next (in future) block of last nb column
+	int l_rank;					// rank holdinh the current l column
 	int gi;						// global index
 	//TODO: pre-calc other values..
 
@@ -186,11 +187,14 @@ test_output pvDGESV_CO_a_smallest(int nb, int n, double** A, int m, double** bb,
 		}
 		*/
 
-		//TODO: avoid if?
-		if (rank==PVMAP(l, mycols)) // if a process contains the last rows/cols, must skip it
+		l_col  = PVLOCAL(l, mycols);
+		l_rank = PVMAP(l, mycols);
+
+		if (rank==l_rank) // if a process contains the last rows/cols, must skip it
 		{
 			myxxstart--;
 		}
+		//TODO: avoid if?
 
 		// update solutions
 		// l .. n-1
@@ -220,16 +224,14 @@ test_output pvDGESV_CO_a_smallest(int nb, int n, double** A, int m, double** bb,
 			}
 		}
 
-
-		l_col=PVLOCAL(l, mycols);
-
 		// must differentiate topological formula on special column l
 		//
-		if (rank==PVMAP(l, mycols))			// proc. containing column l
+		if (rank==l_rank)			// proc. containing column l
 		{//rows:
 			// before first diagonal element
 			for (i=0; i<firstdiag; i++)
 			{//columns:
+				//printf("AA (%d) %d:%d\n",rank,l,i);
 				// before column l (K values)
 				for (j=0; j<l_col; j++)
 				{
@@ -246,8 +248,10 @@ test_output pvDGESV_CO_a_smallest(int nb, int n, double** A, int m, double** bb,
 				}
 			}
 			// containing first diagonal element
-			for (i=firstdiag; i<firstdiag+mycols; i++)
+			for (i=firstdiag; i<firstdiag+l_col; i++)
 			{//columns:
+				//printf("BB (%d) %d:%d\n",rank,l,i);
+
 				// before diagonal element (K values)
 				for (j=0; j<(i-firstdiag); j++)
 				{
@@ -257,7 +261,7 @@ test_output pvDGESV_CO_a_smallest(int nb, int n, double** A, int m, double** bb,
 				// diagonal element (X value)
 				Xlocal[i][i-firstdiag]=Xlocal[i][i-firstdiag]*h[i];
 
-				// // after diagonal element and before column l (K values)
+				// after diagonal element and before column l (K values)
 				for (j=i-firstdiag+1; j<l_col; j++)
 				{
 					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
@@ -271,11 +275,11 @@ test_output pvDGESV_CO_a_smallest(int nb, int n, double** A, int m, double** bb,
 				{
 					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
 				}
-
 			}
 			// remaining
-			for (i=firstdiag+mycols; i<=l-1; i++)
+			for (i=firstdiag+l_col; i<=l-1; i++)
 			{
+				//printf("CC (%d) %d:%d\n",rank,l,i);
 				// before column l (K values)
 				for (j=0; j<l_col; j++)
 				{
@@ -294,9 +298,13 @@ test_output pvDGESV_CO_a_smallest(int nb, int n, double** A, int m, double** bb,
 		}
 		else										// proc. NOT containing column l
 		{//rows:
+			int very_last_row;
+			very_last_row=MIN((firstdiag+mycols),l);
+
 			// before first diagonal element
-			for (i=0; i<firstdiag; i++)
+			for (i=0; i<MIN(firstdiag,l); i++)
 			{//columns:
+				//printf("A (%d) %d:%d\n",rank,l,i);
 				// before column l (K values)
 				for (j=0; j<l_col; j++)
 				{
@@ -308,10 +316,12 @@ test_output pvDGESV_CO_a_smallest(int nb, int n, double** A, int m, double** bb,
 				{
 					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
 				}
+				//TODO: loop join
 			}
 			// containing first diagonal element
-			for (i=firstdiag; i<firstdiag+mycols; i++)
+			for (i=firstdiag; i<very_last_row; i++)
 			{//columns:
+				//printf("B (%d) %d:%d\n",rank,l,i);
 				// before diagonal element (K values)
 				for (j=0; j<(i-firstdiag); j++)
 				{
@@ -328,8 +338,9 @@ test_output pvDGESV_CO_a_smallest(int nb, int n, double** A, int m, double** bb,
 				}
 			}
 			// remaining
-			for (i=firstdiag+mycols; i<=l-1; i++)
+			for (i=very_last_row; i<=l-1; i++)
 			{
+				//printf("C (%d) %d:%d\n",rank,l,i);
 				// before column l (K values)
 				for (j=0; j<l_col; j++)
 				{
@@ -341,9 +352,9 @@ test_output pvDGESV_CO_a_smallest(int nb, int n, double** A, int m, double** bb,
 				{
 					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
 				}
+				//TODO: loop join
 			}
 		}
-
 
 		///////// update local copy of global last rows and cols of K
 		if (current_last>0) // block of last rows (cols) not completely scanned
@@ -363,7 +374,7 @@ test_output pvDGESV_CO_a_smallest(int nb, int n, double** A, int m, double** bb,
 			//TODO: re-shuffle lines for a minimal ovarlap calc/comm
 			current_last=nb-1; // reset counter for next block (to be sent/received)
 
-			l_owner = PVMAP(l-nb, mycols);
+			l_rank_future = PVMAP(l-nb, mycols);
 
 			// collect chunks of last row of K to "future" last node
 			// "current" last node sends smaller chunks until 0
@@ -371,7 +382,7 @@ test_output pvDGESV_CO_a_smallest(int nb, int n, double** A, int m, double** bb,
 
 
 			//future last node broadcasts last rows and cols of K
-			if (rank==l_owner)
+			if (rank==l_rank_future)
 			{
 				// copy data into local buffer before broadcast
 				for(j=0;j<nb;j++)
@@ -384,10 +395,10 @@ test_output pvDGESV_CO_a_smallest(int nb, int n, double** A, int m, double** bb,
 			}
 			// do not wait all for gather: only who has to broadcast
 			//MPI_Wait(&mpi_request, &mpi_status);
-			MPI_Ibcast (&lastKc[0][0], l-1, lastKc_col_resized, l_owner, comm, &mpi_request[1]);
+			MPI_Ibcast (&lastKc[0][0], l-1, lastKc_col_resized, l_rank_future, comm, &mpi_request[1]);
 
 			// decrease the size of next chunk from "current" last node
-			gather_count[l_owner]=gather_count[l_owner]-nb;
+			gather_count[l_rank_future]=gather_count[l_rank_future]-nb;
 		}
 	}
 
