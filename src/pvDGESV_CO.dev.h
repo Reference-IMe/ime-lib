@@ -232,27 +232,38 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 			for (i=l-1; i>=firstdiag+l_col; i--)
 			{
 				//printf("CC (%d) %d:%d\n",rank,l,i);
-				// before column l (K values)
-				for (j=0; j<l_col; j++)
+
+				// after column l (X values)
+				for (j=mycols-1; i>l_col; j--)
 				{
-					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
+					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
 				}
 
 				// column l (X value)
 				Xlocal[i][l_col]= - Xlocal[l][l_col]*hh[i];
 
-				// after column l (X values)
-				for (j=l_col+1; j<mycols; j++)
+				// before column l (K values)
+				for (j=l_col-1; j>=0; j--)
 				{
-					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
+					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
 				}
 			}
 			// containing first diagonal element
 			for (i=firstdiag+l_col-1; i>=firstdiag; i--)
 			{//columns:
 				//printf("BB (%d) %d:%d\n",rank,l,i);
-				// before diagonal element (K values)
-				for (j=0; j<(i-firstdiag); j++)
+
+				// after column l (X values)
+				for (j=mycols-1; j>l_col; j--)
+				{
+					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
+				}
+
+				// column l (X value)
+				Xlocal[i][l_col]= - Xlocal[l][l_col]*hh[i];
+
+				// after diagonal element and before column l (K values)
+				for (j=l_col-1; j>i-firstdiag; j--)
 				{
 					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
 				}
@@ -260,38 +271,30 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 				// diagonal element (X value)
 				Xlocal[i][i-firstdiag]=Xlocal[i][i-firstdiag]*h[i];
 
-				// after diagonal element and before column l (K values)
-				for (j=i-firstdiag+1; j<l_col; j++)
+				// before diagonal element (K values)
+				for (j=(i-firstdiag)-1; j>=0; j--)
 				{
 					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
-				}
-
-				// column l (X value)
-				Xlocal[i][l_col]= - Xlocal[l][l_col]*hh[i];
-
-				// after column l (X values)
-				for (j=l_col+1; j<mycols; j++)
-				{
-					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
 				}
 			}
 			// before first diagonal element
 			for (i=firstdiag-1; i>=0; i--)
 			{//columns:
 				//printf("AA (%d) %d:%d\n",rank,l,i);
-				// before column l (K values)
-				for (j=0; j<l_col; j++)
+
+				// after column l (X values)
+				for (j=mycols-1; j>l_col; j--)
 				{
-					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
+					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
 				}
 
 				// column l (X value)
 				Xlocal[i][l_col]= - Xlocal[l][l_col]*hh[i];
 
-				// after column l (X values)
-				for (j=l_col+1; j<mycols; j++)
+				// before column l (K values)
+				for (j=l_col-1; j>=0; j--)
 				{
-					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
+					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
 				}
 			}
 		}
@@ -304,16 +307,17 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 			for (i=l-1; i>=very_last_row; i--)
 			{
 				//printf("C (%d) %d:%d\n",rank,l,i);
-				// before column l (K values)
-				for (j=0; j<l_col; j++)
-				{
-					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
-				}
 
 				// after column l (X values)
-				for (j=l_col; j<mycols; j++)
+				for (j=mycols-1; j>=l_col; j--)
 				{
 					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
+				}
+
+				// before column l (K values)
+				for (j=l_col-1; j>=0; j--)
+				{
+					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
 				}
 				//TODO: loop join
 			}
@@ -321,8 +325,9 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 			for (i=very_last_row-1; i>=firstdiag; i--)
 			{//columns:
 				//printf("B (%d) %d:%d\n",rank,l,i);
-				// before diagonal element (K values)
-				for (j=0; j<(i-firstdiag); j++)
+
+				// after diagonal element (K values)
+				for (j=mycols-1; j>i-firstdiag; j--)
 				{
 					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
 				}
@@ -330,8 +335,8 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 				// diagonal element (X value)
 				Xlocal[i][i-firstdiag]=Xlocal[i][i-firstdiag]*h[i];
 
-				// after diagonal element (K values)
-				for (j=i-firstdiag+1; j<mycols; j++)
+				// before diagonal element (K values)
+				for (j=(i-firstdiag)-1; j>=0; j--)
 				{
 					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
 				}
@@ -340,16 +345,17 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 			for (i=MIN(firstdiag,l)-1; i>=0; i--)
 			{//columns:
 				//printf("A (%d) %d:%d\n",rank,l,i);
-				// before column l (K values)
-				for (j=0; j<l_col; j++)
-				{
-					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
-				}
 
 				// after column l (X values)
-				for (j=l_col; j<mycols; j++)
+				for (j=mycols-1; j>=l_col; j--)
 				{
 					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
+				}
+
+				// before column l (K values)
+				for (j=l_col-1; j>=0; j--)
+				{
+					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
 				}
 				//TODO: loop join
 			}
