@@ -9,15 +9,7 @@
 #include "pvDGEIT_CX.h"
 
 /*
- *	solve (SV) system with general (GE) matrix A of doubles (D)
- *	of order n and with m r.h.s in matrix bb[n,m] and solutions in xx[n,m]
- *	with:
- *	compact overwrite (CO) memory model
- *	parallelized in NON-interleaved columns (pv) over cprocs calculating processors
- *	parallelized initialization
- *	optimized loops
- *	poor overlapping calc/comm
- *
+ * initial tentative for an "early" version
  */
 test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
@@ -72,11 +64,11 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 				{
 					lastKc[i]=lastK[nb+i];					// alias for last col
 				}
-	// helper vectors
-    double* h;
-    		h=AllocateVector(n);
-    double* hh;
-			hh=AllocateVector(n);
+	// helper vectors (matrices indeed, one row for each level inside the block (of the blocking factor)
+	double** h_block;
+			 h_block=AllocateMatrix2D(nb,n,CONTIGUOUS);
+	double** hh_block;
+			 hh_block=AllocateMatrix2D(nb,n,CONTIGUOUS);
 
     /*
      * MPI derived types
@@ -168,6 +160,8 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 	int l_rank_future;			// rank holding the next (in future) block of last nb column
 	int l_rank;					// rank holdinh the current l column
 	int gi;						// global index
+	int l_block;				// inhibition level inside the block (of the blocking factor)
+
 	//TODO: pre-calc other values..
 
 	// all levels but last one (l=0)
@@ -209,20 +203,41 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 			}
 		}
 
-		// wait for new last rows and cols before computing helpers
-		if (current_last==nb-1) MPI_Waitall(2, mpi_request, mpi_status);
-		// TODO: check performance penalty by skipping MPI_wait with an 'if' for non due cases (inside the blocking factor) or not
-
-		// update helpers
-		for (i=0; i<=l-1; i++)
+		if (current_last==nb-1)
 		{
-			h[i]   = 1/(1-lastKc[current_last][i]*lastKr[current_last][i]);
-			hh[i]  = lastKc[current_last][i]*h[i];
-			for (rhs=0;rhs<m;rhs++)
+			MPI_Waitall(2, mpi_request, mpi_status);
+
+			l_block=l;
+			int cl;
+			for (cl=current_last; cl>=0; cl--) // for every row in the block
 			{
-				bb[i][rhs] = bb[i][rhs]-lastKr[current_last][i]*bb[l][rhs];
+				// update helpers
+				for (i=0; i<=l_block-1; i++)
+				{
+					h_block[cl][i]   = 1/(1-lastKc[cl][i]*lastKr[cl][i]);
+					hh_block[cl][i]  = lastKc[cl][i]*h_block[cl][i];
+				}
+				// update auxiliary quantities
+				for (i=0; i<=l_block-1; i++)
+				{
+					for (rhs=0;rhs<m;rhs++)
+					{
+						bb[i][rhs] = bb[i][rhs]-lastKr[cl][i]*bb[l_block][rhs];
+					}
+				}
+				for (i=0;i<cl;i++) // not executed for row 0
+				{
+					for (j=0; j<=l_block-1; j++)
+					{
+						lastKc[i][j]=lastKc[i][j]*h_block[cl][j]                      - lastKr[cl][l_block-cl+i]*hh_block[cl][j];
+						lastKr[i][j]=lastKr[i][j]*h_block[cl][l_block-cl+i] - lastKr[cl][j]                     *hh_block[cl][l_block-cl+i];
+					}
+				}
+				l_block--;
 			}
 		}
+
+		// TODO: insert EARLY gathering of last cols/rows
 
 		// must differentiate topological formula on special column l
 		//
@@ -236,16 +251,16 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 				// after column l (X values)
 				for (j=mycols-1; i>l_col; j--)
 				{
-					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
+					Xlocal[i][j]=Xlocal[i][j]*h_block[current_last][i] - Xlocal[l][j]*hh_block[current_last][i];
 				}
 
 				// column l (X value)
-				Xlocal[i][l_col]= - Xlocal[l][l_col]*hh[i];
+				Xlocal[i][l_col]= - Xlocal[l][l_col]*hh_block[current_last][i];
 
 				// before column l (K values)
 				for (j=l_col-1; j>=0; j--)
 				{
-					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
+					Klocal[i][j]=Klocal[i][j]*h_block[current_last][i] - Klocal[l][j]*hh_block[current_last][i];
 				}
 			}
 			// containing first diagonal element
@@ -256,25 +271,25 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 				// after column l (X values)
 				for (j=mycols-1; j>l_col; j--)
 				{
-					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
+					Xlocal[i][j]=Xlocal[i][j]*h_block[current_last][i] - Xlocal[l][j]*hh_block[current_last][i];
 				}
 
 				// column l (X value)
-				Xlocal[i][l_col]= - Xlocal[l][l_col]*hh[i];
+				Xlocal[i][l_col]= - Xlocal[l][l_col]*hh_block[current_last][i];
 
 				// after diagonal element and before column l (K values)
 				for (j=l_col-1; j>i-firstdiag; j--)
 				{
-					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
+					Klocal[i][j]=Klocal[i][j]*h_block[current_last][i] - Klocal[l][j]*hh_block[current_last][i];
 				}
 
 				// diagonal element (X value)
-				Xlocal[i][i-firstdiag]=Xlocal[i][i-firstdiag]*h[i];
+				Xlocal[i][i-firstdiag]=Xlocal[i][i-firstdiag]*h_block[current_last][i];
 
 				// before diagonal element (K values)
 				for (j=(i-firstdiag)-1; j>=0; j--)
 				{
-					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
+					Klocal[i][j]=Klocal[i][j]*h_block[current_last][i] - Klocal[l][j]*hh_block[current_last][i];
 				}
 			}
 			// before first diagonal element
@@ -285,16 +300,16 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 				// after column l (X values)
 				for (j=mycols-1; j>l_col; j--)
 				{
-					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
+					Xlocal[i][j]=Xlocal[i][j]*h_block[current_last][i] - Xlocal[l][j]*hh_block[current_last][i];
 				}
 
 				// column l (X value)
-				Xlocal[i][l_col]= - Xlocal[l][l_col]*hh[i];
+				Xlocal[i][l_col]= - Xlocal[l][l_col]*hh_block[current_last][i];
 
 				// before column l (K values)
 				for (j=l_col-1; j>=0; j--)
 				{
-					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
+					Klocal[i][j]=Klocal[i][j]*h_block[current_last][i] - Klocal[l][j]*hh_block[current_last][i];
 				}
 			}
 		}
@@ -311,13 +326,13 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 				// after column l (X values)
 				for (j=mycols-1; j>=l_col; j--)
 				{
-					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
+					Xlocal[i][j]=Xlocal[i][j]*h_block[current_last][i] - Xlocal[l][j]*hh_block[current_last][i];
 				}
 
 				// before column l (K values)
 				for (j=l_col-1; j>=0; j--)
 				{
-					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
+					Klocal[i][j]=Klocal[i][j]*h_block[current_last][i] - Klocal[l][j]*hh_block[current_last][i];
 				}
 				//TODO: loop join
 			}
@@ -329,16 +344,16 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 				// after diagonal element (K values)
 				for (j=mycols-1; j>i-firstdiag; j--)
 				{
-					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
+					Klocal[i][j]=Klocal[i][j]*h_block[current_last][i] - Klocal[l][j]*hh_block[current_last][i];
 				}
 
 				// diagonal element (X value)
-				Xlocal[i][i-firstdiag]=Xlocal[i][i-firstdiag]*h[i];
+				Xlocal[i][i-firstdiag]=Xlocal[i][i-firstdiag]*h_block[current_last][i];
 
 				// before diagonal element (K values)
 				for (j=(i-firstdiag)-1; j>=0; j--)
 				{
-					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
+					Klocal[i][j]=Klocal[i][j]*h_block[current_last][i] - Klocal[l][j]*hh_block[current_last][i];
 				}
 			}
 			// before first diagonal element
@@ -349,13 +364,13 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 				// after column l (X values)
 				for (j=mycols-1; j>=l_col; j--)
 				{
-					Xlocal[i][j]=Xlocal[i][j]*h[i] - Xlocal[l][j]*hh[i];
+					Xlocal[i][j]=Xlocal[i][j]*h_block[current_last][i] - Xlocal[l][j]*hh_block[current_last][i];
 				}
 
 				// before column l (K values)
 				for (j=l_col-1; j>=0; j--)
 				{
-					Klocal[i][j]=Klocal[i][j]*h[i] - Klocal[l][j]*hh[i];
+					Klocal[i][j]=Klocal[i][j]*h_block[current_last][i] - Klocal[l][j]*hh_block[current_last][i];
 				}
 				//TODO: loop join
 			}
@@ -364,14 +379,17 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 		///////// update local copy of global last rows and cols of K
 		if (current_last>0) // block of last rows (cols) not completely scanned
 		{
+			// useless because already done in block at the beginning
+			/*
 			for (i=0;i<current_last;i++)
 			{
 				for (j=0; j<=l-1; j++)
 				{
-					lastKc[i][j]=lastKc[i][j]*h[j]   - lastKr[current_last][l-current_last+i]*hh[j];
-					lastKr[i][j]=lastKr[i][j]*h[l-current_last+i] - lastKr[current_last][j]*hh[l-current_last+i];
+					lastKc[i][j]=lastKc[i][j]*h_block[current_last][j]   - lastKr[current_last][l-current_last+i]*hh_block[current_last][j];
+					lastKr[i][j]=lastKr[i][j]*h_block[current_last][l-current_last+i] - lastKr[current_last][j]*hh_block[current_last][l-current_last+i];
 				}
 			}
+			*/
 			current_last--; // update counter to point to the "future" last row (col) in the block
 		}
 		else // block of last rows (cols) completely scanned
@@ -458,8 +476,8 @@ test_output pvDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 	NULLFREE(gather_count);
 
 	DeallocateMatrix2D(lastK,2*nb,CONTIGUOUS);
-	DeallocateVector(h);
-	DeallocateVector(hh);
+	DeallocateMatrix2D(h_block,nb,CONTIGUOUS);
+	DeallocateMatrix2D(hh_block,nb,CONTIGUOUS);
 	DeallocateMatrix2D(Tlocal,n,CONTIGUOUS);
 
 	result.total_end_time = time(NULL);
