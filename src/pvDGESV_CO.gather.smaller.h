@@ -421,7 +421,7 @@ test_output pvDGESV_CO_g_smaller(int nb, int n, double** A, int m, double** bb, 
 	}
 
 	MPI_Wait(&mpi_request, &mpi_status);
-	MPI_Barrier(MPI_COMM_WORLD);
+	MPI_Barrier(comm);
 
 	// cleanup
 	NULLFREE(lastKc);
