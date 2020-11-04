@@ -357,7 +357,7 @@ test_output pviDGESV_WO_u3ae(int nb, int n, double** A, int m, double** bb, doub
 	*/
 
 	MPI_Waitall(2, mpi_request, mpi_status);
-	MPI_Barrier(MPI_COMM_WORLD);
+	MPI_Barrier(comm);
 
 	// cleanup
 	NULLFREE(local);
