@@ -122,7 +122,7 @@ test_output pviDGESV_WO_scalarization(int n, double** A, int m, double** bb, dou
 	 *  init inhibition table
 	 */
 	DGEZR(xx, n, m);															// init (zero) solution vectors
-	pDGEIT_WX(A, Tlocal, TlastK, n, comm, rank, cprocs, map, global, local);	// init inhibition table
+	pvDGEIT_WX(A, Tlocal, TlastK, n, comm, rank, cprocs, map, global, local);	// init inhibition table
 	//pDGEIT_W_async(A, Tlocal, TlastK, n, comm, rank, cprocs, map, global, local);// init inhibition table
     //MPI_Ibcast (&TlastK[0][0], n, MPI_DOUBLE, map[n-1], comm, &mpi_request);	// broadcast of the last col of T (K part)
     MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm);							// send all r.h.s to all procs

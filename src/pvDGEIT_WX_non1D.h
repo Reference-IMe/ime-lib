@@ -7,10 +7,10 @@
  *
  */
 
-#ifndef __pDGEIT_WX_H__
-#define __pDGEIT_WX_H__
+#ifndef __pvDGEIT_WX_H__
+#define __pvDGEIT_WX_H__
 
-void pDGEIT_WX(double** A, double** Xlocal, double** Klocal, double** lastK, int n, MPI_Comm comm, int rank, int cprocs, int* map, int* global, int* local)
+void pvDGEIT_WX(double** A, double** Xlocal, double** Klocal, double** lastK, int n, MPI_Comm comm, int rank, int cprocs, int* map, int* global, int* local)
 {
 	int i,j;
 

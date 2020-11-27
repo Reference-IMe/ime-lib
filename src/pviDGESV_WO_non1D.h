@@ -4,7 +4,7 @@
 #include "helpers/vector.h"
 #include "testers/tester_structures.h"
 #include "DGEZR.h"
-#include "pDGEIT_WX_non1D.h"
+#include "pvDGEIT_WX_non1D.h"
 
 /*
  *	solve (SV) system with general (GE) matrix A of doubles (D)
@@ -119,7 +119,7 @@ test_output pviDGESV_WO(int n, double** A, int m, double** bb, double** xx, MPI_
 	 *  init inhibition table
 	 */
 	DGEZR(xx, n, m);															// init (zero) solution vectors
-	pDGEIT_WX(A, Xlocal, Klocal, lastK, n, comm, rank, cprocs, map, global, local);	// init inhibition table
+	pvDGEIT_WX(A, Xlocal, Klocal, lastK, n, comm, rank, cprocs, map, global, local);	// init inhibition table
     MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm);							// send all r.h.s to all procs
 
 
