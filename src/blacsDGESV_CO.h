@@ -3,6 +3,16 @@
  *
  *  Created on: Jan 4, 2021
  *      Author: marcello
+ *
+ *      https://www.mathkeisan.com/UsersGuide/ScaLAPACK.cfm
+ *
+ *      Is there a way to extract the diagonal from a matrix with simple matrix operations
+ *      https://math.stackexchange.com/questions/1527670/is-there-a-way-to-extract-the-diagonal-from-a-matrix-with-simple-matrix-operatio
+ *      https://stackoverflow.com/questions/59007147/blas-routine-to-compute-diagonal-elements-only-of-a-matrix-product
+ *
+ *      rank-1 update
+ *      http://www.netlib.org/scalapack/explore-html/d9/d15/pdger___8c_source.html
+ *
  */
 
 #include <mpi.h>
@@ -42,6 +52,9 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 	int nr, nc;
 	double *A;
 	double *At;
+	double *X;
+	double *T;
+
 	int ncrhs, nrrhs;
 	double *B;
 	int ncrhst, nrrhst;
@@ -51,6 +64,8 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 	int descB_global[9];
 	int descA[9];
 	int descAt[9];
+	int descX[9];
+	int descT[9];
 	int descB[9];
 	int descBt[9];
 
@@ -65,6 +80,8 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 		lld = MAX( 1 , nr );
 		A  = malloc(nr*nc*sizeof(double));
 		At = malloc(nr*nc*sizeof(double));
+		X = malloc(nr*nc*sizeof(double));
+		T = malloc(nr*nc*sizeof(double));
 
 		ncrhs = numroc_( &m, &nb, &mycol, &i0, &npcol );
 		nrrhs = numroc_( &n, &nb, &myrow, &i0, &nprow );
@@ -80,6 +97,10 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 		// Descriptors (local)
 		descinit_( descA, &n, &n, &nb, &nb, &i0, &i0, &context, &lld, &info );
 		descinit_( descAt, &n, &n, &nb, &nb, &i0, &i0, &context, &lld, &info );
+
+		descinit_( descX, &n, &n, &nb, &nb, &i0, &i0, &context, &lld, &info );
+		descinit_( descT, &n, &n, &nb, &nb, &i0, &i0, &context, &lld, &info );
+
 		descinit_( descB, &n, &m, &nb, &nb, &i0, &i0, &context, &lld, &info );
 		descinit_( descBt, &m, &n, &nb, &nb, &i0, &i0, &context, &lldt, &info );
 
@@ -104,6 +125,52 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 		// spread matrices
 		pdgemr2d_(&n, &n, A_global, &i1, &i1, descA_global, A, &i1, &i1, descA, &context);
 		pdgemr2d_(&n, &m, B_global, &i1, &i1, descB_global, B, &i1, &i1, descB, &context);
+
+		// init X and K
+		/*
+		 * X=Diag(1/A)
+		 * K=(A.X)' = X'.A'  ::: factors in reverse order !
+		 *
+		 * T is the superposition of X and K after having set K[i,i]=0 (i=1..n)
+		 *
+		 * or, equivalently
+		 *
+		 * T=(X'.A') after having set A[i,i]=1 (i=1..n)
+		 */
+
+		int icol,irow,r,c;
+
+		// distributed init to 0 for mat X
+		pdlaset_("A", &n, &n, &d0, &d0, X, &i1, &i1, descX);
+
+		// initialize in parallel the local parts
+		//   of X (diagonal elements to the reciprocal of same elements in A)
+		//   of K (diagonal elements to "1")
+		for (i=1; i<=n; i++)
+		{
+			// https://info.gwdg.de/wiki/doku.php?id=wiki:hpc:scalapack
+			r    = indxg2l_(&i,&nb,&i0,&i0,&nprow);
+			irow = indxg2p_(&i,&nb,&i0,&i0,&nprow);
+			c    = indxg2l_(&i,&nb,&i0,&i0,&npcol);
+			icol = indxg2p_(&i,&nb,&i0,&i0,&npcol);
+			if (myrow==irow && mycol==icol)
+			{
+				X[c-1+(r-1)*lld]=1/A[c-1+(r-1)*lld];	// X=Diag(1/A)
+				A[c-1+(r-1)*lld]=1;						// A[i,i]=1 (i=1..n)
+			}
+		}
+
+		// X'.A' -> T
+		// do not transpose explicitly because pblas already does, but actual result is T'
+		pdgemm_("N", "N", &n, &n, &n, &d1, X, &i1, &i1, descX, A, &i1, &i1, descA, &d0, T, &i1, &i1, descT);
+		// transpose result ( (T')'=T -> A )
+		pdtran_(&n, &n, &d1, T, &i1, &i1, descT, &d0, A, &i1, &i1, descA);
+
+		pdgemr2d_(&n, &n, A, &i1, &i1, descA, A_global, &i1, &i1, descA_global, &context);
+		if (mpi_rank==0)
+		{
+			PrintMatrix1D(A_global,n,n);
+		}
 
 		// transpose system matrix
 		pdtran_(&n, &n, &d1, A, &i1, &i1, descA, &d0, At, &i1, &i1, descAt);
@@ -131,6 +198,10 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 		At = NULL;
 		B  = NULL;
 		Bt = NULL;
+
+		X  = NULL;
+		T = NULL;
+
 		ipiv = NULL;
 
 		result.core_start_time = time(NULL);
@@ -143,6 +214,10 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 	NULLFREE(At);
 	NULLFREE(B);
 	NULLFREE(Bt);
+
+	NULLFREE(X);
+	NULLFREE(T);
+
 	NULLFREE(ipiv);
 
 	MPI_Barrier(MPI_COMM_WORLD);
