@@ -179,29 +179,33 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 
 		pdlaset_("A", &i1, &n, &d1, &d1, J, &i1, &i1, descJ);
 
-		// last row in A (transposed)
-		//pdgemm_("N", "N", &n, &n, &i1, &d1, Tmp2, &i1, &n, descTmp2, J, &i1, &i1, descJ, &d0, A, &i1, &i1, descA);
+		int n_1=n-1;
+		double d1_ = -1;
 
-		// last col in A
-		pdgemm_("T", "N", &n, &n, &i1, &d1, J, &i1, &i1, descJ, Tmp2, &n, &i1, descTmp2, &d0, A, &i1, &i1, descA);
+		//pdlacpy_ ("A", &n, &n, Tmp2, &i1, &i1, descTmp2, A, &i1, &i1, descA);
 
-		// last col in Tmp1 (transposed)
-		//pdgemm_("T", "N", &n, &n, &i1, &d1, Tmp2, &n, &i1, descTmp2, J, &i1, &i1, descJ, &d0, Tmp1, &i1, &i1, descTmp1);
+		// a-b*c
+		pdger_( &n_1, &n_1, &d1_,
+				Tmp2, &i1, &n, descTmp2, &i1,
+				Tmp2, &n, &i1, descTmp2, &n,
+				Tmp2, &i1, &i1, descTmp2);
 
-		// last row in Tmp1
-		pdgemm_("T", "T", &n, &n, &i1, &d1, J, &i1, &i1, descJ, Tmp2, &i1, &n, descTmp2, &d0, Tmp1, &i1, &i1, descTmp1);
-
-		pdgemr2d_(&n, &n, Tmp1, &i1, &i1, descTmp1, A_global, &i1, &i1, descA_global, &context);
+		pdgemr2d_(&n, &n, Tmp2, &i1, &i1, descTmp2, A_global, &i1, &i1, descA_global, &context);
 		if (mpi_rank==0)
 		{
 			printf("\n");
 			PrintMatrix1D(A_global,n,n);
 		}
 
-		// b*c in At
-		pdgemm_("N", "N", &n, &n, &i1, &d1, Tmp2, &i1, &n, descTmp2, Tmp2, &n, &i1, descTmp2, &d0, At, &i1, &i1, descAt);
+		// last col in A
+		pdgemm_("T", "N", &n, &n, &i1, &d1, J, &i1, &i1, descJ, Tmp2, &n, &i1, descTmp2, &d0, A, &i1, &i1, descA);
+		//TODO: size n-1
 
-		pdgemr2d_(&n, &n, At, &i1, &i1, descAt, A_global, &i1, &i1, descA_global, &context);
+		// last row in Tmp1
+		pdgemm_("T", "T", &n, &n, &i1, &d1, J, &i1, &i1, descJ, Tmp2, &i1, &n, descTmp2, &d0, Tmp1, &i1, &i1, descTmp1);
+		//TODO: size n-1
+
+		pdgemr2d_(&n, &n, A, &i1, &i1, descA, A_global, &i1, &i1, descA_global, &context);
 		if (mpi_rank==0)
 		{
 			printf("\n");
@@ -214,14 +218,12 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 		{
 			for (j=0; j<nc; j++)
 			{
-				A[i*lld+j]=(Tmp2[i*lld+j]-At[i*lld+j])/(1-Tmp1[i*lld+j]*A[i*lld+j]);
-				//A[i*lld+j]=1/(1-Tmp1[i*lld+j]*A[i*lld+j]);
+				A[i*lld+j]=Tmp2[i*lld+j]/(1-Tmp1[i*lld+j]*A[i*lld+j]); // topological
+				//A[i*lld+j]=1/(1-Tmp1[i*lld+j]*A[i*lld+j]); // H only
+				//A[i*lld+j]=(Tmp2[i*lld+j]-At[i*lld+j]); // a-b*c only
 			}
 		}
-
-
-		//pdtran_(&n, &n, &d1, At, &i1, &i1, descAt, &d0, Tmp1, &i1, &i1, descTmp1);
-
+		//TODO: size n*(l-1)
 
 		pdgemr2d_(&n, &n, A, &i1, &i1, descA, A_global, &i1, &i1, descA_global, &context);
 		if (mpi_rank==0)
