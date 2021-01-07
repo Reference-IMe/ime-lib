@@ -178,8 +178,8 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 	int current_last=nb-1;		// index for the current last row or col of K in buffer
 	int firstdiag=mpi_rank_row*mycols;	// (global) position of the first diagonal element on this mpi_rank
 	int l_col;					// (local) position of the column l
-	int l_owner;				// rank holding the column l
-	int gi;						// global index
+	//int l_owner;				// rank holding the column l
+	//int gi;						// global index
 	//TODO: pre-calc other values..
 
 	// all levels but last one (l=0)

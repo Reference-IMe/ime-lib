@@ -40,7 +40,7 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 	 */
 
 	// general
-	int i;
+	int i,j;
 	int i0 = 0;
 	int i1 = 1;
 	double d0 = 0.0;
@@ -52,8 +52,9 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 	int nr, nc;
 	double *A;
 	double *At;
-	double *X;
-	double *T;
+	double *Tmp1;
+	double *Tmp2;
+	double *J;
 
 	int ncrhs, nrrhs;
 	double *B;
@@ -64,13 +65,16 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 	int descB_global[9];
 	int descA[9];
 	int descAt[9];
-	int descX[9];
-	int descT[9];
+	int descTmp1[9];
+	int descTmp2[9];
+	int descJ[9];
+
 	int descB[9];
 	int descBt[9];
 
 	int lld, lldt;
 
+	int ncj, nrj;
 
 	if (mpi_rank < cprocs)
 	{
@@ -80,8 +84,12 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 		lld = MAX( 1 , nr );
 		A  = malloc(nr*nc*sizeof(double));
 		At = malloc(nr*nc*sizeof(double));
-		X = malloc(nr*nc*sizeof(double));
-		T = malloc(nr*nc*sizeof(double));
+		Tmp1 = malloc(nr*nc*sizeof(double));
+		Tmp2 = malloc(nr*nc*sizeof(double));
+
+		ncj = numroc_( &n, &nb, &mycol, &i0, &npcol );
+		nrj = numroc_( &i1,  &nb, &myrow, &i0, &nprow );
+		J = malloc(ncj*nrj*sizeof(double));
 
 		ncrhs = numroc_( &m, &nb, &mycol, &i0, &npcol );
 		nrrhs = numroc_( &n, &nb, &myrow, &i0, &nprow );
@@ -98,8 +106,9 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 		descinit_( descA, &n, &n, &nb, &nb, &i0, &i0, &context, &lld, &info );
 		descinit_( descAt, &n, &n, &nb, &nb, &i0, &i0, &context, &lld, &info );
 
-		descinit_( descX, &n, &n, &nb, &nb, &i0, &i0, &context, &lld, &info );
-		descinit_( descT, &n, &n, &nb, &nb, &i0, &i0, &context, &lld, &info );
+		descinit_( descTmp1, &n, &n, &nb, &nb, &i0, &i0, &context, &lld, &info );
+		descinit_( descTmp2, &n, &n, &nb, &nb, &i0, &i0, &context, &lld, &info );
+		descinit_( descJ, &i1, &n, &nb, &nb, &i0, &i0, &context, &i1, &info );
 
 		descinit_( descB, &n, &m, &nb, &nb, &i0, &i0, &context, &lld, &info );
 		descinit_( descBt, &m, &n, &nb, &nb, &i0, &i0, &context, &lldt, &info );
@@ -140,8 +149,8 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 
 		int icol,irow,r,c;
 
-		// distributed init to 0 for mat X
-		pdlaset_("A", &n, &n, &d0, &d0, X, &i1, &i1, descX);
+		// distributed init to 0 for mat X (= Tmp1)
+		pdlaset_("A", &n, &n, &d0, &d0, Tmp1, &i1, &i1, descTmp1);
 
 		// initialize in parallel the local parts
 		//   of X (diagonal elements to the reciprocal of same elements in A)
@@ -155,20 +164,69 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 			icol = indxg2p_(&i,&nb,&i0,&i0,&npcol);
 			if (myrow==irow && mycol==icol)
 			{
-				X[c-1+(r-1)*lld]=1/A[c-1+(r-1)*lld];	// X=Diag(1/A)
+				Tmp1[c-1+(r-1)*lld]=1/A[c-1+(r-1)*lld];	// X=Diag(1/A)
 				A[c-1+(r-1)*lld]=1;						// A[i,i]=1 (i=1..n)
 			}
 		}
 
-		// X'.A' -> T
-		// do not transpose explicitly because pblas already does, but actual result is T'
-		pdgemm_("N", "N", &n, &n, &n, &d1, X, &i1, &i1, descX, A, &i1, &i1, descA, &d0, T, &i1, &i1, descT);
-		// transpose result ( (T')'=T -> A )
-		pdtran_(&n, &n, &d1, T, &i1, &i1, descT, &d0, A, &i1, &i1, descA);
+		// X'.A' -> T (= Tmp1'.A' -> Tmp2 )
+		// do not transpose operands explicitly because pblas already does, but actual result is T'
+		//pdgemm_("N", "N", &n, &n, &n, &d1, Tmp1, &i1, &i1, descTmp1, A, &i1, &i1, descA, &d0, Tmp2, &i1, &i1, descTmp2);
+		//pdtran_(&n, &n, &d1, Tmp2, &i1, &i1, descTmp2, &d0, A, &i1, &i1, descA); // transpose result ( (T')'=T -> A )
+
+		// or transpose operands and reverse order to have straight T (in Tmp2)
+		pdgemm_("T", "T", &n, &n, &n, &d1, A, &i1, &i1, descA, Tmp1, &i1, &i1, descTmp1, &d0, Tmp2, &i1, &i1, descTmp2);
+
+		pdlaset_("A", &i1, &n, &d1, &d1, J, &i1, &i1, descJ);
+
+		// last row in A (transposed)
+		//pdgemm_("N", "N", &n, &n, &i1, &d1, Tmp2, &i1, &n, descTmp2, J, &i1, &i1, descJ, &d0, A, &i1, &i1, descA);
+
+		// last col in A
+		pdgemm_("T", "N", &n, &n, &i1, &d1, J, &i1, &i1, descJ, Tmp2, &n, &i1, descTmp2, &d0, A, &i1, &i1, descA);
+
+		// last col in Tmp1 (transposed)
+		//pdgemm_("T", "N", &n, &n, &i1, &d1, Tmp2, &n, &i1, descTmp2, J, &i1, &i1, descJ, &d0, Tmp1, &i1, &i1, descTmp1);
+
+		// last row in Tmp1
+		pdgemm_("T", "T", &n, &n, &i1, &d1, J, &i1, &i1, descJ, Tmp2, &i1, &n, descTmp2, &d0, Tmp1, &i1, &i1, descTmp1);
+
+		pdgemr2d_(&n, &n, Tmp1, &i1, &i1, descTmp1, A_global, &i1, &i1, descA_global, &context);
+		if (mpi_rank==0)
+		{
+			printf("\n");
+			PrintMatrix1D(A_global,n,n);
+		}
+
+		// b*c in At
+		pdgemm_("N", "N", &n, &n, &i1, &d1, Tmp2, &i1, &n, descTmp2, Tmp2, &n, &i1, descTmp2, &d0, At, &i1, &i1, descAt);
+
+		pdgemr2d_(&n, &n, At, &i1, &i1, descAt, A_global, &i1, &i1, descA_global, &context);
+		if (mpi_rank==0)
+		{
+			printf("\n");
+			PrintMatrix1D(A_global,n,n);
+		}
+
+
+		// topological formula
+		for (i=0; i<nr; i++)
+		{
+			for (j=0; j<nc; j++)
+			{
+				A[i*lld+j]=(Tmp2[i*lld+j]-At[i*lld+j])/(1-Tmp1[i*lld+j]*A[i*lld+j]);
+				//A[i*lld+j]=1/(1-Tmp1[i*lld+j]*A[i*lld+j]);
+			}
+		}
+
+
+		//pdtran_(&n, &n, &d1, At, &i1, &i1, descAt, &d0, Tmp1, &i1, &i1, descTmp1);
+
 
 		pdgemr2d_(&n, &n, A, &i1, &i1, descA, A_global, &i1, &i1, descA_global, &context);
 		if (mpi_rank==0)
 		{
+			printf("\n");
 			PrintMatrix1D(A_global,n,n);
 		}
 
@@ -177,7 +235,7 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 
 		// linear system equations solver
 		result.core_start_time = time(NULL);
-		pdgesv_( &n, &m, At, &i1, &i1, descAt, ipiv, B, &i1, &i1, descB, &info );
+		//pdgesv_( &n, &m, At, &i1, &i1, descAt, ipiv, B, &i1, &i1, descB, &info );
 		result.core_end_time = time(NULL);
 		result.exit_code = info;
 
@@ -199,8 +257,8 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 		B  = NULL;
 		Bt = NULL;
 
-		X  = NULL;
-		T = NULL;
+		Tmp1  = NULL;
+		Tmp2 = NULL;
 
 		ipiv = NULL;
 
@@ -215,8 +273,8 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 	NULLFREE(B);
 	NULLFREE(Bt);
 
-	NULLFREE(X);
-	NULLFREE(T);
+	NULLFREE(Tmp1);
+	NULLFREE(Tmp2);
 
 	NULLFREE(ipiv);
 
