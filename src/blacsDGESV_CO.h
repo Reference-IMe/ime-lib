@@ -55,6 +55,8 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 	double *Tmp1;
 	double *Tmp2;
 	double *J;
+	double *diag;
+	double *lcol;
 
 	int ncrhs, nrrhs;
 	double *B;
@@ -86,6 +88,8 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 		At = malloc(nr*nc*sizeof(double));
 		Tmp1 = malloc(nr*nc*sizeof(double));
 		Tmp2 = malloc(nr*nc*sizeof(double));
+		diag = malloc(nr*sizeof(double));
+		lcol = malloc(nr*sizeof(double));
 
 		ncj = numroc_( &n, &nb, &mycol, &i0, &npcol );
 		nrj = numroc_( &i1,  &nb, &myrow, &i0, &nprow );
@@ -177,6 +181,14 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 		// or transpose operands and reverse order to have straight T (in Tmp2)
 		pdgemm_("T", "T", &n, &n, &n, &d1, A, &i1, &i1, descA, Tmp1, &i1, &i1, descTmp1, &d0, Tmp2, &i1, &i1, descTmp2);
 
+		pdgemr2d_(&n, &n, Tmp2, &i1, &i1, descTmp2, A_global, &i1, &i1, descA_global, &context);
+		if (mpi_rank==0)
+		{
+			printf("\n[%d]\n",n);
+			printf("(K)\n");
+			PrintMatrix1D(A_global,n,n);
+		}
+
 		pdlaset_("A", &i1, &n, &d1, &d1, J, &i1, &i1, descJ);
 
 		int n_1=n-1;
@@ -184,46 +196,160 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 
 		//pdlacpy_ ("A", &n, &n, Tmp2, &i1, &i1, descTmp2, A, &i1, &i1, descA);
 
-		// a-b*c
-		pdger_( &n_1, &n_1, &d1_,
-				Tmp2, &i1, &n, descTmp2, &i1,
-				Tmp2, &n, &i1, descTmp2, &n,
-				Tmp2, &i1, &i1, descTmp2);
+		int l;
+		int l_1;
+		int n_l;
+		int lp1;
 
-		pdgemr2d_(&n, &n, Tmp2, &i1, &i1, descTmp2, A_global, &i1, &i1, descA_global, &context);
-		if (mpi_rank==0)
+		l=n-2;
+		lp1=l;
+
+		for (l=n; l>1; l--)
 		{
-			printf("\n");
-			PrintMatrix1D(A_global,n,n);
-		}
+			l_1=l-1;
+			n_l=n-l;
+			/*
+			// a-b*c 1..l-1
+			pdger_( &l_1, &l_1, &d1_,
+					Tmp2, &i1, &n, descTmp2, &i1,
+					Tmp2, &n, &i1, descTmp2, &n,
+					Tmp2, &i1, &i1, descTmp2);
 
-		// last col in A
-		pdgemm_("T", "N", &n, &n, &i1, &d1, J, &i1, &i1, descJ, Tmp2, &n, &i1, descTmp2, &d0, A, &i1, &i1, descA);
-		//TODO: size n-1
+			// a-b*c
+			pdger_( &n_l, &l_1, &d1_,
+					Tmp2, &lp1, &n, descTmp2, &i1,
+					Tmp2, &n, &i1, descTmp2, &n,
+					Tmp2, &lp1, &i1, descTmp2);
+			*/
 
-		// last row in Tmp1
-		pdgemm_("T", "T", &n, &n, &i1, &d1, J, &i1, &i1, descJ, Tmp2, &i1, &n, descTmp2, &d0, Tmp1, &i1, &i1, descTmp1);
-		//TODO: size n-1
+			// last col in A
+			pdgemm_("T", "N", &n, &n, &i1, &d1, J, &i1, &i1, descJ, Tmp2, &l, &i1, descTmp2, &d0, A, &i1, &i1, descA);
+			//TODO: size n-1
 
-		pdgemr2d_(&n, &n, A, &i1, &i1, descA, A_global, &i1, &i1, descA_global, &context);
-		if (mpi_rank==0)
-		{
-			printf("\n");
-			PrintMatrix1D(A_global,n,n);
-		}
-
-
-		// topological formula
-		for (i=0; i<nr; i++)
-		{
-			for (j=0; j<nc; j++)
+			pdgemr2d_(&n, &n, A, &i1, &i1, descA, A_global, &i1, &i1, descA_global, &context);
+			if (mpi_rank==0)
 			{
-				A[i*lld+j]=Tmp2[i*lld+j]/(1-Tmp1[i*lld+j]*A[i*lld+j]); // topological
-				//A[i*lld+j]=1/(1-Tmp1[i*lld+j]*A[i*lld+j]); // H only
-				//A[i*lld+j]=(Tmp2[i*lld+j]-At[i*lld+j]); // a-b*c only
+				printf("\n[%d]\n",l-1);
+				printf("(col)\n");
+				PrintMatrix1D(A_global,n,n);
+			}
+
+			// last row in Tmp1
+			pdgemm_("T", "T", &n, &n, &i1, &d1, J, &i1, &i1, descJ, Tmp2, &i1, &l, descTmp2, &d0, Tmp1, &i1, &i1, descTmp1);
+			//TODO: size n-1
+
+			pdgemr2d_(&n, &n, Tmp1, &i1, &i1, descTmp1, A_global, &i1, &i1, descA_global, &context);
+			if (mpi_rank==0)
+			{
+				printf("(row)\n");
+				PrintMatrix1D(A_global,n,n);
+			}
+
+			// save diag
+			for (i=1; i<=l-1; i++)
+			{
+				// https://info.gwdg.de/wiki/doku.php?id=wiki:hpc:scalapack
+				r    = indxg2l_(&i,&nb,&i0,&i0,&nprow);
+				irow = indxg2p_(&i,&nb,&i0,&i0,&nprow);
+				c    = indxg2l_(&i,&nb,&i0,&i0,&npcol);
+				icol = indxg2p_(&i,&nb,&i0,&i0,&npcol);
+				if (myrow==irow && mycol==icol)
+				{
+					diag[r-1]=Tmp2[c-1+(r-1)*lld];
+				}
+			}
+			// save lcol
+			for (i=1; i<=l-1; i++)
+			{
+				// https://info.gwdg.de/wiki/doku.php?id=wiki:hpc:scalapack
+				/*
+				r    = indxg2l_(&i,&nb,&i0,&i0,&nprow);
+				irow = indxg2p_(&i,&nb,&i0,&i0,&nprow);
+				c    = indxg2l_(&l,&nb,&i0,&i0,&npcol);
+				icol = indxg2p_(&l,&nb,&i0,&i0,&npcol);
+				*/
+				// !! swapped indices !! transposition
+				r    = indxg2l_(&l,&nb,&i0,&i0,&nprow);
+				irow = indxg2p_(&l,&nb,&i0,&i0,&nprow);
+				c    = indxg2l_(&i,&nb,&i0,&i0,&npcol);
+				icol = indxg2p_(&i,&nb,&i0,&i0,&npcol);
+				if (myrow==irow && mycol==icol)
+				{
+					//lcol[r-1]=Tmp2[c-1+(r-1)*lld];
+					// !! swapped indices !! transposition
+					lcol[c-1]=Tmp2[r-1+(c-1)*lld];
+				}
+			}
+
+			// a-b*c
+			pdger_( &n, &l_1, &d1_,
+					Tmp2, &i1, &l, descTmp2, &i1,
+					Tmp2, &l, &i1, descTmp2, &n,
+					Tmp2, &i1, &i1, descTmp2);
+
+			pdgemr2d_(&n, &n, Tmp2, &i1, &i1, descTmp2, A_global, &i1, &i1, descA_global, &context);
+			if (mpi_rank==0)
+			{
+				printf("(-)\n");
+				PrintMatrix1D(A_global,l-1,n);
+			}
+
+			// restore diag
+			for (i=1; i<=l-1; i++)
+			{
+				//TODO: r=c
+				// https://info.gwdg.de/wiki/doku.php?id=wiki:hpc:scalapack
+				r    = indxg2l_(&i,&nb,&i0,&i0,&nprow);
+				irow = indxg2p_(&i,&nb,&i0,&i0,&nprow);
+				c    = indxg2l_(&i,&nb,&i0,&i0,&npcol);
+				icol = indxg2p_(&i,&nb,&i0,&i0,&npcol);
+				if (myrow==irow && mycol==icol)
+				{
+					Tmp2[c-1+(r-1)*lld]=diag[r-1];
+				}
+			}
+			// restore lcol
+			for (i=1; i<=l-1; i++)
+			{
+				// !! swapped indices !! transposition
+				// https://info.gwdg.de/wiki/doku.php?id=wiki:hpc:scalapack
+				r    = indxg2l_(&l,&nb,&i0,&i0,&nprow);
+				irow = indxg2p_(&l,&nb,&i0,&i0,&nprow);
+				c    = indxg2l_(&i,&nb,&i0,&i0,&npcol);
+				icol = indxg2p_(&i,&nb,&i0,&i0,&npcol);
+				if (myrow==irow && mycol==icol)
+				{
+					Tmp2[(r-1)+(c-1)*lld]=Tmp2[(r-1)+(c-1)*lld]-lcol[c-1];
+				}
+			}
+
+			pdgemr2d_(&n, &n, Tmp2, &i1, &i1, descTmp2, A_global, &i1, &i1, descA_global, &context);
+			if (mpi_rank==0)
+			{
+				printf("(K pre H)\n");
+				PrintMatrix1D(A_global,n,n);
+			}
+
+			// topological formula
+			for (i=0; i<nr; i++)
+			{
+				for (j=0; j<nc; j++)
+				{
+					Tmp2[i*lld+j]=Tmp2[i*lld+j]/(1-(Tmp1[i*lld+j]*A[i*lld+j])); // topological
+					//A[i*lld+j]=1/(1-Tmp1[i*lld+j]*A[i*lld+j]); // H only
+					//A[i*lld+j]=(Tmp2[i*lld+j]-At[i*lld+j]); // a-b*c only
+				}
+			}
+			//TODO: size n*(l-1)
+
+			pdgemr2d_(&n, &n, Tmp2, &i1, &i1, descTmp2, A_global, &i1, &i1, descA_global, &context);
+			if (mpi_rank==0)
+			{
+				printf("(K)\n");
+				PrintMatrix1D(A_global,l-1,n);
 			}
 		}
-		//TODO: size n*(l-1)
+
 
 		pdgemr2d_(&n, &n, A, &i1, &i1, descA, A_global, &i1, &i1, descA_global, &context);
 		if (mpi_rank==0)
