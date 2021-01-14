@@ -51,7 +51,7 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 	// matrix
 	int nr, nc;
 	double *A;
-	double *At;
+	//double *At;
 	double *C;
 	double *T;
 	double *J;
@@ -66,7 +66,7 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 	int descA_global[9];
 	int descB_global[9];
 	int descA[9];
-	int descAt[9];
+	//int descAt[9];
 	int descC[9];
 	int descT[9];
 	int descJ[9];
@@ -88,7 +88,7 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 		nr = numroc_( &n, &nb, &myrow, &i0, &nprow );
 		lld = MAX( 1 , nr );
 		A  = malloc(nr*nc*sizeof(double));
-		At = malloc(nr*nc*sizeof(double));
+		//At = malloc(nr*nc*sizeof(double));
 		C = malloc(nr*nc*sizeof(double));
 		T = malloc(nr*nc*sizeof(double));
 		diag = malloc(nc*sizeof(double));
@@ -112,7 +112,7 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 
 		// Descriptors (local)
 		descinit_( descA, &n, &n, &nb, &nb, &i0, &i0, &context, &lld, &info );
-		descinit_( descAt, &n, &n, &nb, &nb, &i0, &i0, &context, &lld, &info );
+		//descinit_( descAt, &n, &n, &nb, &nb, &i0, &i0, &context, &lld, &info );
 
 		descinit_( descC, &n, &n, &nb, &nb, &i0, &i0, &context, &lld, &info );
 		descinit_( descT, &n, &n, &nb, &nb, &i0, &i0, &context, &lld, &info );
@@ -121,7 +121,7 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 		descinit_( descB, &n, &m, &nb, &nb, &i0, &i0, &context, &lld, &info );
 		//descinit_( descBt, &m, &n, &nb, &nb, &i0, &i0, &context, &lldt, &info );
 
-		printf("(%d,%d)\n",nprow,npcol);
+		/*
 		for (i=0; i<cprocs; i++)
 		{
 			MPI_Barrier(MPI_COMM_WORLD);
@@ -130,6 +130,8 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 				printf("[%d](%d,%d): %d-%d\n",mpi_rank,myrow,mycol,nr,nc);
 			}
 		}
+		*/
+
 		if (mpi_rank==0)
 		{
 			// Descriptors (global)
@@ -289,33 +291,67 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 			//
 			// !! swapped indices !! transposition
 			//
+			/*
+			 * naive version
+			 */
+			/*
 			for (i=1; i<=l-1; i++) // i should be rows, but treated as cols
 			{
 				// https://info.gwdg.de/wiki/doku.php?id=wiki:hpc:scalapack
-				//r    = indxg2l_(&i,&nb,&i0,&i0,&nprow);
-				//irow = indxg2p_(&i,&nb,&i0,&i0,&nprow);
-				c    = indxg2l_(&i,&nb,&i0,&i0,&npcol);
+				c    = indxg2l_(&i,&nb,&i0,&i0,&npcol) -1;
 				icol = indxg2p_(&i,&nb,&i0,&i0,&npcol);
 				if (mycol==icol)
 				{
 					// diagonal
-					r    = indxg2l_(&i,&nb,&i0,&i0,&nprow);
+					r    = indxg2l_(&i,&nb,&i0,&i0,&nprow) -1;
 					irow = indxg2p_(&i,&nb,&i0,&i0,&nprow);
 					if (myrow==irow)
 					{
-						//diag[r-1]=T[c-1+(r-1)*lld];
-						diag[c-1]=T[r-1+(c-1)*lld];
+						diag[c]=T[r+c*lld];
 					}
 					// l-th column, treated as row
-					r    = indxg2l_(&l,&nb,&i0,&i0,&nprow);
+					r    = indxg2l_(&l,&nb,&i0,&i0,&nprow) -1;
 					irow = indxg2p_(&l,&nb,&i0,&i0,&nprow);
 					if (myrow==irow)
 					{
-						lcol[c-1]=T[r-1+(c-1)*lld];
+						lcol[c]=T[r+c*lld];
 					}
 				}
 			}
+			*/
+			/*
+			 * faster version
+			 */
+			int rl;
+			int irowl;
 
+			// l-th column, treated as row
+			rl    = indxg2l_(&l,&nb,&i0,&i0,&nprow) -1;
+			irowl = indxg2p_(&l,&nb,&i0,&i0,&nprow);
+
+			for (i=1; i<=l-1; i++) // i should be rows, but treated as cols
+			{
+				// https://info.gwdg.de/wiki/doku.php?id=wiki:hpc:scalapack
+				c    = indxg2l_(&i,&nb,&i0,&i0,&npcol) -1;
+				icol = indxg2p_(&i,&nb,&i0,&i0,&npcol);
+				if (mycol==icol)
+				{
+					// diagonal
+					r    = indxg2l_(&i,&nb,&i0,&i0,&nprow) -1;
+					irow = indxg2p_(&i,&nb,&i0,&i0,&nprow);
+					if (myrow==irow)
+					{
+						diag[c]=T[r+c*lld];
+					}
+					// l-th column, treated as row
+					//r    = indxg2l_(&l,&nb,&i0,&i0,&nprow) -1;
+					//irow = indxg2p_(&l,&nb,&i0,&i0,&nprow);
+					if (myrow==irowl)
+					{
+						lcol[c]=T[rl+c*lld];
+					}
+				}
+			}
 			// a-b*c
 			pdger_( &n, &l_1, &d1_,
 					T, &i1, &l, descT, &i1,
@@ -336,31 +372,57 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 			//
 			// !! swapped indices !! transposition
 			//
+			/*
+			 * naive version
+			 */
+			/*
 			for (i=1; i<=l-1; i++) // "i" should be rows, but treated as cols
 			{
 				// https://info.gwdg.de/wiki/doku.php?id=wiki:hpc:scalapack
-				//r    = indxg2l_(&i,&nb,&i0,&i0,&nprow);
-				//irow = indxg2p_(&i,&nb,&i0,&i0,&nprow);
-				c    = indxg2l_(&i,&nb,&i0,&i0,&npcol);
+				c    = indxg2l_(&i,&nb,&i0,&i0,&npcol) -1;
 				icol = indxg2p_(&i,&nb,&i0,&i0,&npcol);
 				if (mycol==icol)
 				{
 					// diagonal
-					r    = indxg2l_(&i,&nb,&i0,&i0,&nprow);
+					r    = indxg2l_(&i,&nb,&i0,&i0,&nprow) -1;
 					irow = indxg2p_(&i,&nb,&i0,&i0,&nprow);
 					if (myrow==irow)
 					{
-						//T[c-1+(r-1)*lld]=diag[r-1];
-						T[r-1+(c-1)*lld]=diag[c-1];
-						//T[r-1+(c-1)*lld]=77;
+						T[r+c*lld]=diag[c];
 					}
 					// l-th column, treated as row
-					r    = indxg2l_(&l,&nb,&i0,&i0,&nprow);
+					r    = indxg2l_(&l,&nb,&i0,&i0,&nprow) -1;
 					irow = indxg2p_(&l,&nb,&i0,&i0,&nprow);
 					if (myrow==irow)
 					{
-						T[r-1+(c-1)*lld]=T[(r-1)+(c-1)*lld]-lcol[c-1];
-						//T[r-1+(c-1)*lld]=99;
+						T[r+c*lld]=T[r+c*lld]-lcol[c];
+					}
+				}
+			}
+			*/
+			/*
+			 * faster version
+			 */
+			for (i=1; i<=l-1; i++) // i should be rows, but treated as cols
+			{
+				// https://info.gwdg.de/wiki/doku.php?id=wiki:hpc:scalapack
+				c    = indxg2l_(&i,&nb,&i0,&i0,&npcol) -1;
+				icol = indxg2p_(&i,&nb,&i0,&i0,&npcol);
+				if (mycol==icol)
+				{
+					// diagonal
+					r    = indxg2l_(&i,&nb,&i0,&i0,&nprow) -1;
+					irow = indxg2p_(&i,&nb,&i0,&i0,&nprow);
+					if (myrow==irow)
+					{
+						T[r+c*lld]=diag[c];
+					}
+					// l-th column, treated as row
+					//r    = indxg2l_(&l,&nb,&i0,&i0,&nprow) -1;
+					//irow = indxg2p_(&l,&nb,&i0,&i0,&nprow);
+					if (myrow==irowl)
+					{
+						T[rl+c*lld]=T[rl+c*lld]-lcol[c];
 					}
 				}
 			}
@@ -376,21 +438,35 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 
 			// topological formula
 			// (l-1)-th row, treated as column
-
+			/*
+			 * naive version, for reference
+			 */
+			/*
 			for (i=1; i<=l-1; i++) // "i" should be rows, but treated as cols
 			{
-				c    = indxg2l_(&i,&nb,&i0,&i0,&npcol);
+				c    = indxg2l_(&i,&nb,&i0,&i0,&npcol) -1;
 				icol = indxg2p_(&i,&nb,&i0,&i0,&npcol);
 				for (j=1; j<=n; j++)
 				{
-					r    = indxg2l_(&j,&nb,&i0,&i0,&nprow);
+					r    = indxg2l_(&j,&nb,&i0,&i0,&nprow) -1;
 					irow = indxg2p_(&j,&nb,&i0,&i0,&nprow);
 					if (mycol==icol && myrow==irow)
 					{
-							//T[(c-1)*lld+(r-1)]=l; // topological
-							T[(c-1)*lld+(r-1)]=T[(c-1)*lld+(r-1)]/(1-(C[(c-1)*lld+(r-1)]*A[(c-1)*lld+(r-1)])); // topological
-							//T[(c-1)*lld+(r-1)]=((C[(c-1)*lld+(r-1)]*A[(c-1)*lld+(r-1)])); // topological
+						T[c*lld+r]=T[c*lld+r]/(1-(C[c*lld+r]*A[c*lld+r])); // topological
 					}
+				}
+			}
+			*/
+			/*
+			 * faster version ("if" removed)
+			 */
+			for (i=1; i<=l-1; i++) // "i" should be rows, but treated as cols
+			{
+				c    = indxg2l_(&i,&nb,&i0,&i0,&npcol) -1;
+				icol = indxg2p_(&i,&nb,&i0,&i0,&npcol);
+				if (mycol==icol)
+				{
+					for (r=0; r<nr; r++) T[c*lld+r]=T[c*lld+r]/(1-(C[c*lld+r]*A[c*lld+r])); // topological
 				}
 			}
 
@@ -419,19 +495,6 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 		*/
 		result.core_end_time = time(NULL);
 		result.exit_code = 0;
-
-		// re-transpose result
-		//pdtran_(&m, &n, &d1, B, &i1, &i1, descB, &d0, Bt, &i1, &i1, descBt);
-
-		/*
-		// collect result
-		if (mpi_rank==0)
-		{
-			// Descriptors (global)
-			descinit_( descB_global, &m, &n, &i1, &i1, &i0, &i0, &context_global, &m, &info );
-		}
-		pdgemr2d_(&m, &n, Bt, &i1, &i1, descBt, B_global, &i1, &i1, descB_global, &context);
-		*/
 	}
 	else
 	{
