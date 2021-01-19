@@ -25,7 +25,7 @@
 #include "testers/tester_structures.h"
 
 
-test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int nb,
+test_output blacsDGESV_CO_2(int n, double* A_global, int m, double* B_global, int nb,
 								int mpi_rank, int cprocs,
 								int nprow, int npcol, int myrow, int mycol,
 								int context, int context_global)
@@ -247,7 +247,7 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 			l_1=l-1;
 
 			// last col in A
-			pdgemm_("N", "N", &n, &n, &i1, &d1, J, &i1, &i1, descJ, T, &l, &i1, descT, &d0, A, &i1, &i1, descA);
+			pdgemm_("N", "N", &n, &l_1, &i1, &d1, J, &i1, &i1, descJ, T, &l, &i1, descT, &d0, A, &i1, &i1, descA);
 
 			/*
 			pdgemr2d_(&n, &n, A, &i1, &i1, descA, A_global, &i1, &i1, descA_global, &context);
@@ -260,7 +260,7 @@ test_output blacsDGESV_CO(int n, double* A_global, int m, double* B_global, int 
 			*/
 
 			// last row in C
-			pdgemm_("N", "T", &n, &n, &i1, &d1, J, &i1, &i1, descJ, T, &i1, &l, descT, &d0, C, &i1, &i1, descC);
+			pdgemm_("N", "T", &n, &l_1, &i1, &d1, J, &i1, &i1, descJ, T, &i1, &l, descT, &d0, C, &i1, &i1, descC);
 
 			/*
 			pdgemr2d_(&n, &n, C, &i1, &i1, descC, A_global, &i1, &i1, descA_global, &context);
