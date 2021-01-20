@@ -1,5 +1,5 @@
 /*
- * blacsDGESV_CO.h
+ * blacsDGESV_CO_1.h
  *
  *  Created on: Jan 4, 2021
  *      Author: marcello
@@ -25,7 +25,7 @@
 #include "testers/tester_structures.h"
 
 
-test_output blacsDGESV_CO_2(int n, double* A_global, int m, double* B_global, int nb,
+test_output blacsDGESV_CO_1(int n, double* A_global, int m, double* B_global, int nb,
 								int mpi_rank, int cprocs,
 								int nprow, int npcol, int myrow, int mycol,
 								int context, int context_global)
@@ -54,7 +54,7 @@ test_output blacsDGESV_CO_2(int n, double* A_global, int m, double* B_global, in
 	//double *At;
 	double *C;
 	double *T;
-	double *J;
+	//double *J;
 	double *diag;
 	double *lcol;
 
@@ -69,15 +69,15 @@ test_output blacsDGESV_CO_2(int n, double* A_global, int m, double* B_global, in
 	//int descAt[9];
 	int descC[9];
 	int descT[9];
-	int descJ[9];
+	//int descJ[9];
 	int descB[9];
 	//int descBt[9];
 
 	int lld;
-	int lldj;
+	//int lldj;
 	//int lldt;
 
-	int ncj, nrj;
+	//int ncj, nrj;
 
 	result.core_start_time = time(NULL);
 
@@ -93,12 +93,12 @@ test_output blacsDGESV_CO_2(int n, double* A_global, int m, double* B_global, in
 		T = malloc(nr*nc*sizeof(double));
 		diag = malloc(nc*sizeof(double));
 		lcol = malloc(nc*sizeof(double));
-
+		/*
 		ncj = numroc_( &i1, &nb, &mycol, &i0, &npcol );
 		nrj = numroc_( &n,  &nb, &myrow, &i0, &nprow );
 		lldj = MAX( 1 , nrj );
 		J = malloc(ncj*nrj*sizeof(double));
-
+		*/
 		ncrhs = numroc_( &m, &nb, &mycol, &i0, &npcol );
 		nrrhs = numroc_( &n, &nb, &myrow, &i0, &nprow );
 		B = malloc(nrrhs*ncrhs*sizeof(double));
@@ -116,7 +116,7 @@ test_output blacsDGESV_CO_2(int n, double* A_global, int m, double* B_global, in
 
 		descinit_( descC, &n, &n, &nb, &nb, &i0, &i0, &context, &lld, &info );
 		descinit_( descT, &n, &n, &nb, &nb, &i0, &i0, &context, &lld, &info );
-		descinit_( descJ, &n, &i1, &nb, &nb, &i0, &i0, &context, &lldj, &info );
+		//descinit_( descJ, &n, &i1, &nb, &nb, &i0, &i0, &context, &lldj, &info );
 
 		descinit_( descB, &n, &m, &nb, &nb, &i0, &i0, &context, &lld, &info );
 		//descinit_( descBt, &m, &n, &nb, &nb, &i0, &i0, &context, &lldt, &info );
@@ -216,16 +216,6 @@ test_output blacsDGESV_CO_2(int n, double* A_global, int m, double* B_global, in
 		// T actually contains T'
 
 		/*
-		for (i=0; i<nr; i++)
-		{
-			for (j=0; j<nc; j++)
-			{
-				T[i*lld+j]=(i+1)*10+(j+1)+(myrow+1)*1000+(mycol+1)*100;
-			}
-		}
-		*/
-
-		/*
 		pdgemr2d_(&n, &n, T, &i1, &i1, descT, A_global, &i1, &i1, descA_global, &context);
 		if (mpi_rank==0)
 		{
@@ -235,9 +225,6 @@ test_output blacsDGESV_CO_2(int n, double* A_global, int m, double* B_global, in
 		}
 		*/
 
-		// fill J with "1"
-		pdlaset_("A", &n, &i1, &d1, &d1, J, &i1, &i1, descJ);
-
 		double d1_ = -1;
 		int l;
 		int l_1;
@@ -246,43 +233,15 @@ test_output blacsDGESV_CO_2(int n, double* A_global, int m, double* B_global, in
 		{
 			l_1=l-1;
 
-			// last col in A
-			pdgemm_("N", "N", &n, &l_1, &i1, &d1, J, &i1, &i1, descJ, T, &l, &i1, descT, &d0, A, &i1, &i1, descA);
+			// b*c in A
+			pdgemm_("N", "N", &n, &l_1, &i1, &d1, T, &i1, &l, descT, T, &l, &i1, descT, &d0, A, &i1, &i1, descA);
 
 			/*
 			pdgemr2d_(&n, &n, A, &i1, &i1, descA, A_global, &i1, &i1, descA_global, &context);
 			if (mpi_rank==0)
 			{
 				printf("\n[%d]\n",l-1);
-				printf("(col)\n");
-				PrintMatrix1D(A_global,n,n);
-			}
-			*/
-
-			// last row in C
-			pdgemm_("N", "T", &n, &l_1, &i1, &d1, J, &i1, &i1, descJ, T, &i1, &l, descT, &d0, C, &i1, &i1, descC);
-
-			/*
-			pdgemr2d_(&n, &n, C, &i1, &i1, descC, A_global, &i1, &i1, descA_global, &context);
-			if (mpi_rank==0)
-			{
-				printf("(row)\n");
-				PrintMatrix1D(A_global,n,n);
-			}
-			*/
-
-			/*
-			for (i=0; i<nr; i++)
-			{
-				for (j=0; j<nc; j++)
-				{
-					At[i*nr+j]=1/(1-A[i*nr+j]*C[i*nr+j]);
-				}
-			}
-			pdgemr2d_(&n, &n, At, &i1, &i1, descAt, A_global, &i1, &i1, descA_global, &context);
-			if (mpi_rank==0)
-			{
-				printf("(h)\n");
+				printf("(b*c)\n");
 				PrintMatrix1D(A_global,n,n);
 			}
 			*/
@@ -352,11 +311,35 @@ test_output blacsDGESV_CO_2(int n, double* A_global, int m, double* B_global, in
 					}
 				}
 			}
+
+			int r1;
+
 			// a-b*c
-			pdger_( &n, &l_1, &d1_,
-					T, &i1, &l, descT, &i1,
-					T, &l, &i1, descT, &n,
-					T, &i1, &i1, descT);
+			/*
+			 * faster version ("if" removed)
+			 */
+			for (i=1; i<=l-1; i++) // "i" should be rows, but treated as cols
+			{
+				c    = indxg2l_(&i,&nb,&i0,&i0,&npcol) -1;
+				icol = indxg2p_(&i,&nb,&i0,&i0,&npcol);
+				if (mycol==icol)
+				{
+					for (r=0; r<nr; r++)
+					{
+						T[c*lld+r]=T[c*lld+r]-A[c*lld+r]; // difference
+						r1=r+1;
+						j = indxl2g_( &r1, &nb, &myrow, &i0, &nprow );
+						if (i==j)
+						{
+							A[c*lld+r]=1/(1-A[c*lld+r]);
+						}
+						else
+						{
+							A[c*lld+r]=0;
+						}
+					}
+				}
+			}
 
 			/*
 			pdgemr2d_(&n, &n, T, &i1, &i1, descT, A_global, &i1, &i1, descA_global, &context);
@@ -365,8 +348,14 @@ test_output blacsDGESV_CO_2(int n, double* A_global, int m, double* B_global, in
 				printf("(-)\n");
 				PrintMatrix1D(A_global,l-1,n);
 			}
-			*/
 
+			pdgemr2d_(&n, &n, A, &i1, &i1, descA, A_global, &i1, &i1, descA_global, &context);
+			if (mpi_rank==0)
+			{
+				printf("(H)\n");
+				PrintMatrix1D(A_global,n,n);
+			}
+			*/
 
 			// restore elements
 			//
@@ -437,38 +426,8 @@ test_output blacsDGESV_CO_2(int n, double* A_global, int m, double* B_global, in
 			*/
 
 			// topological formula
-			// (l-1)-th row, treated as column
-			/*
-			 * naive version, for reference
-			 */
-			/*
-			for (i=1; i<=l-1; i++) // "i" should be rows, but treated as cols
-			{
-				c    = indxg2l_(&i,&nb,&i0,&i0,&npcol) -1;
-				icol = indxg2p_(&i,&nb,&i0,&i0,&npcol);
-				for (j=1; j<=n; j++)
-				{
-					r    = indxg2l_(&j,&nb,&i0,&i0,&nprow) -1;
-					irow = indxg2p_(&j,&nb,&i0,&i0,&nprow);
-					if (mycol==icol && myrow==irow)
-					{
-						T[c*lld+r]=T[c*lld+r]/(1-(C[c*lld+r]*A[c*lld+r])); // topological
-					}
-				}
-			}
-			*/
-			/*
-			 * faster version ("if" removed)
-			 */
-			for (i=1; i<=l-1; i++) // "i" should be rows, but treated as cols
-			{
-				c    = indxg2l_(&i,&nb,&i0,&i0,&npcol) -1;
-				icol = indxg2p_(&i,&nb,&i0,&i0,&npcol);
-				if (mycol==icol)
-				{
-					for (r=0; r<nr; r++) T[c*lld+r]=T[c*lld+r]/(1-(C[c*lld+r]*A[c*lld+r])); // topological
-				}
-			}
+			pdgemm_("N", "N", &n, &l_1, &l_1, &d1, T, &i1, &i1, descT, A, &i1, &i1, descA, &d0, C, &i1, &i1, descC);
+			pdlacpy_("A", &n, &l_1, C, &i1, &i1, descC, T, &i1, &i1, descT);
 
 			/*
 			pdgemr2d_(&n, &n, T, &i1, &i1, descT, A_global, &i1, &i1, descA_global, &context);
@@ -503,7 +462,7 @@ test_output blacsDGESV_CO_2(int n, double* A_global, int m, double* B_global, in
 		B  = NULL;
 		//Bt = NULL;
 
-		J = NULL;
+		//J = NULL;
 		C = NULL;
 		T = NULL;
 
@@ -520,7 +479,7 @@ test_output blacsDGESV_CO_2(int n, double* A_global, int m, double* B_global, in
 	NULLFREE(B);
 	//NULLFREE(Bt);
 
-	NULLFREE(J);
+	//NULLFREE(J);
 	NULLFREE(C);
 	NULLFREE(T);
 
