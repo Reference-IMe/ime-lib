@@ -40,7 +40,7 @@ test_output blacsDGESV_CO_2(int n, double* A_global, int m, double* B_global, in
 	 */
 
 	// general
-	int i,j;
+	int i;
 	int i0 = 0;
 	int i1 = 1;
 	double d0 = 0.0;

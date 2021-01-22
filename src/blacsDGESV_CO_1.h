@@ -225,7 +225,7 @@ test_output blacsDGESV_CO_1(int n, double* A_global, int m, double* B_global, in
 		}
 		*/
 
-		double d1_ = -1;
+		//double d1_ = -1;
 		int l;
 		int l_1;
 

@@ -38,13 +38,13 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 
 	MPI_Comm comm_row;
 	MPI_Comm comm_col;
-	MPI_Comm_split(comm, mpi_row, MPI_UNDEFINED, &comm_row);
-	MPI_Comm_split(comm, mpi_col, MPI_UNDEFINED, &comm_col);
+	MPI_Comm_split(comm, mpi_row, mpi_rank, &comm_row);
+	MPI_Comm_split(comm, mpi_col, mpi_rank, &comm_col);
 
-	int mpi_rank_row;
-	int mpi_rank_col;
-	MPI_Comm_rank(comm_row, &mpi_rank_row);		// get current process id in row
-	MPI_Comm_rank(comm_col, &mpi_rank_col);		// get current process id in col
+	int mpi_rank_col_in_row;
+	int mpi_rank_row_in_col;
+	MPI_Comm_rank(comm_row, &mpi_rank_col_in_row);		// get current process id in row
+	MPI_Comm_rank(comm_col, &mpi_rank_row_in_col);		// get current process id in col
 
 	MPI_Status  mpi_status;
 	MPI_Request mpi_request = MPI_REQUEST_NULL;
@@ -55,7 +55,7 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
     int myxxrows = mycols;			// num of chunks for better code readability
     int rhs;
 
-    printf("rank %d: in (%d,%d) has ranks (%d,%d) - size %dx%d\n",mpi_rank,mpi_row,mpi_col,mpi_rank_row,mpi_rank_col,myrows,mycols);
+    printf("rank %d: in (%d,%d) has ranks (%d,%d) - size %dx%d\n",mpi_rank,mpi_row,mpi_col,mpi_rank_row_in_col,mpi_rank_col_in_row,myrows,mycols);
     fflush(stdout);
 
     /*
@@ -96,14 +96,15 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 	 *  init inhibition table
 	 */
 	DGEZR(xx, n, m);												// init (zero) solution vectors
-	pbDGEIT_CX(A, Tlocal, lastK, n, nb, comm, mpi_rank, comm_row, mpi_rank_row, comm_col, mpi_rank_col, cprocs);	// init inhibition table
+	pbDGEIT_CX(A, Tlocal, lastK, n, nb, comm, mpi_rank, comm_row, mpi_rank_col_in_row, comm_col, mpi_rank_row_in_col, cprocs);	// init inhibition table
 
+	/*
 	for (i=0; i<cprocs; i++)
 	{
 		MPI_Barrier(MPI_COMM_WORLD);
 		if (mpi_rank==i)
 		{
-			printf("Tlocal and lastK in %d (%d,%d):\n",mpi_rank,mpi_rank_row,mpi_rank_col);
+			printf("Tlocal and lastK in %d (%d,%d):\n",mpi_rank,mpi_rank_row_in_col,mpi_rank_col_in_row);
 			PrintMatrix2D(Tlocal, myrows, mycols);
 			printf("\n");
 			PrintMatrix2D(lastK, 2*nb, mycols);
@@ -112,60 +113,13 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 		}
 	}
 	MPI_Barrier(MPI_COMM_WORLD);
+	*/
 
+	if (mpi_rank_row_in_col==0) 								// first row of procs
+	{
+		MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm_row);		// send all r.h.s
+	}
 
-
-	/*
-     * MPI derived types
-     */
-	//
-	MPI_Datatype s_lastKr_chunk;
-	MPI_Type_vector (nb, 1, mycols, MPI_DOUBLE, & s_lastKr_chunk );
-	MPI_Type_commit (& s_lastKr_chunk);
-
-	MPI_Datatype lastKr_chunk;
-	MPI_Type_vector (nb, 1, n, MPI_DOUBLE, & lastKr_chunk );
-	MPI_Type_commit (& lastKr_chunk);
-
-	// proper resizing for gathering
-	MPI_Datatype s_lastKr_chunk_resized;
-	MPI_Type_create_resized (s_lastKr_chunk, 0, 1*sizeof(double), & s_lastKr_chunk_resized);
-	MPI_Type_commit (& s_lastKr_chunk_resized);
-
-	MPI_Datatype lastKr_chunk_resized;
-	MPI_Type_create_resized (lastKr_chunk, 0, 1*sizeof(double), & lastKr_chunk_resized);
-	MPI_Type_commit (& lastKr_chunk_resized);
-
-	// rows of xx to be extracted
-	MPI_Datatype xx_chunk;
-	MPI_Type_vector (myxxrows/nb, m*nb, nb*m*cprocs, MPI_DOUBLE, & xx_chunk );
-	MPI_Type_commit (& xx_chunk);
-
-	// rows of xx to be extracted, properly resized for gathering
-	MPI_Datatype xx_chunk_resized;
-	MPI_Type_create_resized (xx_chunk, 0, nb*m*sizeof(double), & xx_chunk_resized);
-	MPI_Type_commit (& xx_chunk_resized);
-
-	int* gather_count;
-		 gather_count=malloc(cprocs*sizeof(int));
-
-	int* gather_displacement;
-		 gather_displacement=malloc(cprocs*sizeof(int));
-
-		 for (i=0; i<cprocs; i++)
-		 {
-			gather_displacement[i]=i*mycols;
-			gather_count[i]=mycols;
-		 }
-
-
-	// last proc has already sent a full chunk of lastKr
-	// decrease chunk size by nb for next sending
-	gather_count[cprocs-1]=mycols-nb;
-
-
-
-	MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm);								// send all r.h.s to all procs
 
 	/*
 	 *  calc inhibition sequence
@@ -176,23 +130,33 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 	// they differ on processes and change along the main loop over the levels
 	int myxxstart = mycols;		// beginning column position for updating the solution (begins from right)
 	int current_last=nb-1;		// index for the current last row or col of K in buffer
-	int firstdiag=mpi_rank_row*mycols;	// (global) position of the first diagonal element on this mpi_rank
 	int l_col;					// (local) position of the column l
-	//int l_owner;				// rank holding the column l
-	//int gi;						// global index
+	int last_row;				// (local) last row to process
+	int last_col;
 	//TODO: pre-calc other values..
+
+	int li;
+	int gi,gj;
 
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
 	{
 
+		if (mpi_rank==0)
+		{
+			printf("\n[%d]\n",l);
+		}
+		MPI_Barrier(MPI_COMM_WORLD);
+
 		for (i=0; i<cprocs; i++)
 		{
 			MPI_Barrier(MPI_COMM_WORLD);
 			if (mpi_rank==i)
 			{
-				printf("Tlocal in %d (%d,%d):\n",mpi_rank,mpi_rank_row,mpi_rank_col);
+				printf("Tlocal and lastK in %d (%d,%d):\n",mpi_rank,mpi_rank_row_in_col,mpi_rank_col_in_row);
 				PrintMatrix2D(Tlocal, myrows, mycols);
+				printf("\n");
+				PrintMatrix2D(lastK, 2*nb, mycols);
 				printf("\n");
 			    fflush(stdout);
 			}
@@ -200,224 +164,176 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 		MPI_Barrier(MPI_COMM_WORLD);
 
 
-		//TODO: avoid if?
-		if (mpi_rank_row==PVMAP(l, mycols)) // if a process contains the last rows/cols, must skip it
+		if (mpi_rank_row_in_col==0) 								// first row of procs
 		{
-			myxxstart--;
+			if (mpi_rank_col_in_row==PVMAP(l, mycols)) // if a process contains the last rows/cols, must skip it
+			{
+				myxxstart--;
+			}
+			//TODO: avoid if?
+
+			printf("\n[%d] %d: %d %d\n",l,mpi_rank_col_in_row,myxxstart,PVLOCAL(n-1, mycols));
+
+			MPI_Bcast (&bb[l][0], m, MPI_DOUBLE, PVMAP(l, mycols), comm_row);
+
+			// update solutions
+			// l .. n-1
+			for (i=myxxstart; i<=PVLOCAL(n-1, mycols); i++)
+			{
+				gi=PVGLOBAL(i, mycols, mpi_rank_col_in_row);
+				for (rhs=0;rhs<m;rhs++)
+				{
+					// on column < l X is null and not stored in T
+					//if (global[i]>=l) xx[global[i]][rhs]=xx[global[i]][rhs]+Xlocal[l][i]*bb[l][rhs];
+					xx[gi][rhs]=xx[gi][rhs]+lastKr[current_last][i]*bb[l][rhs];
+				}
+			}
 		}
 
-		/*
-		// update solutions
-		// l .. n-1
-		for (i=myxxstart; i<=PVLOCAL(n-1, mycols); i++)
+
+		// wait for new last rows and cols before computing helpers
+		//if (current_last==nb-1) MPI_Wait(&mpi_request, &mpi_status);
+		// TODO: check performance penalty by skipping MPI_wait with an 'if' for non due cases (inside the blocking factor) or not
+
+		if (mpi_rank_row_in_col < PVMAP(l, myrows)) 		// all rows
 		{
-			gi=PVGLOBAL(i, mycols, mpi_rank_row);
-			for (rhs=0;rhs<m;rhs++)
+			last_row=myrows;
+		}
+		else if (mpi_rank_row_in_col == PVMAP(l, myrows))	// rows till l-1
+		{
+			last_row=PVLOCAL(l, myrows);
+		}
+		else
+		{
+			last_row=0;										// no rows
+		}
+
+		// update helpers
+		if (mpi_rank_row_in_col==mpi_rank_col_in_row)
+		{
+			for (i=0; i<last_row; i++)
 			{
-				// on column < l X is null and not stored in T
-				//if (global[i]>=l) xx[global[i]][rhs]=xx[global[i]][rhs]+Xlocal[l][i]*bb[l][rhs];
-				xx[gi][rhs]=xx[gi][rhs]+Xlocal[l][i]*bb[l][rhs];
+				h[i]   = 1/(1-lastKc[current_last][i]*lastKr[current_last][i]);
+				hh[i]  = lastKc[current_last][i]*h[i];
+				/*
+				for (rhs=0;rhs<m;rhs++)
+				{
+					bb[i][rhs] = bb[i][rhs]-lastKr[current_last][i]*bb[l][rhs];
+				}
+				*/
 			}
+		}
+		MPI_Bcast ( &h[0], last_row, MPI_DOUBLE, mpi_rank_row_in_col, comm_row);
+		MPI_Bcast ( &hh[0], last_row, MPI_DOUBLE, mpi_rank_row_in_col, comm_row);
+
+		if (mpi_rank_col_in_row < PVMAP(l-1, mycols)) 		// all cols
+		{
+			last_col=mycols-1;
+		}
+		else if (mpi_rank_col_in_row == PVMAP(l-1, mycols))	// cols till l-1
+		{
+			last_col=PVLOCAL(l-1, mycols);
+		}
+		else
+		{
+			last_col=-1;										// no rows
+		}
+
+		if (mpi_rank_row_in_col==0) 								// first row of procs
+		{
+			//MPI_Bcast (&bb[l][0], m, MPI_DOUBLE, PVMAP(l, mycols), comm_row);
+
+			for (i=0; i<=last_col; i++)
+			{
+				for (rhs=0;rhs<m;rhs++)
+				{
+					bb[mpi_rank_col_in_row*mycols+i][rhs] = bb[mpi_rank_col_in_row*mycols+i][rhs]-lastKr[current_last][i]*bb[l][rhs];
+				}
+			}
+		}
+		/*
+		for (i=0; i<cprocs; i++)
+		{
+			MPI_Barrier(MPI_COMM_WORLD);
+			if (mpi_rank==i)
+			{
+				printf("h and hh in %d (%d,%d):\n",mpi_rank,mpi_rank_row_in_col,mpi_rank_col_in_row);
+				PrintVector(h, myrows);
+				//printf("\n");
+				//PrintVector(hh, myrows);
+				printf("\n");
+			    fflush(stdout);
+			}
+		}
+		MPI_Barrier(MPI_COMM_WORLD);
+		*/
+
+
+		/*
+		if (mpi_rank_row_in_col < PVMAP(l, myrows)) // all rows
+		{
+			last_row=myrows-1;
+		}
+		else if (mpi_rank_row_in_col == PVMAP(l, myrows))
+		{
+			last_row=(l-1) % myrows;
+		}
+		else
+		{
+			last_row=-1;
 		}
 		*/
 
-		// wait for new last rows and cols before computing helpers
-		if (current_last==nb-1) MPI_Wait(&mpi_request, &mpi_status);
-		// TODO: check performance penalty by skipping MPI_wait with an 'if' for non due cases (inside the blocking factor) or not
-
-		// update helpers
-		if (mpi_rank_col < PVMAP(l, myrows))
+		//for (i=0; i <= last_row; i++)
+		for (i=0; i < last_row; i++)
 		{
-			for (i=0; i<myrows; i++)
+			gi=PVGLOBAL(i, myrows, mpi_rank_row_in_col);
+			for (j=0; j<mycols; j++)
 			{
-				h[i]   = 1/(1-lastKc[current_last][i]*lastKr[current_last][i]);
-				hh[i]  = lastKc[current_last][i]*h[i];
-				for (rhs=0;rhs<m;rhs++)
+				gj=PVGLOBAL(j, mycols, mpi_rank_col_in_row);
+				if (gj==gi)
 				{
-					bb[i][rhs] = bb[i][rhs]-lastKr[current_last][i]*bb[l][rhs];
+					Tlocal[i][j] = Tlocal[i][j]*h[i];
+				}
+				else if (gj==l)
+				{
+					Tlocal[i][j] = - lastKr[current_last][j]*hh[i];
+				}
+				else
+				{
+					Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[current_last][j]*hh[i];
 				}
 			}
 		}
-		else if (mpi_rank_col == PVMAP(l, myrows))
+
+		l_col=PVLOCAL(l-1, mycols);
+
+		// sync last col
+		if (mpi_rank_row_in_col <= PVMAP(l-1, myrows))
 		{
-			for (i=0; i<=( (l-1) % myrows); i++)
+			if (mpi_rank_col_in_row == PVMAP(l-1, mycols))
 			{
-				h[i]   = 1/(1-lastKc[current_last][i]*lastKr[current_last][i]);
-				hh[i]  = lastKc[current_last][i]*h[i];
-				for (rhs=0;rhs<m;rhs++)
+				//for (i=0; i <= last_row; i++)
+				for (i=0; i < last_row; i++)
 				{
-					bb[i][rhs] = bb[i][rhs]-lastKr[current_last][i]*bb[l][rhs];
+					lastKc[current_last][i]=Tlocal[i][l_col];
 				}
 			}
+			//printf("%d bcast from %d to %d (%d,%d)\n",last_row+1,PVMAP(l-1, mycols),mpi_rank,mpi_rank_row_in_col,mpi_rank_col_in_row);
+			//MPI_Bcast ( &lastKc[current_last][0], last_row+1, MPI_DOUBLE, PVMAP(l-1, mycols), comm_row);
+			MPI_Bcast ( &lastKc[current_last][0], last_row, MPI_DOUBLE, PVMAP(l-1, mycols), comm_row);
 		}
 
-		for (i=0; i<cprocs; i++)
+		// sync last row
+		if (mpi_rank_row_in_col == PVMAP(l-1, myrows))
 		{
-			MPI_Barrier(MPI_COMM_WORLD);
-			if (mpi_rank==i)
+			for (i=0; i < mycols; i++)
 			{
-				printf("h and hh in %d (%d,%d):\n",mpi_rank,mpi_rank_row,mpi_rank_col);
-				PrintVector(h, myrows);
-				printf("\n");
-				PrintVector(hh, myrows);
-				printf("\n");
-			    fflush(stdout);
+				lastKr[current_last][i]=Tlocal[l_col][i];
 			}
 		}
-		MPI_Barrier(MPI_COMM_WORLD);
+		MPI_Bcast ( &lastKr[current_last][0], mycols, MPI_DOUBLE, PVMAP(l-1, myrows), comm_col);
 
-
-
-
-		l_col=PVLOCAL(l, mycols);
-		int li;
-
-		// must differentiate topological formula on special column l
-		//
-		if (mpi_rank_row==PVMAP(l, mycols))			// proc. in row containing column l
-		{//rows:
-			// before first diagonal element
-			for (i=0; i<firstdiag; i++)
-			{//columns:
-				if (mpi_rank_col==PVMAP(i, myrows))
-				{
-					li=i % myrows;
-					// before column l (K values)
-					for (j=0; j<l_col; j++)
-					{
-						Klocal[li][j]=Klocal[li][j]*h[li] - Klocal[l][j]*hh[li];
-					}
-
-					// column l (X value)
-					Xlocal[li][l_col]= - Xlocal[l][l_col]*hh[li];
-
-					// after column l (X values)
-					for (j=l_col+1; j<mycols; j++)
-					{
-						Xlocal[li][j]=Xlocal[li][j]*h[li] - Xlocal[l][j]*hh[li];
-					}
-				}
-			}
-			// containing first diagonal element
-			for (i=firstdiag; i<firstdiag+l_col; i++)
-			{//columns:
-				if (mpi_rank_col==PVMAP(i, myrows))
-				{
-					li=i % myrows;
-					// before diagonal element (K values)
-					for (j=0; j<(i-firstdiag); j++)
-					{
-						Klocal[li][j]=Klocal[li][j]*h[li] - Klocal[l][j]*hh[li];
-					}
-
-					// diagonal element (X value)
-					Xlocal[li][i-firstdiag]=Xlocal[li][i-firstdiag]*h[li];
-
-					// // after diagonal element and before column l (K values)
-					for (j=i-firstdiag+1; j<l_col; j++)
-					{
-						Klocal[li][j]=Klocal[li][j]*h[li] - Klocal[l][j]*hh[li];
-					}
-
-					// column l (X value)
-					Xlocal[li][l_col]= - Xlocal[l][l_col]*hh[li];
-
-					// after column l (X values)
-					for (j=l_col+1; j<mycols; j++)
-					{
-						Xlocal[li][j]=Xlocal[li][j]*h[li] - Xlocal[l][j]*hh[li];
-					}
-				}
-			}
-			// remaining
-			for (i=firstdiag+l_col; i<=l-1; i++)
-			{
-				if (mpi_rank_col==PVMAP(i, myrows))
-				{
-					li=i % myrows;
-					// before column l (K values)
-					for (j=0; j<l_col; j++)
-					{
-						Klocal[li][j]=Klocal[li][j]*h[li] - Klocal[l][j]*hh[li];
-					}
-
-					// column l (X value)
-					Xlocal[li][l_col]= - Xlocal[l][l_col]*hh[li];
-
-					// after column l (X values)
-					for (j=l_col+1; j<mycols; j++)
-					{
-						Xlocal[li][j]=Xlocal[li][j]*h[li] - Xlocal[l][j]*hh[li];
-					}
-				}
-			}
-		}
-		else										// proc. NOT containing column l
-		{//rows:
-			int very_last_row;
-			very_last_row=MIN((firstdiag+mycols),l);
-
-			// before first diagonal element
-			for (i=0; i<MIN(firstdiag,l); i++)
-			{//columns:
-				if (mpi_rank_col==PVMAP(i, myrows))
-				{
-					li=i % myrows;
-					// before column l (K values)
-					for (j=0; j<l_col; j++)
-					{
-						Klocal[li][j]=Klocal[li][j]*h[li] - Klocal[l][j]*hh[li];
-					}
-
-					// after column l (X values)
-					for (j=l_col; j<mycols; j++)
-					{
-						Xlocal[li][j]=Xlocal[li][j]*h[li] - Xlocal[l][j]*hh[li];
-					}
-				}
-			}
-			// containing first diagonal element
-			for (i=firstdiag; i<very_last_row; i++)
-			{//columns:
-				if (mpi_rank_col==PVMAP(i, myrows))
-				{
-					li=i % myrows;
-					// before diagonal element (K values)
-					for (j=0; j<(i-firstdiag); j++)
-					{
-						Klocal[li][j]=Klocal[li][j]*h[li] - Klocal[l][j]*hh[li];
-					}
-
-					// diagonal element (X value)
-					Xlocal[li][i-firstdiag]=Xlocal[li][i-firstdiag]*h[li];
-
-					// after diagonal element (K values)
-					for (j=i-firstdiag+1; j<mycols; j++)
-					{
-						Klocal[li][j]=Klocal[li][j]*h[li] - Klocal[l][j]*hh[li];
-					}
-				}
-			}
-			// remaining
-			for (i=very_last_row; i<=l-1; i++)
-			{
-				if (mpi_rank_col==PVMAP(i, myrows))
-				{
-					li=i % myrows;
-					// before column l (K values)
-					for (j=0; j<l_col; j++)
-					{
-						Klocal[li][j]=Klocal[li][j]*h[li] - Klocal[l][j]*hh[li];
-					}
-
-					// after column l (X values)
-					for (j=l_col; j<mycols; j++)
-					{
-						Xlocal[li][j]=Xlocal[li][j]*h[li] - Xlocal[l][j]*hh[li];
-					}
-				}
-			}
-		}
 
 /*
 		///////// update local copy of global last rows and cols of K
@@ -470,55 +386,75 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 	}
 
 
-
-
-
-	/*
-	MPI_Barrier(MPI_COMM_WORLD);
 	for (i=0; i<cprocs; i++)
 	{
-		if (rank==i)
-		{
-			printf("%d-%d:\n",l,rank);
-			PrintMatrix2D(Tlocal, n, mycols);
-		}
 		MPI_Barrier(MPI_COMM_WORLD);
-	}
-	*/
-
-/*
-	// last level (l=0)
-	for (i=0; i<myxxrows; i++)
-	{
-		gi=PVGLOBAL(i, mycols, mpi_rank);
-		for(rhs=0;rhs<m;rhs++)
+		if (mpi_rank==i)
 		{
-			xx[gi][rhs]=xx[gi][rhs]+Xlocal[0][i]*bb[0][rhs];
+			printf("[0]\nTlocal and lastK in %d (%d,%d):\n",mpi_rank,mpi_rank_row_in_col,mpi_rank_col_in_row);
+			PrintMatrix2D(Tlocal, myrows, mycols);
+			printf("\n");
+			//PrintMatrix2D(lastK, 2*nb, mycols);
+			//printf("\n");
+		    fflush(stdout);
 		}
 	}
+	MPI_Barrier(MPI_COMM_WORLD);
+
+
+	// last level (l=0)
+	if (mpi_rank_row_in_col==0) 								// first row of procs
+	{
+		MPI_Bcast (&bb[0][0], m, MPI_DOUBLE, 0, comm_row);
+
+		for (i=0; i<myxxrows; i++)
+		{
+			gi=PVGLOBAL(i, mycols, mpi_rank_col_in_row);
+			for(rhs=0;rhs<m;rhs++)
+			{
+				xx[gi][rhs]=xx[gi][rhs]+Tlocal[0][i]*bb[0][rhs];
+			}
+		}
+
+		//MPI_Wait(&mpi_request, &mpi_status);
+
+		result.core_end_time = time(NULL);
+
+		// TODO: add checking on exit code
+		result.exit_code = 0;
+
+		// collect solution
+		// MPI_IN_PLACE required for MPICH based versions
+		if (mpi_rank_col_in_row==0)
+		{
+			MPI_Gather (MPI_IN_PLACE, m*myxxrows, MPI_DOUBLE, &xx[0][0], m*myxxrows, MPI_DOUBLE, 0, comm_row);
+		}
+		else
+		{
+			MPI_Gather (&xx[mpi_rank_col_in_row*myxxrows][0], m*myxxrows, MPI_DOUBLE, &xx[0][0], m*myxxrows, MPI_DOUBLE, 0, comm_row);
+		}
+	}
+
+	for (i=0; i<cprocs; i++)
+	{
+		MPI_Barrier(MPI_COMM_WORLD);
+		if (mpi_rank==i)
+		{
+			printf("[0]\n xx %d (%d,%d):\n",mpi_rank,mpi_rank_row_in_col,mpi_rank_col_in_row);
+			PrintMatrix2D(xx, n, m);
+			printf("\n");
+			//PrintMatrix2D(lastK, 2*nb, mycols);
+			//printf("\n");
+		    fflush(stdout);
+		}
+	}
+	MPI_Barrier(MPI_COMM_WORLD);
 
 	//MPI_Wait(&mpi_request, &mpi_status);
-
-	result.core_end_time = time(NULL);
-
-	// TODO: add checking on exit code
-	result.exit_code = 0;
-
-	// collect solution
-	// MPI_IN_PLACE required for MPICH based versions
-	if (mpi_rank==0)
-	{
-		MPI_Gather (MPI_IN_PLACE, m*myxxrows, MPI_DOUBLE, &xx[0][0], m*myxxrows, MPI_DOUBLE, 0, comm);
-	}
-	else
-	{
-		MPI_Gather (&xx[mpi_rank*myxxrows][0], m*myxxrows, MPI_DOUBLE, &xx[0][0], m*myxxrows, MPI_DOUBLE, 0, comm);
-	}
-*/
-	MPI_Wait(&mpi_request, &mpi_status);
-	MPI_Barrier(comm);
+	//MPI_Barrier(comm);
 
 	// cleanup
+	/*
 	NULLFREE(lastKc);
 	NULLFREE(lastKr);
 	NULLFREE(gather_displacement);
@@ -528,7 +464,7 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 	DeallocateVector(h);
 	DeallocateVector(hh);
 	DeallocateMatrix2D(Tlocal,myrows,CONTIGUOUS);
-
+	*/
 	result.total_end_time = time(NULL);
 
 	return result;

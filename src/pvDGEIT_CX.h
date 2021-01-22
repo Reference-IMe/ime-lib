@@ -78,6 +78,10 @@ void pvDGEIT_CX(double** A, double** Tlocal, double** lastK, int n, int bf, MPI_
 			// store the diagonal of A at the beginning of lastKc because it's contiguous to lastKr
 			lastKc[0][i]=A[i][i]; // diagonal of A
 		}
+		i=n-1;
+		j=0;
+		lastKr[j][i]=1/A[i][i]; // correct wrongly overwritten element
+
     }
 
     MPI_Bcast (&lastK[0][0], n*(bf+1), MPI_DOUBLE, 0, comm); // last cols and diagonal of A
