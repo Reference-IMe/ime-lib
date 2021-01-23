@@ -38,6 +38,7 @@ void pbDGEIT_CX(double** A, double** Tlocal, double** lastK, int n, int bf, MPI_
 		vlastK=AllocateMatrix2D(2*bf, n, CONTIGUOUS);	// last rows [0 - (bf-1)] and cols [ bf - (2bf -1)] of K
 		pvDGEIT_CX(A, vTlocal, vlastK, n, bf, comm_row, rank_col_in_row, cproccols);
 
+		/*
 		for (i=0; i<cproccols; i++)
 		{
 			MPI_Barrier(comm_row);
@@ -52,6 +53,7 @@ void pbDGEIT_CX(double** A, double** Tlocal, double** lastK, int n, int bf, MPI_
 			}
 		}
 		MPI_Barrier(comm_row);
+		*/
 
 		MPI_Scatter (&vTlocal[0][0], myrows*mycols, MPI_DOUBLE, &Tlocal[0][0], myrows*mycols, MPI_DOUBLE, 0, comm_col);
 		for (i=0; i<bf; i++)
