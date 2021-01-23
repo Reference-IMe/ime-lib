@@ -42,8 +42,19 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 	MPI_Comm_rank(comm_row, &mpi_rank_col_in_row);		// get current process id in row
 	MPI_Comm_rank(comm_col, &mpi_rank_row_in_col);		// get current process id in col
 
-	//MPI_Status  mpi_status;
-	//MPI_Request mpi_request = MPI_REQUEST_NULL;
+	MPI_Status  mpi_status[3];
+	MPI_Request mpi_request[3];
+				mpi_request[0] = MPI_REQUEST_NULL;
+				mpi_request[1] = MPI_REQUEST_NULL;
+				mpi_request[2] = MPI_REQUEST_NULL;
+	//aliases
+	MPI_Request* mpi_req_bb  = &mpi_request[0]; // req. for bb broadcast
+	MPI_Request* mpi_req_row = &mpi_request[1]; // req. for row broadcast
+	MPI_Request* mpi_req_col = &mpi_request[2]; // req. for col broadcast
+
+	MPI_Status* mpi_st_bb =  &mpi_status[0];
+	MPI_Status* mpi_st_row = &mpi_status[1];
+	MPI_Status* mpi_st_col = &mpi_status[2];
 
 	int i,j,l;						// general indexes
     int rhs;						// r.h.s. index
@@ -131,29 +142,6 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 		l_1_col   = PVLOCAL(l-1, mycols);
 
 		/*
-		if (mpi_rank==0)
-		{
-			printf("\n[%d]\n",l);
-		}
-		MPI_Barrier(MPI_COMM_WORLD);
-
-		for (i=0; i<cprocs; i++)
-		{
-			MPI_Barrier(MPI_COMM_WORLD);
-			if (mpi_rank==i)
-			{
-				printf("Tlocal and lastK in %d (%d,%d):\n",mpi_rank,mpi_rank_row_in_col,mpi_rank_col_in_row);
-				PrintMatrix2D(Tlocal, myrows, mycols);
-				printf("\n");
-				PrintMatrix2D(lastK, 2*bf, mycols);
-				printf("\n");
-			    fflush(stdout);
-			}
-		}
-		MPI_Barrier(MPI_COMM_WORLD);
-		*/
-
-		/*
 		 * update solutions
 		 */
 			if (mpi_rank_row_in_col==0) 					// first row of procs
@@ -163,6 +151,14 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 					myxxstart--;
 				}
 				//TODO: avoid if?
+
+				// bb[l] must be here
+				//MPI_Wait( mpi_req_bb, mpi_st_bb);
+
+				// lastKr must be here
+				//MPI_Wait( mpi_req_row, mpi_st_row);
+
+				MPI_Waitall(2, mpi_request, mpi_status);
 
 				// update xx vector
 				// l .. n-1
@@ -186,8 +182,15 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 			if ( mpi_rank_row_in_col < l_owner )					// procs before row l
 			{
 				last_row=myrows;								// all rows
+
+				// lastKc must be here
+				MPI_Wait( mpi_req_col, mpi_st_col);
+
 				if (mpi_rank_row_in_col==mpi_rank_col_in_row)
 				{
+					// lastKr must be here
+					MPI_Wait( mpi_req_row, mpi_st_row);
+
 					for (i=0; i<last_row; i++)
 					{
 						h[i]   = 1/(1-lastKc[current_last][i]*lastKr[current_last][i]);
@@ -203,8 +206,15 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 			else if ( mpi_rank_row_in_col == l_owner )				// procs holding row l
 			{
 				last_row=PVLOCAL(l, myrows);					// rows till l-1
+
+				// lastKc must be here
+				MPI_Wait( mpi_req_col, mpi_st_col);
+
 				if (mpi_rank_row_in_col==mpi_rank_col_in_row)
 				{
+					// lastKr must be here
+					MPI_Wait( mpi_req_row, mpi_st_row);
+
 					for (i=0; i<last_row; i++)
 					{
 						h[i]   = 1/(1-lastKc[current_last][i]*lastKr[current_last][i]);
@@ -229,6 +239,8 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 		 */
 			if (mpi_rank_row_in_col==0) 							// first row of procs
 			{
+				// no need to "MPI_Wait": lastKr is already there
+
 				if ( mpi_rank_col_in_row < l_1_owner ) 			// procs before col l-1
 				{
 					for (i=0; i<mycols; i++)				// treat all cols
@@ -254,32 +266,22 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 				//else	{do nothing}							// procs after col l-1
 
 				// send l-1 values to other procs for next iteration
-				MPI_Bcast (&bb[l-1][0], m, MPI_DOUBLE, l_1_owner, comm_row);
+				MPI_Ibcast (&bb[l-1][0], m, MPI_DOUBLE, l_1_owner, comm_row, mpi_req_bb);
 			}
 
-		/*
-		// print h and hh
-		for (i=0; i<cprocs; i++)
-		{
-			MPI_Barrier(MPI_COMM_WORLD);
-			if (mpi_rank==i)
-			{
-				printf("h and hh in %d (%d,%d):\n",mpi_rank,mpi_rank_row_in_col,mpi_rank_col_in_row);
-				PrintVector(h, myrows);
-				printf("\n");
-				PrintVector(hh, myrows);
-				printf("\n");
-			    fflush(stdout);
-			}
-		}
-		MPI_Barrier(MPI_COMM_WORLD);
-		*/
 
 		/*
 		 * update table
 		 */
 			// last row is computed above
 			// for procs with last_row == -1, nothing to do
+
+			// lastKr must be here
+			MPI_Wait( mpi_req_row, mpi_st_row);
+
+			// lastKc is already there
+			// no need to "MPI_Wait"
+
 			for (i=0; i < last_row; i++)
 			{
 				gi=PVGLOBAL(i, myrows, mpi_rank_row_in_col);
@@ -305,6 +307,16 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 		/*
 		 * sync future last (l-1) row and col
 		 */
+			// sync last row
+			if (mpi_rank_row_in_col == l_1_owner)			// procs row that holds the (l-1)-th row
+			{
+				for (i=0; i < mycols; i++)			// copy (l-1)-th row in buffer
+				{
+					lastKr[current_last][i]=Tlocal[l_1_col][i];
+				}
+			}
+			MPI_Ibcast ( &lastKr[current_last][0], mycols, MPI_DOUBLE, l_1_owner, comm_col, mpi_req_row);
+
 			// sync last col
 			if (mpi_rank_row_in_col <= l_1_owner)			// procs rows, including that one holding the (l-1)-th row
 			{
@@ -315,37 +327,11 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 						lastKc[current_last][i]=Tlocal[i][l_1_col];
 					}
 				}
-				MPI_Bcast ( &lastKc[current_last][0], last_row, MPI_DOUBLE, l_1_owner, comm_row);
+				MPI_Ibcast ( &lastKc[current_last][0], last_row, MPI_DOUBLE, l_1_owner, comm_row, mpi_req_col);
 			}
-
-			// sync last row
-			if (mpi_rank_row_in_col == l_1_owner)			// procs row that holds the (l-1)-th row
-			{
-				for (i=0; i < mycols; i++)			// copy (l-1)-th row in buffer
-				{
-					lastKr[current_last][i]=Tlocal[l_1_col][i];
-				}
-			}
-			MPI_Bcast ( &lastKr[current_last][0], mycols, MPI_DOUBLE, l_1_owner, comm_col);
 
 	}// end of loop over levels
 
-	/*
-	for (i=0; i<cprocs; i++)
-	{
-		MPI_Barrier(MPI_COMM_WORLD);
-		if (mpi_rank==i)
-		{
-			printf("[0]\nTlocal and lastK in %d (%d,%d):\n",mpi_rank,mpi_rank_row_in_col,mpi_rank_col_in_row);
-			PrintMatrix2D(Tlocal, myrows, mycols);
-			printf("\n");
-			//PrintMatrix2D(lastK, 2*bf, mycols);
-			//printf("\n");
-		    fflush(stdout);
-		}
-	}
-	MPI_Barrier(MPI_COMM_WORLD);
-	*/
 
 	/*
 	 * update last level of the table
@@ -353,7 +339,9 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 		// last level (l=0)
 		if (mpi_rank_row_in_col==0) 								// first row of procs
 		{
-			MPI_Bcast (&bb[0][0], m, MPI_DOUBLE, 0, comm_row);
+			// bb[0] must be here
+			MPI_Wait( mpi_req_bb, mpi_st_bb);
+			//MPI_Bcast (&bb[0][0], m, MPI_DOUBLE, 0, comm_row);
 
 			for (i=0; i<myxxrows; i++)
 			{
@@ -363,8 +351,6 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 					xx[gi][rhs]=xx[gi][rhs]+Tlocal[0][i]*bb[0][rhs];
 				}
 			}
-
-			//MPI_Wait(&mpi_request, &mpi_status);
 
 			result.core_end_time = time(NULL);
 
@@ -390,22 +376,9 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 			result.exit_code = 0;
 		}
 
-	/*
-	for (i=0; i<cprocs; i++)
-	{
-		MPI_Barrier(MPI_COMM_WORLD);
-		if (mpi_rank==i)
-		{
-			printf("[0]\n xx %d (%d,%d):\n",mpi_rank,mpi_rank_row_in_col,mpi_rank_col_in_row);
-			PrintMatrix2D(xx, n, m);
-			printf("\n");
-		    fflush(stdout);
-		}
-	}
-	MPI_Barrier(MPI_COMM_WORLD);
-	*/
 
-	//MPI_Wait(&mpi_request, &mpi_status);
+	// wait to complete before cleanup and return
+	MPI_Waitall(3, mpi_request, mpi_status);
 	//MPI_Barrier(comm);
 
 	// cleanup
