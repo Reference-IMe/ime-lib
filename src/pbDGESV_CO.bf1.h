@@ -9,7 +9,7 @@
 #include "pbDGEIT_CX.h"
 
 
-test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
 	/*
 	 * nb	NOT USED: blocking factor: number of adjacent column (block width)
@@ -42,19 +42,22 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 	MPI_Comm_rank(comm_row, &mpi_rank_col_in_row);		// get current process id in row
 	MPI_Comm_rank(comm_col, &mpi_rank_row_in_col);		// get current process id in col
 
-	MPI_Status  mpi_status[3];
-	MPI_Request mpi_request[3];
+	MPI_Status  mpi_status[4];
+	MPI_Request mpi_request[4];
 				mpi_request[0] = MPI_REQUEST_NULL;
 				mpi_request[1] = MPI_REQUEST_NULL;
 				mpi_request[2] = MPI_REQUEST_NULL;
+				mpi_request[3] = MPI_REQUEST_NULL;
 	//aliases
 	MPI_Request* mpi_req_bb  = &mpi_request[0]; // req. for bb broadcast
 	MPI_Request* mpi_req_row = &mpi_request[1]; // req. for row broadcast
-	MPI_Request* mpi_req_col = &mpi_request[2]; // req. for col broadcast
+	MPI_Request* mpi_req_h   = &mpi_request[2]; // req. for h broadcast
+	MPI_Request* mpi_req_col = &mpi_request[3]; // req. for col broadcast
 
-	MPI_Status* mpi_st_bb =  &mpi_status[0];
+	MPI_Status* mpi_st_bb  = &mpi_status[0];
 	MPI_Status* mpi_st_row = &mpi_status[1];
-	MPI_Status* mpi_st_col = &mpi_status[2];
+	//MPI_Status* mpi_st_h   = &mpi_status[2]; // never referenced explicitly
+	//MPI_Status* mpi_st_col = &mpi_status[3]; // never referenced explicitly
 
 	int i,j,l;						// general indexes
     int rhs;						// r.h.s. index
@@ -62,7 +65,7 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
     int mycols   = n/cproccols;		// num of cols per process
     int myxxrows = mycols;			// num of chunks for better code readability
     int bf           = 1;			// blocking factor
-	int current_last = bf-1;		// index for the current last row or col of K in buffer
+	//int current_last = bf-1;		// index for the current last row or col of K in buffer
     //TODO: use nb as blocking factor
 
     /*
@@ -82,24 +85,19 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 
 	// last rows and cols of K
 	double** lastK;
-			 lastK=AllocateMatrix2D(2*nb, mycols, CONTIGUOUS);	// last rows [0 - (bf-1)] and cols [ bf - (2bf -1)] of K
-	double** lastKr;
-				lastKr=malloc(bf*sizeof(double*));
-				for(i=0;i<bf;i++)
-				{
-					lastKr[i]=lastK[i];						// alias for last row
-				}
-	double** lastKc;
-				lastKc=malloc(nb*sizeof(double*));
-				for(i=0;i<bf;i++)
-				{
-					lastKc[i]=lastK[bf+i];					// alias for last col
-				}
+			 lastK=AllocateMatrix2D(2*bf, mycols, CONTIGUOUS);	// last rows [0 - (bf-1)] and cols [ bf - (2bf -1)] of K
+	// aliases
+	double*  lastKr=&lastK[0][0];
+	double*  lastKc=&lastK[1][0];
+
 	// helper vectors
     double* h;
     		h=AllocateVector(myrows);
+    double hh;
+    /*
     double* hh;
 			hh=AllocateVector(myrows);
+	*/
 
 	/*
 	 *  init inhibition table
@@ -129,19 +127,23 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 	//TODO: pre-calc other values..
 
 	int gi;			// global i
-	int gj;			// global j
-	int l_owner;	// proc rank hosting the l-th row (or col)
 	int l_1_owner;	// proc rank hosting the (l-1)-th row (or col)
 	int l_1_col;	// local index of the (l-1)-th col
+	int l_1_row;
+	int l_owner;	// proc rank hosting the l-th row (or col)
 	int l_row;
+	int l_col;
 
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
 	{
 		l_owner  = PVMAP(l, myrows);
 		l_row    = PVLOCAL(l, myrows);
+		l_col    = l_row;
+
 		l_1_owner = PVMAP(l-1, mycols);
 		l_1_col   = PVLOCAL(l-1, mycols);
+		l_1_row   = l_1_col;
 
 		/*
 		 * update solutions
@@ -156,7 +158,7 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 				}
 				*/
 				// avoid if
-				myxxstart = myxxstart - (mpi_rank_col_in_row==l_owner);
+				myxxstart = myxxstart - (mpi_rank_col_in_row == l_owner);
 
 				// bb[l] must be here
 				//MPI_Wait( mpi_req_bb, mpi_st_bb);
@@ -164,17 +166,17 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 				// lastKr must be here
 				//MPI_Wait( mpi_req_row, mpi_st_row);
 
+				// bb[l] and lastKr must be here
 				MPI_Waitall(2, mpi_request, mpi_status);
 
 				// update xx vector
 				// l .. n-1
-				//for (i=myxxstart; i<=PVLOCAL(n-1, mycols); i++)
 				for (i=myxxstart; i<myrows; i++)
 				{
 					gi=PVGLOBAL(i, mycols, mpi_rank_col_in_row);
 					for (rhs=0;rhs<m;rhs++)
 					{
-						xx[gi][rhs]=xx[gi][rhs]+lastKr[current_last][i]*bb[l][rhs];
+						xx[gi][rhs]=xx[gi][rhs]+lastKr[i]*bb[l][rhs];
 					}
 				}
 			}
@@ -188,26 +190,24 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 			// last_row = myrows | l_row | 0
 			last_row = ( mpi_rank_row_in_col < l_owner )*myrows + ( mpi_rank_row_in_col == l_owner )*l_row;
 
-			// lastKc must be here
-			MPI_Wait( mpi_req_col, mpi_st_col);
-
 			if (mpi_rank_row_in_col==mpi_rank_col_in_row)
 			{
-				// lastKr must be here
-				MPI_Wait( mpi_req_row, mpi_st_row);
+				// lastKc must be here
+				//MPI_Wait( mpi_req_col, mpi_st_col);
 
+				// lastKr must be here
+				//MPI_Wait( mpi_req_row, mpi_st_row);
+
+				MPI_Waitall(3, mpi_req_row, mpi_st_row);
+
+#pragma ivdep
 				for (i=0; i<last_row; i++)
 				{
-					h[i]   = 1/(1-lastKc[current_last][i]*lastKr[current_last][i]);
+					h[i]   = 1/(1-lastKc[i]*lastKr[i]);
 				}
 			}
-			MPI_Bcast ( &h[0], last_row, MPI_DOUBLE, mpi_rank_row_in_col, comm_row);
+			MPI_Ibcast ( &h[0], last_row, MPI_DOUBLE, mpi_rank_row_in_col, comm_row, mpi_req_h);
 			//TODO: async
-
-			for (i=0; i<last_row; i++)
-			{
-				hh[i]  = lastKc[current_last][i]*h[i];
-			}
 
 
 		/*
@@ -225,7 +225,7 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 						gi=PVGLOBAL(i, mycols, mpi_rank_col_in_row);
 						for (rhs=0;rhs<m;rhs++)
 						{
-							bb[gi][rhs] = bb[gi][rhs]-lastKr[current_last][i]*bb[l][rhs];
+							bb[gi][rhs] = bb[gi][rhs]-lastKr[i]*bb[l][rhs];
 						}
 					}
 				}
@@ -236,7 +236,7 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 						gi=PVGLOBAL(i, mycols, mpi_rank_col_in_row);
 						for (rhs=0;rhs<m;rhs++)
 						{
-							bb[gi][rhs] = bb[gi][rhs]-lastKr[current_last][i]*bb[l][rhs];
+							bb[gi][rhs] = bb[gi][rhs]-lastKr[i]*bb[l][rhs];
 						}
 					}
 				}
@@ -244,6 +244,7 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 
 				// send l-1 values to other procs for next iteration
 				MPI_Ibcast (&bb[l-1][0], m, MPI_DOUBLE, l_1_owner, comm_row, mpi_req_bb);
+				// TODO: can be avoided?
 			}
 
 
@@ -254,17 +255,28 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 			// for procs with last_row == 0, nothing to do
 
 			// lastKr must be here
-			MPI_Wait( mpi_req_row, mpi_st_row);
+			//MPI_Wait( mpi_req_row, mpi_st_row);
+
+			// h must be here
+			//MPI_Wait( mpi_req_h, mpi_st_h);
+
+			// lastKr and h must be here
+			MPI_Waitall(3, mpi_req_row, mpi_st_row);
 
 			// lastKc is already there
 			// no need to "MPI_Wait"
 
+			/*
+			   // naive version
+			   //
+			int gi; // global i
 			for (i=0; i < last_row; i++)
 			{
+				hh[i]  = lastKc[i]*h[i];
+
 				gi=PVGLOBAL(i, myrows, mpi_rank_row_in_col);
 				for (j=0; j<mycols; j++)
 				{
-					// TODO: remove ifs
 					gj=PVGLOBAL(j, mycols, mpi_rank_col_in_row);
 					if (gj==gi)
 					{
@@ -272,11 +284,113 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 					}
 					else if (gj==l)
 					{
-						Tlocal[i][j] = - lastKr[current_last][j]*hh[i];
+						Tlocal[i][j] = - lastKr[j]*hh[i];
 					}
 					else
 					{
-						Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[current_last][j]*hh[i];
+						Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh[i];
+					}
+				}
+			}
+			*/
+
+			   // faster version (ifs removed from loop inside)
+			   //
+			if (mpi_rank_col_in_row == l_owner)
+			{
+				if (mpi_rank_col_in_row == mpi_rank_row_in_col)		// proc holding l-th col AND ON the diagonal
+				{
+					for (i=0; i < last_row; i++)
+					{
+						hh  = lastKc[i]*h[i];
+
+						// before diagonal
+#pragma ivdep
+						for (j=0; j < i; j++)
+						{
+							Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
+						}
+
+						// on diagonal
+						Tlocal[i][j] = Tlocal[i][j]*h[i];
+
+						// after diagonal but before l-th
+#pragma ivdep
+						for (j=i+1; j < l_col; j++)
+						{
+							Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
+						}
+
+						// on l-th
+						Tlocal[i][j] = - lastKr[j]*hh;
+
+						// after l-th
+#pragma ivdep
+						for (j=l_col+1; j < mycols; j++)
+						{
+							Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
+						}
+					}
+				}
+				else												// procs holding l-th col AND OFF the diagonal
+				{
+					for (i=0; i < last_row; i++)
+					{
+						hh  = lastKc[i]*h[i];
+
+						// before l-th
+#pragma ivdep
+						for (j=0; j < l_col; j++)
+						{
+							Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
+						}
+
+						// on l-th
+						Tlocal[i][j] = - lastKr[j]*hh;
+
+						// after l-th
+#pragma ivdep
+						for (j=l_col+1; j < mycols; j++)
+						{
+							Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
+						}
+					}
+				}
+			}
+			else if (mpi_rank_col_in_row == mpi_rank_row_in_col)	// procs ON the diagonal but NOT holding the l-th col
+			{
+				for (i=0; i < last_row; i++)
+				{
+					hh  = lastKc[i]*h[i];
+
+					// before diagonal
+#pragma ivdep
+					for (j=0; j < i; j++)
+					{
+						Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
+					}
+
+					// on diagonal
+					Tlocal[i][j] = Tlocal[i][j]*h[i];
+
+					// after diagonal
+#pragma ivdep
+					for (j=i+1; j < mycols; j++)
+					{
+						Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
+					}
+				}
+			}
+			else													// procs OFF the diagonal but NOT holding the l-th col
+			{
+				for (i=0; i < last_row; i++)
+				{
+					hh  = lastKc[i]*h[i];
+
+#pragma ivdep
+					for (j=0; j < mycols; j++)
+					{
+						Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
 					}
 				}
 			}
@@ -290,10 +404,10 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 			{
 				for (i=0; i < mycols; i++)			// copy (l-1)-th row in buffer
 				{
-					lastKr[current_last][i]=Tlocal[l_1_col][i];
+					lastKr[i]=Tlocal[l_1_row][i];
 				}
 			}
-			MPI_Ibcast ( &lastKr[current_last][0], mycols, MPI_DOUBLE, l_1_owner, comm_col, mpi_req_row);
+			MPI_Ibcast ( &lastKr[0], mycols, MPI_DOUBLE, l_1_owner, comm_col, mpi_req_row);
 
 			// sync last col
 			if (mpi_rank_row_in_col <= l_1_owner)			// procs rows, including that one holding the (l-1)-th row
@@ -302,10 +416,10 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 				{
 					for (i=0; i < last_row; i++)	// copy (l-1)-th col in buffer
 					{
-						lastKc[current_last][i]=Tlocal[i][l_1_col];
+						lastKc[i]=Tlocal[i][l_1_col];
 					}
 				}
-				MPI_Ibcast ( &lastKc[current_last][0], last_row, MPI_DOUBLE, l_1_owner, comm_row, mpi_req_col);
+				MPI_Ibcast ( &lastKc[0], last_row, MPI_DOUBLE, l_1_owner, comm_row, mpi_req_col);
 			}
 
 	}// end of loop over levels
@@ -355,16 +469,16 @@ test_output pbDGESV_CO_g_smallest(int nb, int n, double** A, int m, double** bb,
 
 
 	// wait to complete before cleanup and return
-	MPI_Waitall(3, mpi_request, mpi_status);
+	MPI_Waitall(4, mpi_request, mpi_status);
 	//MPI_Barrier(comm);
 
 	// cleanup
-	NULLFREE(lastKc);
-	NULLFREE(lastKr);
+	//NULLFREE(lastKc);
+	//NULLFREE(lastKr);
 
 	DeallocateMatrix2D(lastK,2*bf,CONTIGUOUS);
 	DeallocateVector(h);
-	DeallocateVector(hh);
+	//DeallocateVector(hh);
 	DeallocateMatrix2D(Tlocal,myrows,CONTIGUOUS);
 
 	result.total_end_time = time(NULL);
