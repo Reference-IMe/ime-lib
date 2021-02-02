@@ -4,6 +4,13 @@
  *  Created on: Jan 4, 2021
  *      Author: marcello
  *
+ *      b*c        (kronecker)
+ *      a-b*c      (hadamard)
+ *                 (extract diagonal)
+ *      (a-b*c)*h  (pdgemm)
+ *                 (copy)
+ *                 (triangular solve)
+ *
  *      https://www.mathkeisan.com/UsersGuide/ScaLAPACK.cfm
  *
  *      Is there a way to extract the diagonal from a matrix with simple matrix operations
@@ -46,38 +53,26 @@ test_output blacsDGESV_CO_1(int n, double* A_global, int m, double* B_global, in
 	double d0 = 0.0;
 	double d1 = 1.0;
 	int info;
-	//int *ipiv;
 
 	// matrix
 	int nr, nc;
 	double *A;
-	//double *At;
 	double *C;
 	double *T;
-	//double *J;
 	double *diag;
 	double *lcol;
 
 	int ncrhs, nrrhs;
 	double *B;
-	//int ncrhst, nrrhst;
-	//double *Bt;
 
 	int descA_global[9];
 	int descB_global[9];
 	int descA[9];
-	//int descAt[9];
 	int descC[9];
 	int descT[9];
-	//int descJ[9];
 	int descB[9];
-	//int descBt[9];
 
 	int lld;
-	//int lldj;
-	//int lldt;
-
-	//int ncj, nrj;
 
 	result.core_start_time = time(NULL);
 
@@ -88,38 +83,20 @@ test_output blacsDGESV_CO_1(int n, double* A_global, int m, double* B_global, in
 		nr = numroc_( &n, &nb, &myrow, &i0, &nprow );
 		lld = MAX( 1 , nr );
 		A  = malloc(nr*nc*sizeof(double));
-		//At = malloc(nr*nc*sizeof(double));
 		C = malloc(nr*nc*sizeof(double));
 		T = malloc(nr*nc*sizeof(double));
 		diag = malloc(nc*sizeof(double));
 		lcol = malloc(nc*sizeof(double));
-		/*
-		ncj = numroc_( &i1, &nb, &mycol, &i0, &npcol );
-		nrj = numroc_( &n,  &nb, &myrow, &i0, &nprow );
-		lldj = MAX( 1 , nrj );
-		J = malloc(ncj*nrj*sizeof(double));
-		*/
+
 		ncrhs = numroc_( &m, &nb, &mycol, &i0, &npcol );
 		nrrhs = numroc_( &n, &nb, &myrow, &i0, &nprow );
 		B = malloc(nrrhs*ncrhs*sizeof(double));
 
-		//ncrhst = numroc_( &n, &nb, &mycol, &i0, &npcol );
-		//nrrhst = numroc_( &m, &nb, &myrow, &i0, &nprow );
-		//lldt = MAX( 1 , nrrhst );
-		//Bt = malloc(nrrhst*ncrhst*sizeof(double));
-
-		//ipiv = malloc((lld+nb)*sizeof(int));
-
 		// Descriptors (local)
 		descinit_( descA, &n, &n, &nb, &nb, &i0, &i0, &context, &lld, &info );
-		//descinit_( descAt, &n, &n, &nb, &nb, &i0, &i0, &context, &lld, &info );
-
 		descinit_( descC, &n, &n, &nb, &nb, &i0, &i0, &context, &lld, &info );
 		descinit_( descT, &n, &n, &nb, &nb, &i0, &i0, &context, &lld, &info );
-		//descinit_( descJ, &n, &i1, &nb, &nb, &i0, &i0, &context, &lldj, &info );
-
 		descinit_( descB, &n, &m, &nb, &nb, &i0, &i0, &context, &lld, &info );
-		//descinit_( descBt, &m, &n, &nb, &nb, &i0, &i0, &context, &lldt, &info );
 
 		/*
 		for (i=0; i<cprocs; i++)
@@ -215,17 +192,6 @@ test_output blacsDGESV_CO_1(int n, double* A_global, int m, double* B_global, in
 		pdgemm_("N", "N", &n, &n, &n, &d1, A, &i1, &i1, descA, C, &i1, &i1, descC, &d0, T, &i1, &i1, descT);
 		// T actually contains T'
 
-		/*
-		pdgemr2d_(&n, &n, T, &i1, &i1, descT, A_global, &i1, &i1, descA_global, &context);
-		if (mpi_rank==0)
-		{
-			printf("\n[%d]\n",n);
-			printf("(T')\n");
-			PrintMatrix1D(A_global,n,n);
-		}
-		*/
-
-		//double d1_ = -1;
 		int l;
 		int l_1;
 
@@ -235,16 +201,6 @@ test_output blacsDGESV_CO_1(int n, double* A_global, int m, double* B_global, in
 
 			// b*c in A
 			pdgemm_("N", "N", &n, &l_1, &i1, &d1, T, &i1, &l, descT, T, &l, &i1, descT, &d0, A, &i1, &i1, descA);
-
-			/*
-			pdgemr2d_(&n, &n, A, &i1, &i1, descA, A_global, &i1, &i1, descA_global, &context);
-			if (mpi_rank==0)
-			{
-				printf("\n[%d]\n",l-1);
-				printf("(b*c)\n");
-				PrintMatrix1D(A_global,n,n);
-			}
-			*/
 
 			// save elements that will be overwritten
 			//
@@ -341,22 +297,6 @@ test_output blacsDGESV_CO_1(int n, double* A_global, int m, double* B_global, in
 				}
 			}
 
-			/*
-			pdgemr2d_(&n, &n, T, &i1, &i1, descT, A_global, &i1, &i1, descA_global, &context);
-			if (mpi_rank==0)
-			{
-				printf("(-)\n");
-				PrintMatrix1D(A_global,l-1,n);
-			}
-
-			pdgemr2d_(&n, &n, A, &i1, &i1, descA, A_global, &i1, &i1, descA_global, &context);
-			if (mpi_rank==0)
-			{
-				printf("(H)\n");
-				PrintMatrix1D(A_global,n,n);
-			}
-			*/
-
 			// restore elements
 			//
 			// !! swapped indices !! transposition
@@ -416,27 +356,9 @@ test_output blacsDGESV_CO_1(int n, double* A_global, int m, double* B_global, in
 				}
 			}
 
-			/*
-			pdgemr2d_(&n, &n, T, &i1, &i1, descT, A_global, &i1, &i1, descA_global, &context);
-			if (mpi_rank==0)
-			{
-				printf("(K pre H)\n");
-				PrintMatrix1D(A_global,n,n);
-			}
-			*/
-
 			// topological formula
 			pdgemm_("N", "N", &n, &l_1, &l_1, &d1, T, &i1, &i1, descT, A, &i1, &i1, descA, &d0, C, &i1, &i1, descC);
 			pdlacpy_("A", &n, &l_1, C, &i1, &i1, descC, T, &i1, &i1, descT);
-
-			/*
-			pdgemr2d_(&n, &n, T, &i1, &i1, descT, A_global, &i1, &i1, descA_global, &context);
-			if (mpi_rank==0)
-			{
-				printf("T(%d)\n",l-1);
-				PrintMatrix1D(A_global,n,n);
-			}
-			*/
 
 		}
 
@@ -445,28 +367,16 @@ test_output blacsDGESV_CO_1(int n, double* A_global, int m, double* B_global, in
 		pdtrmm_ ("L", "L", "N", "N", &n, &i1, &d1, T, &i1, &i1, descT, B, &i1, &i1, descB);
 
 		pdgemr2d_(&n, &m, B, &i1, &i1, descB, B_global, &i1, &i1, descB_global, &context);
-		/*
-		if (mpi_rank==0)
-		{
-			printf("C(%d)\n",l-1);
-			PrintMatrix1D(B_global,n,m);
-		}
-		*/
+
 		result.core_end_time = time(NULL);
 		result.exit_code = 0;
 	}
 	else
 	{
 		A  = NULL;
-		//At = NULL;
 		B  = NULL;
-		//Bt = NULL;
-
-		//J = NULL;
 		C = NULL;
 		T = NULL;
-
-		//ipiv = NULL;
 
 		result.core_start_time = time(NULL);
 		result.core_end_time = time(NULL);
@@ -475,15 +385,9 @@ test_output blacsDGESV_CO_1(int n, double* A_global, int m, double* B_global, in
 
 	// cleanup
 	NULLFREE(A);
-	//NULLFREE(At);
 	NULLFREE(B);
-	//NULLFREE(Bt);
-
-	//NULLFREE(J);
 	NULLFREE(C);
 	NULLFREE(T);
-
-	//NULLFREE(ipiv);
 
 	MPI_Barrier(MPI_COMM_WORLD);
 
