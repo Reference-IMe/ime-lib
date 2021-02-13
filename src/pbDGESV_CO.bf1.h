@@ -103,15 +103,17 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 	 *  init inhibition table
 	 */
 	DGEZR(xx, n, m);											// init (zero) solution vectors
-	pbDGEIT_CX(A, Tlocal, lastK, n, bf,
+	pbDGEIT_CX(A, Tlocal, lastK, n, 1, cprocs,
 			comm, mpi_rank, comm_row,
 			mpi_rank_col_in_row, comm_col,
 			mpi_rank_row_in_col,
-			cprocs);											// init inhibition table
+			mpi_status,
+			mpi_request
+			);											// init inhibition table
 
 	if (mpi_rank_row_in_col==0) 								// first row of procs
 	{
-		MPI_Bcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm_row);	// send all r.h.s
+		MPI_Ibcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm_row, mpi_req_bb);	// send all r.h.s
 	}
 
 
@@ -166,7 +168,7 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 				// lastKr must be here
 				//MPI_Wait( mpi_req_row, mpi_st_row);
 
-				// bb[l] and lastKr must be here
+				// bb[l] (or full bb, for the first iteration after init) and lastKr must be here
 				MPI_Waitall(2, mpi_request, mpi_status);
 
 				// update xx vector
