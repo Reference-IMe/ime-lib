@@ -9,10 +9,10 @@
  *
  */
 
-#ifndef __pbDGEIT_CX_H__
-#define __pbDGEIT_CX_H__
+#ifndef __pbDGEIT_CX_BF1_H__
+#define __pbDGEIT_CX_BF1_H__
 
-void pbDGEIT_CX(double** A, double** Tlocal, double** lastK, int n, int bf, int cprocs,
+void pbDGEIT_CX_bf1(double** A, double** Tlocal, double** lastK, int n, int cprocs,
 				MPI_Comm comm, int rank,
 				MPI_Comm comm_row, int rank_col_in_row,
 				MPI_Comm comm_col, int rank_row_in_col,
@@ -26,18 +26,11 @@ void pbDGEIT_CX(double** A, double** Tlocal, double** lastK, int n, int bf, int 
     int myrows   = n/cprocrows;		// num of rows per process
     int mycols   = n/cproccols;		// num of cols per process
 
-	double** lastKr;
-				lastKr=malloc(bf*sizeof(double*));
-				for(i=0;i<bf;i++)
-				{
-					lastKr[i]=lastK[i];						// alias for last row
-				}
-	double** lastKc;
-				lastKc=malloc(bf*sizeof(double*));
-				for(i=0;i<bf;i++)
-				{
-					lastKc[i]=lastK[bf+i];					// alias for last col
-				}
+	double* lastKr;
+			lastKr=lastK[0];						// alias for last row
+
+	double* lastKc;
+			lastKc=lastK[1];					// alias for last col
 
 	double* diag;
 			diag=malloc(mycols*sizeof(double*));
@@ -107,10 +100,10 @@ void pbDGEIT_CX(double** A, double** Tlocal, double** lastK, int n, int bf, int 
 			INIT_T_ON_DIAG(i, j, myrows, mycols, diag);
 
 			// receive last rows
-			MPI_Ibcast ( &lastKr[0][0], bf*mycols, MPI_DOUBLE, cprocrows-1, comm_col, &mpi_request[1]);
+			MPI_Ibcast ( &lastKr[0], mycols, MPI_DOUBLE, cprocrows-1, comm_col, &mpi_request[1]);
 
 			// receive last cols
-			MPI_Ibcast ( &lastKc[0][0], bf*myrows, MPI_DOUBLE, cproccols-1, comm_row, &mpi_request[3]);
+			MPI_Ibcast ( &lastKc[0], myrows, MPI_DOUBLE, cproccols-1, comm_row, &mpi_request[3]);
 
 		}
 		else if ( rank_row_in_col == cproccols-1 )											// last proc in the row
@@ -129,15 +122,12 @@ void pbDGEIT_CX(double** A, double** Tlocal, double** lastK, int n, int bf, int 
 			// distribute last cols
 			for (i=0; i<myrows; i++)
 			{
-				for (j=0; j<bf; j++)
-				{
-					lastKc[j][i]=Tlocal[i][mycols-bf];
-				}
+				lastKc[i]=Tlocal[i][mycols-1];
 			}
-			MPI_Ibcast ( &lastKc[0][0], bf*myrows, MPI_DOUBLE, cproccols-1, comm_row, &mpi_request[3]);
+			MPI_Ibcast ( &lastKc[0], myrows, MPI_DOUBLE, cproccols-1, comm_row, &mpi_request[3]);
 
 			// receive last rows
-			MPI_Ibcast ( &lastKr[0][0], bf*mycols, MPI_DOUBLE, cprocrows-1, comm_col, &mpi_request[1]);
+			MPI_Ibcast ( &lastKr[0], mycols, MPI_DOUBLE, cprocrows-1, comm_col, &mpi_request[1]);
 
 		}
 		else 																				// all procs in the row but the diagonal and the last one
@@ -154,10 +144,10 @@ void pbDGEIT_CX(double** A, double** Tlocal, double** lastK, int n, int bf, int 
 			INIT_T_OFF_DIAG(i, j, myrows, mycols, diag);
 
 			// receive last rows
-			MPI_Ibcast ( &lastKr[0][0], bf*mycols, MPI_DOUBLE, cprocrows-1, comm_col, &mpi_request[1]);
+			MPI_Ibcast ( &lastKr[0], mycols, MPI_DOUBLE, cprocrows-1, comm_col, &mpi_request[1]);
 
 			// receive last cols
-			MPI_Ibcast ( &lastKc[0][0], bf*myrows, MPI_DOUBLE, cproccols-1, comm_row, &mpi_request[3]);
+			MPI_Ibcast ( &lastKc[0], myrows, MPI_DOUBLE, cproccols-1, comm_row, &mpi_request[3]);
 
 		}
 	}
@@ -182,24 +172,18 @@ void pbDGEIT_CX(double** A, double** Tlocal, double** lastK, int n, int bf, int 
 			INIT_T_ON_DIAG(i, j, myrows, mycols, diag);
 
 			// distribute last rows
-			for (i=0; i<bf; i++)
+			for (j=0; j<mycols; j++)
 			{
-				for (j=0; j<mycols; j++)
-				{
-					lastKr[i][j]=Tlocal[myrows-bf][j];
-				}
+				lastKr[j]=Tlocal[myrows-1][j];
 			}
-			MPI_Ibcast ( &lastKr[0][0], bf*mycols, MPI_DOUBLE, cprocrows-1, comm_col, &mpi_request[1]);
+			MPI_Ibcast ( &lastKr[0], mycols, MPI_DOUBLE, cprocrows-1, comm_col, &mpi_request[1]);
 
 			// distribute last cols
 			for (i=0; i<myrows; i++)
 			{
-				for (j=0; j<bf; j++)
-				{
-					lastKc[j][i]=Tlocal[i][mycols-bf];
-				}
+					lastKc[i]=Tlocal[i][mycols-1];
 			}
-			MPI_Ibcast ( &lastKc[0][0], bf*myrows, MPI_DOUBLE, cproccols-1, comm_row, &mpi_request[3]);
+			MPI_Ibcast ( &lastKc[0], myrows, MPI_DOUBLE, cproccols-1, comm_row, &mpi_request[3]);
 
 		}
 		else 																				// all procs in the row but the last one (which also on the diagonal)
@@ -216,21 +200,16 @@ void pbDGEIT_CX(double** A, double** Tlocal, double** lastK, int n, int bf, int 
 			INIT_T_OFF_DIAG(i, j, myrows, mycols, diag);
 
 			// distribute last rows
-			for (i=0; i<bf; i++)
+			for (j=0; j<mycols; j++)
 			{
-				for (j=0; j<mycols; j++)
-				{
-					lastKr[i][j]=Tlocal[myrows-bf][j];
-				}
+				lastKr[j]=Tlocal[myrows-1][j];
 			}
-			MPI_Ibcast ( &lastKr[0][0], bf*mycols, MPI_DOUBLE, cprocrows-1, comm_col, &mpi_request[1]);
+			MPI_Ibcast ( &lastKr[0], mycols, MPI_DOUBLE, cprocrows-1, comm_col, &mpi_request[1]);
 
 			// receive last cols
-			MPI_Ibcast ( &lastKc[0][0], bf*myrows, MPI_DOUBLE, cproccols-1, comm_row, &mpi_request[3]);
+			MPI_Ibcast ( &lastKc[0], myrows, MPI_DOUBLE, cproccols-1, comm_row, &mpi_request[3]);
 		}
 	}
-	NULLFREE(lastKr);
-	NULLFREE(lastKc);
 	NULLFREE(diag);
 }
 
