@@ -12,7 +12,7 @@
 #ifndef __pbDGEIT_CX_H__
 #define __pbDGEIT_CX_H__
 
-void pbDGEIT_CX(double** A, double** Tlocal, double** lastK, int n, int bf, int cprocs,
+void pbDGEIT_CX(double** A, double** Tlocal, double** lastKr, double** lastKc, int n, int bf, int cprocs,
 				MPI_Comm comm, int rank,
 				MPI_Comm comm_row, int rank_col_in_row,
 				MPI_Comm comm_col, int rank_row_in_col,
@@ -25,19 +25,6 @@ void pbDGEIT_CX(double** A, double** Tlocal, double** lastK, int n, int bf, int 
     int cproccols = cprocrows;
     int myrows   = n/cprocrows;		// num of rows per process
     int mycols   = n/cproccols;		// num of cols per process
-
-	double** lastKr;
-				lastKr=malloc(bf*sizeof(double*));
-				for(i=0;i<bf;i++)
-				{
-					lastKr[i]=lastK[i];						// alias for last row
-				}
-	double** lastKc;
-				lastKc=malloc(bf*sizeof(double*));
-				for(i=0;i<bf;i++)
-				{
-					lastKc[i]=lastK[bf+i];					// alias for last col
-				}
 
 	double* diag;
 			diag=malloc(mycols*sizeof(double*));
@@ -131,7 +118,7 @@ void pbDGEIT_CX(double** A, double** Tlocal, double** lastK, int n, int bf, int 
 			{
 				for (j=0; j<bf; j++)
 				{
-					lastKc[j][i]=Tlocal[i][mycols-bf];
+					lastKc[i][j]=Tlocal[i][mycols-bf];
 				}
 			}
 			MPI_Ibcast ( &lastKc[0][0], bf*myrows, MPI_DOUBLE, cproccols-1, comm_row, &mpi_request[3]);
@@ -196,7 +183,7 @@ void pbDGEIT_CX(double** A, double** Tlocal, double** lastK, int n, int bf, int 
 			{
 				for (j=0; j<bf; j++)
 				{
-					lastKc[j][i]=Tlocal[i][mycols-bf];
+					lastKc[i][j]=Tlocal[i][mycols-bf];
 				}
 			}
 			MPI_Ibcast ( &lastKc[0][0], bf*myrows, MPI_DOUBLE, cproccols-1, comm_row, &mpi_request[3]);
@@ -229,8 +216,6 @@ void pbDGEIT_CX(double** A, double** Tlocal, double** lastK, int n, int bf, int 
 			MPI_Ibcast ( &lastKc[0][0], bf*myrows, MPI_DOUBLE, cproccols-1, comm_row, &mpi_request[3]);
 		}
 	}
-	NULLFREE(lastKr);
-	NULLFREE(lastKc);
 	NULLFREE(diag);
 }
 

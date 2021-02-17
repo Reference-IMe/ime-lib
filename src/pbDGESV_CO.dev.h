@@ -73,22 +73,15 @@ test_output pbDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 			 Tlocal=AllocateMatrix2D(myrows, mycols, CONTIGUOUS);
 
 	// last rows and cols of K
-	double** lastK;
-			 lastK=AllocateMatrix2D(2*bf, mycols, CONTIGUOUS);	// last rows [0 - (bf-1)] and cols [ bf - (2bf -1)] of K
+	//double** lastK;
+	//		 lastK=AllocateMatrix2D(2*bf, mycols, CONTIGUOUS);	// last rows [0 - (bf-1)] and cols [ bf - (2bf -1)] of K
 
 	// aliases
 	double** lastKr;
-				lastKr=malloc(bf*sizeof(double*));
-				for(i=0;i<bf;i++)
-				{
-					lastKr[i]=lastK[i];						// alias for last row
-				}
+			 lastKr=AllocateMatrix2D(bf, mycols, CONTIGUOUS);
+
 	double** lastKc;
-				lastKc=malloc(bf*sizeof(double*));
-				for(i=0;i<bf;i++)
-				{
-					lastKc[i]=lastK[bf+i];					// alias for last col
-				}
+			 lastKc=AllocateMatrix2D(myrows, bf, CONTIGUOUS);
 
 	// helper vectors
     double* h;
@@ -102,7 +95,7 @@ test_output pbDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 	 *  init inhibition table
 	 */
 	DGEZR(xx, n, m);											// init (zero) solution vectors
-	pbDGEIT_CX(A, Tlocal, lastK, n, bf, cprocs,
+	pbDGEIT_CX(A, Tlocal, lastKr, lastKc, n, bf, cprocs,
 			comm, mpi_rank, comm_row,
 			mpi_rank_col_in_row, comm_col,
 			mpi_rank_row_in_col,
@@ -144,7 +137,6 @@ test_output pbDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 		for (lb=bf-1; lb>=0; lb--)
 		{
 			l=block*bf+lb;
-			if (mpi_rank==0) printf("level %d\n",l);
 			l_owner  = PVMAP(l, myrows);
 			l_row    = PVLOCAL(l, myrows);
 			l_col    = l_row;
@@ -193,7 +185,7 @@ test_output pbDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 					#pragma ivdep
 					for (i=0; i<last_row; i++)
 					{
-						h[i]   = 1/(1-lastKc[lb][i]*lastKr[lb][i]);
+						h[i]   = 1/(1-lastKc[i][lb]*lastKr[lb][i]);
 					}
 				}
 				MPI_Ibcast ( &h[0], last_row, MPI_DOUBLE, mpi_rank_row_in_col, comm_row, mpi_req_h);
@@ -252,7 +244,7 @@ test_output pbDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 				#pragma ivdep
 				for (i=0; i<last_row; i++)
 				{
-					hh[i]  = lastKc[lb][i]*h[i];
+					hh[i]  = lastKc[i][lb]*h[i];
 				}
 
 				if (mpi_rank_col_in_row == l_owner)
@@ -349,15 +341,20 @@ test_output pbDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 			/*
 			 * update local copy of global last rows and cols of K
 			 */
-				for (i=0;i<lb-1;i++)
+				for (i=0; i < lb-1; i++)
 				{
-					//for (j=0; j<=l-1; j++)
-					//TODO: reduce update of lastKc
 					#pragma ivdep
 					for (j=0; j<mycols; j++)
 					{
-						lastKc[i][j]=lastKc[i][j]*h[j]      - lastKr[lb][l-lb+i]*hh[j];
 						lastKr[i][j]=lastKr[i][j]*h[l-lb+i] - lastKr[lb][j]*hh[l-lb+i];
+					}
+				}
+				for (i=0; i < last_row; i++)
+				{
+					#pragma ivdep
+					for (j=0; j < lb-1; j++)
+					{
+						lastKc[i][j]=lastKc[i][j]*h[i]      - lastKr[lb][l-lb+j]*hh[i];
 					}
 				}
 
@@ -366,7 +363,6 @@ test_output pbDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 			 */
 				if (lb==0)
 				{
-					if (mpi_rank==0) printf("sync\n");
 					// sync last row
 					if (mpi_rank_row_in_col == l_1_owner)			// procs row that holds the (l-1)-th row
 					{
@@ -392,11 +388,11 @@ test_output pbDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 								#pragma ivdep
 								for (j=0; j < last_row; j++)	// copy (l-1)-th col in buffer
 								{
-									lastKc[i][j]=Tlocal[j][l_1_col-i];
+									lastKc[j][i]=Tlocal[j][l_1_col-i];
 								}
 							}
 						}
-						MPI_Ibcast ( &lastKc[0][0], bf*myrows, MPI_DOUBLE, l_1_owner, comm_row, mpi_req_col);
+						MPI_Ibcast ( &lastKc[0][0], bf*last_row, MPI_DOUBLE, l_1_owner, comm_row, mpi_req_col);
 					}
 				}
 
@@ -406,7 +402,6 @@ test_output pbDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 	for (lb=bf-1; lb>0; lb--) // loop over level but last one in last block
 	{
 		l=block*bf+lb;
-		if (mpi_rank==0) printf("level %d\n",l);
 		l_owner  = PVMAP(l, myrows);
 		l_row    = PVLOCAL(l, myrows);
 		l_col    = l_row;
@@ -455,7 +450,7 @@ test_output pbDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 				#pragma ivdep
 				for (i=0; i<last_row; i++)
 				{
-					h[i]   = 1/(1-lastKc[lb][i]*lastKr[lb][i]);
+					h[i]   = 1/(1-lastKc[i][lb]*lastKr[lb][i]);
 				}
 			}
 			MPI_Ibcast ( &h[0], last_row, MPI_DOUBLE, mpi_rank_row_in_col, comm_row, mpi_req_h);
@@ -514,7 +509,7 @@ test_output pbDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 			#pragma ivdep
 			for (i=0; i<last_row; i++)
 			{
-				hh[i]  = lastKc[lb][i]*h[i];
+				hh[i]  = lastKc[i][lb]*h[i];
 			}
 
 			if (mpi_rank_col_in_row == l_owner)
@@ -661,10 +656,8 @@ test_output pbDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 	//MPI_Barrier(comm);
 
 	// cleanup
-	NULLFREE(lastKc);
-	NULLFREE(lastKr);
-
-	DeallocateMatrix2D(lastK,2*bf,CONTIGUOUS);
+	DeallocateMatrix2D(lastKr,bf,CONTIGUOUS);
+	DeallocateMatrix2D(lastKc,myrows,CONTIGUOUS);
 	DeallocateVector(h);
 	DeallocateVector(hh);
 	DeallocateMatrix2D(Tlocal,myrows,CONTIGUOUS);
