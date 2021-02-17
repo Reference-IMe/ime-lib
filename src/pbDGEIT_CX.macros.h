@@ -8,6 +8,8 @@
 #ifndef __PBDGEIT_CX_MACROS_H__
 #define __PBDGEIT_CX_MACROS_H__
 
+// "hash" parameter has to be # (without quotes) when calling
+// (preprocessor directive are not allowed in #defines
 
 #define INIT_T_ON_DIAG(i, j, myrows, mycols, diag)	for (i=0;i<myrows;i++)						\
 													{											\
