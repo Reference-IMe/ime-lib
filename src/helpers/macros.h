@@ -42,7 +42,9 @@
 #define PVMAP(col_index, num_of_cols) ((col_index)/(num_of_cols))
 #define PVGLOBAL(col_index, num_of_cols, mpi_rank) col_index+(num_of_cols)*(mpi_rank)
 
-#define IS_MULT(a, b) ((a % b)==0)
+#define IS_MULT(a, b) ( (a % b)==0 )
+
+#define IS_SQUARE(a) ( pow((int)sqrt(a),2)==a )
 
 #define DISPLAY_MSG(routine_name, text) printf("     %s %s\n", routine_name, text);
 #define DISPLAY_ERR(routine_name, text) printf("ERR: %s %s\n", routine_name, text);
