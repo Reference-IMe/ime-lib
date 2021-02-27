@@ -12,7 +12,7 @@
 #ifndef __pbDGEIT_CX_BF1_H__
 #define __pbDGEIT_CX_BF1_H__
 
-void pbDGEIT_CX_bf1(double** A, double** Tlocal, double** lastK, int n, int cprocs,
+void pbDGEIT_CX_bf1(double** A, double** Tlocal, double* lastKr, double* lastKc, int n, int cprocs,
 				MPI_Comm comm, int rank,
 				MPI_Comm comm_row, int rank_col_in_row,
 				MPI_Comm comm_col, int rank_row_in_col,
@@ -25,12 +25,6 @@ void pbDGEIT_CX_bf1(double** A, double** Tlocal, double** lastK, int n, int cpro
     int cproccols = cprocrows;
     int myrows   = n/cprocrows;		// num of rows per process
     int mycols   = n/cproccols;		// num of cols per process
-
-	double* lastKr;
-			lastKr=lastK[0];						// alias for last row
-
-	double* lastKc;
-			lastKc=lastK[1];					// alias for last col
 
 	double* diag;
 			diag=malloc(mycols*sizeof(double*));
@@ -80,7 +74,7 @@ void pbDGEIT_CX_bf1(double** A, double** Tlocal, double** lastK, int n, int cpro
 
 	if ( rank_row_in_col != cprocrows-1 )														// all rows of procs but the last one
 	{
-		if ( rank_row_in_col == rank_col_in_row )											// proc on the diagonal
+		if ( rank_col_in_row == rank_row_in_col )											// proc on the diagonal
 		{
 			// block of A must be here before distributing diagonal elements
 			MPI_Wait( &mpi_request[2], &mpi_status[2]);
@@ -92,7 +86,7 @@ void pbDGEIT_CX_bf1(double** A, double** Tlocal, double** lastK, int n, int cpro
 				//TODO: reciprocal to avoid division in subsequent ops, any rounding concern?
 			}
 				// proc on main diagonal broadcasts to his row of procs
-			MPI_Ibcast (&diag[0], mycols, MPI_DOUBLE, rank_col_in_row, comm_row, &mpi_request[0]);
+			MPI_Ibcast (&diag[0], mycols, MPI_DOUBLE, rank_row_in_col, comm_row, &mpi_request[0]);
 
 			// diagonal elements are already here, then
 
@@ -106,10 +100,10 @@ void pbDGEIT_CX_bf1(double** A, double** Tlocal, double** lastK, int n, int cpro
 			MPI_Ibcast ( &lastKc[0], myrows, MPI_DOUBLE, cproccols-1, comm_row, &mpi_request[3]);
 
 		}
-		else if ( rank_row_in_col == cproccols-1 )											// last proc in the row
+		else if ( rank_col_in_row == cproccols-1 )											// last proc in the row
 		{
 			// receive diagonal elements
-			MPI_Ibcast (&diag[0], mycols, MPI_DOUBLE, rank_col_in_row, comm_row, &mpi_request[0]);
+			MPI_Ibcast (&diag[0], mycols, MPI_DOUBLE, rank_row_in_col, comm_row, &mpi_request[0]);
 
 			// block of A and diagonal (lastKc) must be here before init
 			//MPI_Waitall(2, &mpi_request[2], &mpi_status[2]);
@@ -133,7 +127,7 @@ void pbDGEIT_CX_bf1(double** A, double** Tlocal, double** lastK, int n, int cpro
 		else 																				// all procs in the row but the diagonal and the last one
 		{
 			// receive diagonal elements
-			MPI_Ibcast (&diag[0], mycols, MPI_DOUBLE, rank_col_in_row, comm_row, &mpi_request[0]);
+			MPI_Ibcast (&diag[0], mycols, MPI_DOUBLE, rank_row_in_col, comm_row, &mpi_request[0]);
 
 			// block of A and diagonal (lastKc) must be here before init
 			//MPI_Waitall(2, &mpi_request[2], &mpi_status[2]);
@@ -153,7 +147,7 @@ void pbDGEIT_CX_bf1(double** A, double** Tlocal, double** lastK, int n, int cpro
 	}
 	else																						// the last row of procs
 	{
-		if ( rank_row_in_col == cproccols-1 )												// last proc in the row (which is also on the diagonal)
+		if ( rank_col_in_row == cproccols-1 )												// last proc in the row (which is also on the diagonal)
 		{
 			// block of A must be here before distributing diagonal elements
 			MPI_Wait( &mpi_request[2], &mpi_status[2]);
@@ -164,7 +158,7 @@ void pbDGEIT_CX_bf1(double** A, double** Tlocal, double** lastK, int n, int cpro
 				diag[i]=Tlocal[i][i];
 			}
 				// proc on main diagonal broadcasts to his row of procs
-			MPI_Ibcast (&diag[0], mycols, MPI_DOUBLE, rank_col_in_row, comm_row, &mpi_request[0]);
+			MPI_Ibcast (&diag[0], mycols, MPI_DOUBLE, cproccols-1, comm_row, &mpi_request[0]);
 
 			// diagonal elements are already here, then
 
@@ -189,7 +183,7 @@ void pbDGEIT_CX_bf1(double** A, double** Tlocal, double** lastK, int n, int cpro
 		else 																				// all procs in the row but the last one (which also on the diagonal)
 		{
 			// receive diagonal elements
-			MPI_Ibcast (&diag[0], mycols, MPI_DOUBLE, rank_col_in_row, comm_row, &mpi_request[0]);
+			MPI_Ibcast (&diag[0], mycols, MPI_DOUBLE, cproccols-1, comm_row, &mpi_request[0]);
 
 			// block of A and diagonal (lastKc) must be here before init
 			//MPI_Waitall(2, &mpi_request[2], &mpi_status[2]);
@@ -210,6 +204,7 @@ void pbDGEIT_CX_bf1(double** A, double** Tlocal, double** lastK, int n, int cpro
 			MPI_Ibcast ( &lastKc[0], myrows, MPI_DOUBLE, cproccols-1, comm_row, &mpi_request[3]);
 		}
 	}
+
 	NULLFREE(diag);
 }
 

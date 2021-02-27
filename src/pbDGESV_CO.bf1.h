@@ -103,13 +103,35 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 	 *  init inhibition table
 	 */
 	DGEZR(xx, n, m);											// init (zero) solution vectors
-	pbDGEIT_CX_bf1(A, Tlocal, lastK, n, cprocs,
+	pbDGEIT_CX_bf1(A, Tlocal, lastKr, lastKc, n, cprocs,
 			comm, mpi_rank, comm_row,
 			mpi_rank_col_in_row, comm_col,
 			mpi_rank_row_in_col,
 			mpi_status,
 			mpi_request
 			);											// init inhibition table
+
+	/*
+	 * check initialization
+	 */
+		/*
+		MPI_Waitall(4, mpi_request, mpi_status);
+
+		for (i=0; i<cprocs; i++)
+		{
+			MPI_Barrier(MPI_COMM_WORLD);
+			if (mpi_rank==i)
+			{
+				printf("%d@(%d,%d)\n",n,mpi_rank_row_in_col,mpi_rank_col_in_row);
+				PrintMatrix2D(Tlocal, myrows, mycols);
+				printf("\n");
+				PrintMatrix2D(lastK, 2, mycols);
+
+				fflush(stdout);
+			}
+			MPI_Barrier(MPI_COMM_WORLD);
+		}
+		*/
 
 	if (mpi_rank_row_in_col==0) 								// first row of procs
 	{
