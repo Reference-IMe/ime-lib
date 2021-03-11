@@ -198,7 +198,6 @@ test_output pbDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 				/*
 				 * update helpers
 				 */
-				// TODO: move helpers to top
 				if (mpi_rank_row_in_col==mpi_rank_col_in_row)	// procs on diagonal
 				{
 					MPI_Waitall(3, mpi_req_row, mpi_st_row);	// wait for lastKr and lastKc

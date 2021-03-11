@@ -59,29 +59,18 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 	//MPI_Status* mpi_st_h   = &mpi_status[2]; // never referenced explicitly
 	//MPI_Status* mpi_st_col = &mpi_status[3]; // never referenced explicitly
 
-	int i,j,l;						// general indexes
+	int i,j,l,gi;					// general indexes
     int rhs;						// r.h.s. index
     int myrows   = n/cprocrows;		// num of rows per process
     int mycols   = n/cproccols;		// num of cols per process
     int myxxrows = mycols;			// num of chunks for better code readability
-    int bf           = 1;			// blocking factor
-	//int current_last = bf-1;		// index for the current last row or col of K in buffer
-    //TODO: use nb as blocking factor
+    int bf       = 1;				// blocking factor
 
     /*
      * local storage for a part of the input matrix (continuous columns, not interleaved)
      */
     double** Tlocal;
 			 Tlocal=AllocateMatrix2D(myrows, mycols, CONTIGUOUS);
-	// aliases for better code readability
-	/*
-    // X part
-    double** Xlocal;
-    		 Xlocal=Tlocal;
-    // K part
-	double** Klocal;
-			 Klocal=Tlocal;
-	*/
 
 	// last rows and cols of K
 	double** lastK;
@@ -94,10 +83,6 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
     double* h;
     		h=AllocateVector(myrows);
     double hh;
-    /*
-    double* hh;
-			hh=AllocateVector(myrows);
-	*/
 
 	/*
 	 *  init inhibition table
@@ -148,15 +133,12 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 	// they differ on processes and change along the main loop over the levels
 	int myxxstart = mycols;		// beginning column position for updating the solution (begins from right)
 	int last_row;				// (local) last row to process
-	//TODO: pre-calc other values..
-
-	int gi;			// global i
-	int l_1_owner;	// proc rank hosting the (l-1)-th row (or col)
-	int l_1_col;	// local index of the (l-1)-th col
-	int l_1_row;
-	int l_owner;	// proc rank hosting the l-th row (or col)
-	int l_row;
-	int l_col;
+	int l_1_owner;				// proc rank hosting the (l-1)-th row (or col)
+	int l_1_row;				// local index of the (l-1)-th row
+	int l_1_col;				// local index of the (l-1)-th col
+	int l_owner;				// proc rank hosting the l-th row (or col)
+	int l_row;					// local index of the l-th row
+	int l_col;					// local index of the l-th col
 
 	// all levels but last one (l=0)
 	for (l=n-1; l>0; l--)
@@ -175,26 +157,13 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 			if (mpi_rank_row_in_col==0) 					// first row of procs
 			{
 				// if a process contains the l-th cols, must skip it
-				/*
-				if (mpi_rank_col_in_row==l_owner)
-				{
-					myxxstart--;
-				}
-				*/
-				// avoid if
+				// if (mpi_rank_col_in_row==l_owner) {myxxstart--;}
+				// avoid if:
 				myxxstart = myxxstart - (mpi_rank_col_in_row == l_owner);
 
-				// bb[l] must be here
-				//MPI_Wait( mpi_req_bb, mpi_st_bb);
-
-				// lastKr must be here
-				//MPI_Wait( mpi_req_row, mpi_st_row);
-
-				// bb[l] (or full bb, for the first iteration after init) and lastKr must be here
-				MPI_Waitall(2, mpi_request, mpi_status);
+				MPI_Waitall(2, mpi_request, mpi_status); // wait for lastKr and bb
 
 				// update xx vector
-				// l .. n-1
 				for (i=myxxstart; i<myrows; i++)
 				{
 					gi=PVGLOBAL(i, mycols, mpi_rank_col_in_row);
@@ -216,23 +185,15 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 
 			if (mpi_rank_row_in_col==mpi_rank_col_in_row)
 			{
-				// lastKc must be here
-				//MPI_Wait( mpi_req_col, mpi_st_col);
+				MPI_Waitall(3, mpi_req_row, mpi_st_row); // wait for lastKr and lastKc
 
-				// lastKr must be here
-				//MPI_Wait( mpi_req_row, mpi_st_row);
-
-				MPI_Waitall(3, mpi_req_row, mpi_st_row);
-
-#pragma ivdep
+				#pragma ivdep
 				for (i=0; i<last_row; i++)
 				{
 					h[i]   = 1/(1-lastKc[i]*lastKr[i]);
 				}
 			}
 			MPI_Ibcast ( &h[0], last_row, MPI_DOUBLE, mpi_rank_row_in_col, comm_row, mpi_req_h);
-			//TODO: async
-
 
 		/*
 		 * update auxiliary causes
@@ -268,7 +229,6 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 
 				// send l-1 values to other procs for next iteration
 				MPI_Ibcast (&bb[l-1][0], m, MPI_DOUBLE, l_1_owner, comm_row, mpi_req_bb);
-				// TODO: can be avoided?
 			}
 
 
@@ -278,48 +238,8 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 			// last row is computed above
 			// for procs with last_row == 0, nothing to do
 
-			// lastKr must be here
-			//MPI_Wait( mpi_req_row, mpi_st_row);
+			MPI_Waitall(3, mpi_req_row, mpi_st_row); // wait for lastKr, lastKc and h
 
-			// h must be here
-			//MPI_Wait( mpi_req_h, mpi_st_h);
-
-			// lastKr and h must be here
-			MPI_Waitall(3, mpi_req_row, mpi_st_row);
-
-			// lastKc is already there
-			// no need to "MPI_Wait"
-
-			/*
-			   // naive version
-			   //
-			int gi; // global i
-			for (i=0; i < last_row; i++)
-			{
-				hh[i]  = lastKc[i]*h[i];
-
-				gi=PVGLOBAL(i, myrows, mpi_rank_row_in_col);
-				for (j=0; j<mycols; j++)
-				{
-					gj=PVGLOBAL(j, mycols, mpi_rank_col_in_row);
-					if (gj==gi)
-					{
-						Tlocal[i][j] = Tlocal[i][j]*h[i];
-					}
-					else if (gj==l)
-					{
-						Tlocal[i][j] = - lastKr[j]*hh[i];
-					}
-					else
-					{
-						Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh[i];
-					}
-				}
-			}
-			*/
-
-			   // faster version (ifs removed from loop inside)
-			   //
 			if (mpi_rank_col_in_row == l_owner)
 			{
 				if (mpi_rank_col_in_row == mpi_rank_row_in_col)		// proc holding l-th col AND ON the diagonal
@@ -329,7 +249,7 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 						hh  = lastKc[i]*h[i];
 
 						// before diagonal
-#pragma ivdep
+						#pragma ivdep
 						for (j=0; j < i; j++)
 						{
 							Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
@@ -339,7 +259,7 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 						Tlocal[i][j] = Tlocal[i][j]*h[i];
 
 						// after diagonal but before l-th
-#pragma ivdep
+						#pragma ivdep
 						for (j=i+1; j < l_col; j++)
 						{
 							Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
@@ -349,7 +269,7 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 						Tlocal[i][j] = - lastKr[j]*hh;
 
 						// after l-th
-#pragma ivdep
+						#pragma ivdep
 						for (j=l_col+1; j < mycols; j++)
 						{
 							Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
@@ -363,7 +283,7 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 						hh  = lastKc[i]*h[i];
 
 						// before l-th
-#pragma ivdep
+						#pragma ivdep
 						for (j=0; j < l_col; j++)
 						{
 							Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
@@ -373,7 +293,7 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 						Tlocal[i][j] = - lastKr[j]*hh;
 
 						// after l-th
-#pragma ivdep
+						#pragma ivdep
 						for (j=l_col+1; j < mycols; j++)
 						{
 							Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
@@ -388,7 +308,7 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 					hh  = lastKc[i]*h[i];
 
 					// before diagonal
-#pragma ivdep
+					#pragma ivdep
 					for (j=0; j < i; j++)
 					{
 						Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
@@ -398,7 +318,7 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 					Tlocal[i][j] = Tlocal[i][j]*h[i];
 
 					// after diagonal
-#pragma ivdep
+					#pragma ivdep
 					for (j=i+1; j < mycols; j++)
 					{
 						Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
@@ -411,7 +331,7 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 				{
 					hh  = lastKc[i]*h[i];
 
-#pragma ivdep
+					#pragma ivdep
 					for (j=0; j < mycols; j++)
 					{
 						Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
@@ -426,6 +346,7 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 			// sync last row
 			if (mpi_rank_row_in_col == l_1_owner)			// procs row that holds the (l-1)-th row
 			{
+				#pragma ivdep
 				for (i=0; i < mycols; i++)			// copy (l-1)-th row in buffer
 				{
 					lastKr[i]=Tlocal[l_1_row][i];
@@ -438,6 +359,7 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 			{
 				if (mpi_rank_col_in_row == l_1_owner)	// proc in the row that has (l-1)-th col
 				{
+					#pragma ivdep
 					for (i=0; i < last_row; i++)	// copy (l-1)-th col in buffer
 					{
 						lastKc[i]=Tlocal[i][l_1_col];
@@ -494,15 +416,10 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 
 	// wait to complete before cleanup and return
 	MPI_Waitall(4, mpi_request, mpi_status);
-	//MPI_Barrier(comm);
 
 	// cleanup
-	//NULLFREE(lastKc);
-	//NULLFREE(lastKr);
-
-	DeallocateMatrix2D(lastK,2*bf,CONTIGUOUS);
+	DeallocateMatrix2D(lastK,2,CONTIGUOUS);
 	DeallocateVector(h);
-	//DeallocateVector(hh);
 	DeallocateMatrix2D(Tlocal,myrows,CONTIGUOUS);
 
 	result.total_end_time = time(NULL);

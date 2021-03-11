@@ -22,5 +22,5 @@
  */
 test_output pbDGESV_CO_default(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
-	return pbDGESV_CO_dev(nb, n, A, m, bb, xx, comm);
+	return EMPTY_OUTPUT;
 }
