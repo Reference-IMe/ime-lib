@@ -13,7 +13,7 @@ __attribute__((always_inline)) inline void pbDGEUT_CO (	int mpi_rank_row_in_col,
 
 	if (mpi_rank_col_in_row == l_owner)
 	{
-		if (mpi_rank_col_in_row == mpi_rank_row_in_col)		// proc holding l-th col AND ON the diagonal
+		if ( unlikely ( mpi_rank_col_in_row == mpi_rank_row_in_col ) )		// proc holding l-th col AND ON the diagonal
 		{
 			for (i=0; i < last_row; i++)
 			{
@@ -72,7 +72,7 @@ __attribute__((always_inline)) inline void pbDGEUT_CO (	int mpi_rank_row_in_col,
 			}
 		}
 	}
-	else if (mpi_rank_col_in_row == mpi_rank_row_in_col)	// procs ON the diagonal but NOT holding the l-th col
+	else if ( unlikely ( mpi_rank_col_in_row == mpi_rank_row_in_col ) )	// procs ON the diagonal but NOT holding the l-th col
 	{
 		for (i=0; i < last_row; i++)
 		{

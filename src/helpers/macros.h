@@ -8,6 +8,10 @@
 #ifndef __MACROS_H__
 #define __MACROS_H__
 
+// https://www.geeksforgeeks.org/branch-prediction-macros-in-gcc/
+#define likely(x)	 __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
+
 #define MAX(a, b) (((a) > (b)) ? (a) : (b)) 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b)) 
 

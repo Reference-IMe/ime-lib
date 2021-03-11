@@ -1,4 +1,5 @@
 #include <mpi.h>
+#include "helpers/macros.h"
 
 #ifndef __pbDGEUB_CO_H__
 #define __pbDGEUB_CO_H__
@@ -14,33 +15,32 @@ __attribute__((always_inline)) inline void pbDGEUB_CO (	int mpi_rank_row_in_col,
 	{
 		// no need to "MPI_Wait": lastKr is already there
 
-		// TODO: remove ifs
-		if ( mpi_rank_col_in_row < l_1_owner ) 			// procs before col l-1
+		if ( likely ( mpi_rank_col_in_row <= l_1_owner ) )
 		{
-			for (i=0; i<mycols; i++)				// treat all cols
+			if ( likely ( mpi_rank_col_in_row < l_1_owner ) )			// procs before col l-1
 			{
-				gi=PVGLOBAL(i, mycols, mpi_rank_col_in_row);
-				for (rhs=0;rhs<m;rhs++)
+				for (i=0; i<mycols; i++)				// treat all cols
 				{
-					bb[gi][rhs] = bb[gi][rhs]-lastKr[i]*bb[l][rhs];
+					gi=PVGLOBAL(i, mycols, mpi_rank_col_in_row);
+					for (rhs=0;rhs<m;rhs++)
+					{
+						bb[gi][rhs] = bb[gi][rhs]-lastKr[i]*bb[l][rhs];
+					}
 				}
 			}
-		}
-		else if ( mpi_rank_col_in_row == l_1_owner ) 		// proc holding col l-1
-		{
-			for (i=0; i<=l_1_col; i++)				// cols till l-1
+			else // if ( mpi_rank_col_in_row == l_1_owner ) 		// proc holding col l-1
 			{
-				gi=PVGLOBAL(i, mycols, mpi_rank_col_in_row);
-				for (rhs=0;rhs<m;rhs++)
+				for (i=0; i<=l_1_col; i++)				// cols till l-1
 				{
-					bb[gi][rhs] = bb[gi][rhs]-lastKr[i]*bb[l][rhs];
+					gi=PVGLOBAL(i, mycols, mpi_rank_col_in_row);
+					for (rhs=0;rhs<m;rhs++)
+					{
+						bb[gi][rhs] = bb[gi][rhs]-lastKr[i]*bb[l][rhs];
+					}
 				}
 			}
 		}
 		//else	{do nothing}							// procs after col l-1
-
-		// send l-1 values to other procs for next iteration
-		//MPI_Ibcast (&bb[l-1][0], m, MPI_DOUBLE, l_1_owner, comm_row, mpi_req_bb);
 	}
 }
 #endif
