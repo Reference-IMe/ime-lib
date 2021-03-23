@@ -181,14 +181,14 @@ test_output pbDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 					 * update solutions
 					 */
 					MPI_Waitall(2, mpi_request, mpi_status);	// wait for lastKr and bb
-					pbDGEUX_CO (	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, rhs, m,
+					pbDGEUX_CO (	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, m,
 									l, l_owner, l_1_owner, l_row, l_col,
 									&myxxstart,
 									lastKr, xx, bb);
 					/*
 					 * update auxiliary causes
 					 */
-					pbDGEUB_CO (	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, rhs, m,
+					pbDGEUB_CO (	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, m,
 									l, l_owner, l_1_owner, l_row, l_col,
 									l_1_col,
 									lastKr, bb);
@@ -201,7 +201,7 @@ test_output pbDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 				if (mpi_rank_row_in_col==mpi_rank_col_in_row)	// procs on diagonal
 				{
 					MPI_Waitall(3, mpi_req_row, mpi_st_row);	// wait for lastKr and lastKc
-					pbDGEUH_CO (	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, rhs, m,
+					pbDGEUH_CO (	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, m,
 									l, l_owner, l_1_owner, l_row, l_col,
 									last_row,
 									lastKr, lastKc, h);
@@ -226,7 +226,7 @@ test_output pbDGESV_CO_dev(int nb, int n, double** A, int m, double** bb, double
 				 * update table
 				 */
 				MPI_Waitall(3, mpi_req_row, mpi_st_row);		// wait for lastKr, lastKc and h
-				pbDGEUT_CO (	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, rhs, m,
+				pbDGEUT_CO (	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, m,
 								l, l_owner, l_1_owner, l_row, l_col,
 								last_row,
 								lastKr, lastKc, h, Tlocal);
