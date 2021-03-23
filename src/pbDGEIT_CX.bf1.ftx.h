@@ -58,7 +58,7 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 	MPI_Type_create_resized (K_column, 0, 1*sizeof(double), & K_column_contiguous_resized);
 	MPI_Type_commit (& K_column_contiguous_resized);
 
-	if (rank < cprocs)
+	if ( likely(rank < cprocs) )
 	{
 		/*
 		 * scatter 1 block to every proc in grid
@@ -81,9 +81,9 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 			}
 			MPI_Iscatterv (&A[0][0], counts, disps, A_block_resized, &Tlocal[0][0], mycols, K_column_contiguous_resized, 0, comm, &mpi_request[2]);
 
-		if ( rank_row_in_col != cprocrows-1 )														// all rows of procs but the last one
+		if ( likely(rank_row_in_col != cprocrows-1) )														// all rows of procs but the last one
 		{
-			if ( rank_col_in_row == rank_row_in_col )											// proc on the diagonal
+			if ( unlikely(rank_col_in_row == rank_row_in_col) )											// proc on the diagonal
 			{
 				// block of A must be here before distributing diagonal elements
 				MPI_Wait( &mpi_request[2], &mpi_status[2]);
@@ -109,7 +109,7 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 				MPI_Ibcast ( &lastKc[0], myrows, MPI_DOUBLE, cproccols-1, comm_row, &mpi_request[3]);
 
 			}
-			else if ( rank_col_in_row == cproccols-1 )											// last proc in the row
+			else if ( unlikely(rank_col_in_row == cproccols-1) )											// last proc in the row
 			{
 				// receive diagonal elements
 				MPI_Ibcast (&diag[0], mycols, MPI_DOUBLE, rank_row_in_col, comm_row_calc, &mpi_request[0]);
@@ -156,7 +156,7 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 		}
 		else																						// the last row of procs
 		{
-			if ( rank_col_in_row == cproccols-1 )												// last proc in the row (which is also on the diagonal)
+			if ( unlikely(rank_col_in_row == cproccols-1) )												// last proc in the row (which is also on the diagonal)
 			{
 				// block of A must be here before distributing diagonal elements
 				MPI_Wait( &mpi_request[2], &mpi_status[2]);
@@ -224,22 +224,23 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 
     for (l=0; l<sproccols; l++)
     {
-    	MPI_Barrier(MPI_COMM_WORLD);
-		if ( rank_col_in_row < cproccols )
+    	//MPI_Barrier(MPI_COMM_WORLD);
+		if ( likely(rank_col_in_row < cproccols) )
 		{
 			for (i=0; i<myrows; i++)
 			{
+				#pragma ivdep
 				for (j=0; j<mycols; j++)
 				{
 					//tmpTlocal[i][j]=(rank_row_in_col+1)*100+rank_col_in_row+1;
 					tmpTlocal[i][j]=Tlocal[i][j]*(l+1);
 				}
 			}
-			if (rank_col_in_row==rank_row_in_col)
+			if ( unlikely(rank_col_in_row == rank_row_in_col) )
 			{
 				for (j=0; j<mycols; j++)
 				{
-
+					#pragma ivdep
 					tmpTlocal[j][j]=tmpTlocal[j][j]+(l+1);
 				}
 			}
@@ -248,11 +249,11 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 		}
 		else
 		{
-			if ( rank_col_in_row == (cproccols+l) )
+			if ( unlikely(rank_col_in_row == (cproccols+l) ) )
 			{
-				printf("*****(*%d*%d)(%d,%d)-%d\n",l,rank,rank_row_in_col,rank_col_in_row,cproccols);
 				for (i=0; i<myrows; i++)
 				{
+					#pragma ivdep
 					for (j=0; j<mycols; j++)
 					{
 						tmpTlocal[i][j]=0;
@@ -263,13 +264,13 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 
 				if ( rank_row_in_col == cprocrows-1 )
 				{
+					#pragma ivdep
 					for (j=0; j<mycols; j++)
 					{
 						lastKr[j]=Tlocal[myrows-1][j];
 					}
 				}
 				MPI_Ibcast ( &lastKr[0], mycols, MPI_DOUBLE, cprocrows-1, comm_col, &mpi_request[1]);
-
 			}
 			else
 			{
@@ -279,6 +280,9 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 		}
         MPI_Comm_free(&comm_row_checksum);
     }
+
+    // cleanup
+    DeallocateMatrix2D(tmpTlocal,myrows,CONTIGUOUS);
 }
 
 #endif

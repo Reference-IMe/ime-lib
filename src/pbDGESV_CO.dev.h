@@ -6,7 +6,7 @@
 #include "helpers/vector.h"
 #include "testers/tester_structures.h"
 #include "DGEZR.h"
-#include "pbDGEIT_CX.bf1.ft.h"
+#include "pbDGEIT_CX.bf1.ftx.h"
 
 
 test_output pbDGESV_CO_dev(double** A, double** bb, double** xx, test_input input, parallel_env env, MPI_Comm comm)
