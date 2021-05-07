@@ -25,6 +25,7 @@ test_output pbDGESV_CO_bf1_ftx(double** A, double** bb, double** xx, test_input 
 
 	result.total_start_time = time(NULL);
 
+
 	MPI_Comm comm_calc;
 	MPI_Comm comm_row;
 	MPI_Comm comm_row_calc;
@@ -121,6 +122,7 @@ test_output pbDGESV_CO_bf1_ftx(double** A, double** bb, double** xx, test_input 
 	// helper vectors
     double* h;
     		h=AllocateVector(myrows);
+
 
 	/*
 	 *  init inhibition table
