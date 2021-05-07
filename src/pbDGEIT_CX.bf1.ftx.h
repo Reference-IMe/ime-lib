@@ -222,9 +222,36 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 		MPI_Ibcast ( &lastKc[0], myrows, MPI_DOUBLE, cproccols-1, comm_row, &mpi_request[3]);
 	}
 
+
+	int sprocrows = cprocrows;
+
+	/*
+	 *  matrix of weights
+	 *
+	 *  columns contain coefficients to be applied to the corresponding column of processes
+	 *
+	 *  each row of processes has the same coefficients
+	 *  row i of processes has weights w(j,k) where
+	 *  j is the calc process column in that row and
+	 *  k is the cheksum process column in that row
+	 *
+	 */
+    double** w;
+    w=AllocateMatrix2D(sproccols, sprocrows, CONTIGUOUS); //TODO: transpose to gain some cache hit in loops below
+    RandomMatrix2D(w, sproccols, sprocrows, 0);
+
+    /*
+     * check weights
+     */
+    /*
+    if (rank==0)
+    {
+    	printf("weights:\n");
+    	PrintMatrix2D(w,sproccols, sprocrows);
+    }
+    */
     for (l=0; l<sproccols; l++)
     {
-    	//MPI_Barrier(MPI_COMM_WORLD);
 		if ( likely(rank_col_in_row < cproccols) )
 		{
 			for (i=0; i<myrows; i++)
@@ -233,7 +260,7 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 				for (j=0; j<mycols; j++)
 				{
 					//tmpTlocal[i][j]=(rank_row_in_col+1)*100+rank_col_in_row+1;
-					tmpTlocal[i][j]=Tlocal[i][j]*(l+1);
+					tmpTlocal[i][j]=Tlocal[i][j] * w[l][rank_col_in_row];
 				}
 			}
 			if ( unlikely(rank_col_in_row == rank_row_in_col) )
@@ -241,7 +268,7 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 				for (j=0; j<mycols; j++)
 				{
 					#pragma ivdep
-					tmpTlocal[j][j]=tmpTlocal[j][j]+(l+1);
+					tmpTlocal[j][j]=tmpTlocal[j][j] + w[l][rank_col_in_row];
 				}
 			}
 			MPI_Comm_split(comm_row, 1, rank, &comm_row_checksum);
@@ -282,6 +309,7 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
     }
 
     // cleanup
+	DeallocateMatrix2D(w,sproccols,CONTIGUOUS);
     DeallocateMatrix2D(tmpTlocal,myrows,CONTIGUOUS);
 }
 
