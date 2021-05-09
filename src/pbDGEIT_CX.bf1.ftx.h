@@ -29,7 +29,7 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
     int mycols   = n/cproccols;		// num of cols per process
 
 	double* diag;
-			diag=malloc(mycols*sizeof(double*));
+			//diag=malloc(mycols*sizeof(double*));
 
 	double** tmpTlocal;
 			 tmpTlocal=AllocateMatrix2D(myrows, mycols, CONTIGUOUS);
@@ -60,6 +60,8 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 
 	if ( likely(rank < cprocs) )
 	{
+		diag=malloc(mycols*sizeof(double*));
+
 		/*
 		 * scatter 1 block to every proc in grid
 		 */
@@ -272,6 +274,7 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 				}
 			}
 			MPI_Comm_split(comm_row, 1, rank, &comm_row_checksum);
+			// destination has rank cproccols because the communicator is split every time and has always cproccols+1 processes
 			MPI_Reduce( &tmpTlocal[0][0], NULL, myrows*mycols, MPI_DOUBLE, MPI_SUM, cproccols, comm_row_checksum );
 		}
 		else
