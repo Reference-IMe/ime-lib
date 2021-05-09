@@ -12,7 +12,7 @@
 #include "pbDGEUH_CO.h"
 #include "pbDGEUB_CO.h"
 
-test_output pbDGESV_CO_dev(double** A, double** bb, double** xx, test_input input, parallel_env env, int failing_rank, int failing_level)
+test_output pbDGESV_CO_dev(double** A, double** bb, double** xx, test_input input, parallel_env env, int fault_protection, int fault_number, int* failing_rank_list, int failing_level, int recovery)
 {
 	/*
 	 * nb	NOT USED: blocking factor: number of adjacent column (block width)
@@ -184,6 +184,8 @@ test_output pbDGESV_CO_dev(double** A, double** bb, double** xx, test_input inpu
 		int l_row;					// local index of the l-th row
 		int l_col;					// local index of the l-th col
 
+		int fr;
+
 		if ( mpi_rank_col_in_row < cproccols )
 		{
 			if ( mpi_rank_row_in_col == 0 ) 					// first row of calc procs
@@ -191,12 +193,25 @@ test_output pbDGESV_CO_dev(double** A, double** bb, double** xx, test_input inpu
 				// all levels but last one (l=0)
 				for (l=input.n-1; l>0; l--)
 				{
-					if (l == failing_level)
+					if ( unlikely(l == failing_level) )
 					{
-						if (env.mpi_rank == failing_rank)
+						for (fr=0; fr<fault_protection; fr++)
 						{
-							printf("\n * rank %d faulty at level %d *\n", env.mpi_rank, l);
-							SetMatrix2D(0, Tlocal, myrows, mycols);
+							if (env.mpi_rank == failing_rank_list[fr])
+							{
+								printf("\n * rank %d faulty at level %d *\n", env.mpi_rank, l);
+								SetMatrix2D(0, Tlocal, myrows, mycols);
+
+								if (!recovery)
+								{
+									printf("\n * rank %d not recovering! *\n", env.mpi_rank);
+								}
+								else
+								{
+									printf("\n * rank %d recovering.. *\n", env.mpi_rank);
+									printf("\n * rank %d recovered *\n", env.mpi_rank);
+								}
+							}
 						}
 
 					}
@@ -289,12 +304,25 @@ test_output pbDGESV_CO_dev(double** A, double** bb, double** xx, test_input inpu
 				// all levels but last one (l=0)
 				for (l=input.n-1; l>0; l--)
 				{
-					if (l == failing_level)
+					if ( unlikely(l == failing_level) )
 					{
-						if (env.mpi_rank == failing_rank)
+						for (fr=0; fr<fault_protection; fr++)
 						{
-							printf("\n * rank %d faulty at level %d *\n", env.mpi_rank, l);
-							SetMatrix2D(0, Tlocal, myrows, mycols);
+							if (env.mpi_rank == failing_rank_list[fr])
+							{
+								printf("\n * rank %d faulty at level %d *\n", env.mpi_rank, l);
+								SetMatrix2D(0, Tlocal, myrows, mycols);
+
+								if (!recovery)
+								{
+									printf("\n * rank %d not recovering! *\n", env.mpi_rank);
+								}
+								else
+								{
+									printf("\n * rank %d recovering.. *\n", env.mpi_rank);
+									printf("\n * rank %d recovered *\n", env.mpi_rank);
+								}
+							}
 						}
 
 					}
@@ -370,12 +398,25 @@ test_output pbDGESV_CO_dev(double** A, double** bb, double** xx, test_input inpu
 			// all levels but last one (l=0)
 			for (l=input.n-1; l>0; l--)
 			{
-				if (l == failing_level)
+				if ( unlikely(l == failing_level) )
 				{
-					if (env.mpi_rank == failing_rank)
+					for (fr=0; fr<fault_protection; fr++)
 					{
-						printf("\n * rank %d faulty at level %d *\n", env.mpi_rank, l);
-						SetMatrix2D(0, Tlocal, myrows, mycols);
+						if (env.mpi_rank == failing_rank_list[fr])
+						{
+							printf("\n * rank %d faulty at level %d *\n", env.mpi_rank, l);
+							SetMatrix2D(0, Tlocal, myrows, mycols);
+
+							if (!recovery)
+							{
+								printf("\n * rank %d not recovering! *\n", env.mpi_rank);
+							}
+							else
+							{
+								printf("\n * rank %d recovering.. *\n", env.mpi_rank);
+								printf("\n * rank %d recovered *\n", env.mpi_rank);
+							}
+						}
 					}
 
 				}
