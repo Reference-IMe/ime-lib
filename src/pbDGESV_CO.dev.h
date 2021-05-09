@@ -30,6 +30,8 @@ test_output pbDGESV_CO_dev(double** A, double** bb, double** xx, test_input inpu
 	MPI_Comm comm_row_calc;
 	MPI_Comm comm_col;
 
+	MPI_Comm comm_row_checksum;
+
     int cprocrows;
     int cproccols;
     int sprocrows;
@@ -83,15 +85,11 @@ test_output pbDGESV_CO_dev(double** A, double** bb, double** xx, test_input inpu
 	//MPI_Status* mpi_st_h   = &mpi_status[2]; // never referenced explicitly
 	//MPI_Status* mpi_st_col = &mpi_status[3]; // never referenced explicitly
 
-	int i,l,gi;							// general indexes
+	int i,j,l,gi;							// general indexes
     int rhs;							// r.h.s. index
     int myrows   = input.n/cprocrows;	// num of rows per process
     int mycols   = input.n/cproccols;	// num of cols per process
     int myxxrows = mycols;				// num of chunks for better code readability
-
-    double** w;							// matrix of weights
-    w=AllocateMatrix2D(sproccols, sprocrows, CONTIGUOUS);
-    RandomMatrix2D(w, sproccols, sprocrows, 0);
 
     /*
      * check grid
@@ -140,6 +138,11 @@ test_output pbDGESV_CO_dev(double** A, double** bb, double** xx, test_input inpu
 			mpi_request
 			);											// init inhibition table
 
+	//the weights
+    double** w;
+    w=AllocateMatrix2D(sproccols, sprocrows, CONTIGUOUS); //TODO: transpose to gain some cache hit in loops below
+    RandomMatrix2D(w, sproccols, sprocrows, 0);
+
 	if (mpi_rank_row_in_col == 0 && mpi_rank_col_in_row < cproccols) 							// first row of calc procs
 	{
 		MPI_Ibcast (&bb[0][0], input.n*input.nrhs, MPI_DOUBLE, 0, comm_row_calc, mpi_req_bb);	// send all r.h.s
@@ -185,8 +188,9 @@ test_output pbDGESV_CO_dev(double** A, double** bb, double** xx, test_input inpu
 		int l_col;					// local index of the l-th col
 
 		int fr;
+		int i_am_faulty = 0;
 
-		if ( mpi_rank_col_in_row < cproccols )
+		if ( mpi_rank_col_in_row < cproccols ) // calc. procs
 		{
 			if ( mpi_rank_row_in_col == 0 ) 					// first row of calc procs
 			{
@@ -209,12 +213,53 @@ test_output pbDGESV_CO_dev(double** A, double** bb, double** xx, test_input inpu
 								else
 								{
 									printf("\n * rank %d recovering.. *\n", env.mpi_rank);
+								}
+
+								i_am_faulty=1;
+							}
+						}
+
+						// TODO: fix names of variable (mpi_)rank..
+						// TODO: fault to recover <-> sprocs
+
+						double** tmpTlocal;
+								 tmpTlocal=AllocateMatrix2D(myrows, mycols, CONTIGUOUS);
+
+					    for (fr=0; fr<sproccols; fr++)
+					    {
+							// update sums
+					    	if (!i_am_faulty)
+							{
+								for (i=0; i<myrows; i++)
+								{
+									#pragma ivdep
+									for (j=0; j<mycols; j++)
+									{
+										tmpTlocal[i][j]= - Tlocal[i][j] * w[fr][mpi_rank_col_in_row];
+									}
+								}
+								MPI_Comm_split(comm_row, 1, env.mpi_rank, &comm_row_checksum);
+								MPI_Reduce( &tmpTlocal[0][0], NULL, myrows*mycols, MPI_DOUBLE, MPI_SUM, cproccols-sproccols, comm_row_checksum );
+							}
+							else
+							{
+								MPI_Comm_split(comm_row, 0, env.mpi_rank, &comm_row_checksum);
+								// does not participate in reduction
+							}
+							MPI_Comm_free(&comm_row_checksum);
+					    }
+
+						for (fr=0; fr<fault_protection; fr++)
+						{
+							if (env.mpi_rank == failing_rank_list[fr])
+							{
+								if (recovery)
+								{
 									printf("\n * rank %d recovered *\n", env.mpi_rank);
 								}
 							}
 						}
-
-					}
+					}// failure management
 
 					l_owner  = PVMAP(l, myrows);
 					l_row    = PVLOCAL(l, myrows);
@@ -393,32 +438,65 @@ test_output pbDGESV_CO_dev(double** A, double** bb, double** xx, test_input inpu
 				}// end of loop over levels
 			}
 		}
-		else
+		else // spare procs
 		{
 			// all levels but last one (l=0)
 			for (l=input.n-1; l>0; l--)
 			{
 				if ( unlikely(l == failing_level) )
 				{
-					for (fr=0; fr<fault_protection; fr++)
+					if (mpi_rank_row_in_col == 0) // TEMP!!!!
 					{
-						if (env.mpi_rank == failing_rank_list[fr])
+						for (fr=0; fr<fault_protection; fr++)
 						{
-							printf("\n * rank %d faulty at level %d *\n", env.mpi_rank, l);
-							SetMatrix2D(0, Tlocal, myrows, mycols);
-
-							if (!recovery)
+							if (env.mpi_rank == failing_rank_list[fr])
 							{
-								printf("\n * rank %d not recovering! *\n", env.mpi_rank);
+								printf("\n * rank %d faulty at level %d *\n", env.mpi_rank, l);
+								SetMatrix2D(0, Tlocal, myrows, mycols);
+
+								if (!recovery)
+								{
+									printf("\n * rank %d not recovering! *\n", env.mpi_rank);
+								}
+								else
+								{
+									printf("\n * rank %d recovering.. *\n", env.mpi_rank);
+								}
+
+								i_am_faulty=1;
+							}
+						}
+
+						double** tmpTlocal;
+								 tmpTlocal=AllocateMatrix2D(myrows, mycols, CONTIGUOUS);
+
+						for (fr=0; fr<sproccols; fr++)
+						{
+							// update sums
+							if ( unlikely(mpi_rank_col_in_row == (cproccols+fr) ) )
+							{
+								MPI_Comm_split(comm_row, 1, env.mpi_rank, &comm_row_checksum);
+								MPI_Reduce( &Tlocal[0][0], &tmpTlocal[0][0], myrows*mycols, MPI_DOUBLE, MPI_SUM, cproccols-sproccols, comm_row_checksum );
 							}
 							else
 							{
-								printf("\n * rank %d recovering.. *\n", env.mpi_rank);
-								printf("\n * rank %d recovered *\n", env.mpi_rank);
+								MPI_Comm_split(comm_row, 0, env.mpi_rank, &comm_row_checksum);
+								// does not participate in reduction
+							}
+							MPI_Comm_free(&comm_row_checksum);
+						}
+
+						for (fr=0; fr<fault_protection; fr++)
+						{
+							if (env.mpi_rank == failing_rank_list[fr])
+							{
+								if (recovery)
+								{
+									printf("\n * rank %d recovered *\n", env.mpi_rank);
+								}
 							}
 						}
 					}
-
 				}
 
 				l_owner  = PVMAP(l, myrows);
