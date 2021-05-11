@@ -143,6 +143,12 @@ test_output pbDGESV_CO_dev(double** A, double** bb, double** xx, test_input inpu
     w=AllocateMatrix2D(sproccols, sprocrows, CONTIGUOUS); //TODO: transpose to gain some cache hit in loops below
     RandomMatrix2D(w, sproccols, sprocrows, 0);
 
+    double** wfaulty;
+    wfaulty=AllocateMatrix2D(sproccols, sproccols, CONTIGUOUS);
+
+    double** wrecovery;
+    wrecovery=AllocateMatrix2D(sproccols, sproccols, CONTIGUOUS);
+
 	if (mpi_rank_row_in_col == 0 && mpi_rank_col_in_row < cproccols) 							// first row of calc procs
 	{
 		MPI_Ibcast (&bb[0][0], input.n*input.nrhs, MPI_DOUBLE, 0, comm_row_calc, mpi_req_bb);	// send all r.h.s
@@ -190,6 +196,38 @@ test_output pbDGESV_CO_dev(double** A, double** bb, double** xx, test_input inpu
 		int fr;
 		int i_am_faulty = 0;
 
+		// weights matrix of the faulty ones
+		// TODO: generalize column extraction for non consecutive ranks
+		for (i=0; i<fault_protection; i++)
+		{
+			for (j=0; j<fault_protection; j++)
+			{
+				wfaulty[i][j]=w[i][failing_rank_list[0]+j];
+			}
+		}
+
+	    if (env.mpi_rank==0)
+	    {
+	    	printf("\nweights:\n");
+	    	PrintMatrix2D(w,sproccols, sprocrows);
+	    	printf("faulty weights:\n");
+	    	PrintMatrix2D(wfaulty,sproccols, fault_protection);
+	    }
+
+	    int* ipiv = malloc(fault_protection*sizeof(int));
+	    int lwork = fault_protection*fault_protection;
+	    double* work = malloc(lwork*sizeof(double));
+	    int info;
+		dgetrf_(&fault_protection,&fault_protection,&wfaulty[0][0],&fault_protection,ipiv,&info);
+		dgetri_(&fault_protection,&wfaulty[0][0],&fault_protection,ipiv,work,&lwork,&info);
+
+	    if (env.mpi_rank==0)
+	    {
+	    	printf("recovery weights:\n");
+	    	PrintMatrix2D(wfaulty,sproccols, fault_protection);
+	    }
+	    MPI_Barrier(comm_row);
+
 		if ( mpi_rank_col_in_row < cproccols ) // calc. procs
 		{
 			if ( mpi_rank_row_in_col == 0 ) 					// first row of calc procs
@@ -199,21 +237,19 @@ test_output pbDGESV_CO_dev(double** A, double** bb, double** xx, test_input inpu
 				{
 					if ( unlikely(l == failing_level) )
 					{
+
 						for (fr=0; fr<fault_protection; fr++)
 						{
+							MPI_Barrier(comm_row_calc);
 							if (env.mpi_rank == failing_rank_list[fr])
 							{
 								printf("\n * rank %d faulty at level %d *\n", env.mpi_rank, l);
-								SetMatrix2D(0, Tlocal, myrows, mycols);
 
-								if (!recovery)
-								{
-									printf("\n * rank %d not recovering! *\n", env.mpi_rank);
-								}
-								else
-								{
-									printf("\n * rank %d recovering.. *\n", env.mpi_rank);
-								}
+								printf(" * before fault:\n");
+								PrintMatrix2D(Tlocal, myrows, mycols);
+								SetMatrix2D(0, Tlocal, myrows, mycols);
+								printf(" * after fault:\n");
+								PrintMatrix2D(Tlocal, myrows, mycols);
 
 								i_am_faulty=1;
 							}
@@ -225,10 +261,10 @@ test_output pbDGESV_CO_dev(double** A, double** bb, double** xx, test_input inpu
 						double** tmpTlocal;
 								 tmpTlocal=AllocateMatrix2D(myrows, mycols, CONTIGUOUS);
 
-					    for (fr=0; fr<sproccols; fr++)
-					    {
-							// update sums
-					    	if (!i_am_faulty)
+						// update sums
+						for (fr=0; fr<sproccols; fr++)
+						{
+							if (!i_am_faulty)
 							{
 								for (i=0; i<myrows; i++)
 								{
@@ -236,6 +272,14 @@ test_output pbDGESV_CO_dev(double** A, double** bb, double** xx, test_input inpu
 									for (j=0; j<mycols; j++)
 									{
 										tmpTlocal[i][j]= - Tlocal[i][j] * w[fr][mpi_rank_col_in_row];
+									}
+								}
+								if ( unlikely(mpi_rank_col_in_row == mpi_rank_row_in_col) )
+								{
+									for (j=0; j<mycols; j++)
+									{
+										#pragma ivdep
+										tmpTlocal[j][j]=tmpTlocal[j][j] - w[fr][mpi_rank_col_in_row];
 									}
 								}
 								MPI_Comm_split(comm_row, 1, env.mpi_rank, &comm_row_checksum);
@@ -247,16 +291,49 @@ test_output pbDGESV_CO_dev(double** A, double** bb, double** xx, test_input inpu
 								// does not participate in reduction
 							}
 							MPI_Comm_free(&comm_row_checksum);
-					    }
+						}
 
 						for (fr=0; fr<fault_protection; fr++)
 						{
 							if (env.mpi_rank == failing_rank_list[fr])
 							{
-								if (recovery)
+								for (i=0; i<myrows; i++)
 								{
-									printf("\n * rank %d recovered *\n", env.mpi_rank);
+									#pragma ivdep
+									for (j=0; j<mycols; j++)
+									{
+										tmpTlocal[i][j]= 0;
+									}
 								}
+								MPI_Comm_split(comm_row, 1, env.mpi_rank, &comm_row_checksum);
+								// in place, because it has been zeroed before
+								MPI_Reduce( &tmpTlocal[0][0], &Tlocal[0][0], myrows*mycols, MPI_DOUBLE, MPI_SUM, 0, comm_row_checksum );
+								if ( unlikely(mpi_rank_col_in_row == mpi_rank_row_in_col) )
+								{
+									for (j=0; j<mycols; j++)
+									{
+										#pragma ivdep
+										Tlocal[j][j]=Tlocal[j][j] - 1;
+									}
+								}
+							}
+							else
+							{
+								MPI_Comm_split(comm_row, 0, env.mpi_rank, &comm_row_checksum);
+								// does not participate in reduction
+							}
+							MPI_Comm_free(&comm_row_checksum);
+						}
+
+						for (fr=0; fr<fault_protection; fr++)
+						{
+							MPI_Barrier(comm_row_calc);
+							if (env.mpi_rank == failing_rank_list[fr])
+							{
+								printf("\n * rank %d recovered *\n", env.mpi_rank, l);
+
+								printf(" * with:\n");
+								PrintMatrix2D(Tlocal, myrows, mycols);
 							}
 						}
 					}// failure management
@@ -483,6 +560,22 @@ test_output pbDGESV_CO_dev(double** A, double** bb, double** xx, test_input inpu
 								MPI_Comm_split(comm_row, 0, env.mpi_rank, &comm_row_checksum);
 								// does not participate in reduction
 							}
+							MPI_Comm_free(&comm_row_checksum);
+						}
+
+						for (fr=0; fr<fault_protection; fr++)
+						{
+							for (i=0; i<myrows; i++)
+							{
+								#pragma ivdep
+								for (j=0; j<mycols; j++)
+								{
+									Tlocal[i][j]= tmpTlocal[i][j] * wfaulty[fr][mpi_rank_col_in_row-cproccols];
+								}
+							}
+							MPI_Comm_split(comm_row, 1, env.mpi_rank, &comm_row_checksum);
+							MPI_Reduce( &Tlocal[0][0], NULL, myrows*mycols, MPI_DOUBLE, MPI_SUM, 0, comm_row_checksum );
+
 							MPI_Comm_free(&comm_row_checksum);
 						}
 
