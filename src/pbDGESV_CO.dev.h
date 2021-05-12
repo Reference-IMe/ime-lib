@@ -158,16 +158,11 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 			mpi_request
 			 );											// init inhibition table
 
-	//the weights
+	//the checksum weights
 	double** w;
 	w = AllocateMatrix2D ( spare_proc_cols, spare_proc_rows, CONTIGUOUS ); //TODO: transpose to gain some cache hit in loops below
 	RandomMatrix2D ( w, spare_proc_cols, spare_proc_rows, 0 );
 
-	double** wfaulty;
-	wfaulty = AllocateMatrix2D ( spare_proc_cols, spare_proc_cols, CONTIGUOUS );
-
-	double** wrecovery;
-	wrecovery = AllocateMatrix2D ( spare_proc_cols, spare_proc_cols, CONTIGUOUS );
 
 	if ( mpi_rank_row_in_col == 0 && mpi_rank_col_in_row < calc_proc_cols ) 			// first row of calc procs
 	{
@@ -219,37 +214,7 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 		int mpi_row_with_faults;
 		mpi_row_with_faults = failing_rank_list[0] / calc_proc_cols;
 
-		// weights matrix of the faulty ones
-		// TODO: generalize column extraction for non consecutive ranks
-		for ( i=0; i < num_of_failing_ranks; i++ )
-		{
-			for ( j=0; j < num_of_failing_ranks; j++ )
-			{
-				wfaulty[i][j] = w[i][failing_rank_list[0] - mpi_row_with_faults * calc_proc_cols + j];
-			}
-		}
 
-		if ( mpi_rank == 0 )
-		{
-			printf ( "\nweights:\n" );
-			PrintMatrix2D ( w, spare_proc_cols, spare_proc_rows );
-			printf ( "faulty weights:\n" );
-			PrintMatrix2D ( wfaulty, spare_proc_cols, num_of_failing_ranks );
-		}
-
-		int* ipiv = malloc ( num_of_failing_ranks*sizeof ( int ) );
-		int lwork = num_of_failing_ranks*num_of_failing_ranks;
-		double* work = malloc ( lwork*sizeof ( double ) );
-		int info;
-		dgetrf_ ( &num_of_failing_ranks, &num_of_failing_ranks, &wfaulty[0][0], &num_of_failing_ranks, ipiv, &info );
-		dgetri_ ( &num_of_failing_ranks, &wfaulty[0][0], &num_of_failing_ranks, ipiv, work, &lwork, &info );
-
-		if ( mpi_rank==0 )
-		{
-			printf ( "recovery weights:\n" );
-			PrintMatrix2D ( wfaulty, spare_proc_cols, num_of_failing_ranks );
-		}
-		MPI_Barrier ( comm_row );
 
 		// for a better optimization, treat calc procs differently from spare procs
 		if ( mpi_rank_col_in_row < calc_proc_cols )											// calc. procs
@@ -308,6 +273,7 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 								{
 									if ( !faulted ) // non-faulty procs prepare contributions to send to the checksum node
 									{
+										// TODO: last row to recover ?
 										for ( i=0; i < myrows; i++ )
 										{
 											#pragma ivdep
@@ -697,6 +663,40 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 							double** tmpTlocal;
 									 tmpTlocal = AllocateMatrix2D ( myrows, mycols, CONTIGUOUS );
 
+							double** wfaulty;
+									 wfaulty = AllocateMatrix2D ( spare_proc_cols, spare_proc_cols, CONTIGUOUS );
+
+							// weights matrix of the faulty ones
+							// TODO: generalize column extraction for non consecutive ranks
+							for ( i=0; i < num_of_failing_ranks; i++ )
+							{
+								for ( j=0; j < num_of_failing_ranks; j++ )
+								{
+									wfaulty[i][j] = w[i][failing_rank_list[0] - mpi_row_with_faults * calc_proc_cols + j];
+								}
+							}
+
+							if ( mpi_rank_col_in_row == calc_proc_cols ) // first spare proc in row
+							{
+								printf ( "\nweights:\n" );
+								PrintMatrix2D ( w, spare_proc_cols, spare_proc_rows );
+								printf ( "faulty weights:\n" );
+								PrintMatrix2D ( wfaulty, spare_proc_cols, num_of_failing_ranks );
+							}
+
+							int* ipiv = malloc ( num_of_failing_ranks*sizeof ( int ) );
+							int lwork = num_of_failing_ranks*num_of_failing_ranks;
+							double* work = malloc ( lwork*sizeof ( double ) );
+							int info;
+							dgetrf_ ( &num_of_failing_ranks, &num_of_failing_ranks, &wfaulty[0][0], &num_of_failing_ranks, ipiv, &info );
+							dgetri_ ( &num_of_failing_ranks, &wfaulty[0][0], &num_of_failing_ranks, ipiv, work, &lwork, &info );
+
+							if ( mpi_rank_col_in_row == calc_proc_cols )
+							{
+								printf ( "recovery weights:\n" );
+								PrintMatrix2D ( wfaulty, spare_proc_cols, num_of_failing_ranks );
+							}
+
 							/*
 							 * update sums
 							 *
@@ -736,6 +736,9 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 								MPI_Comm_free ( &comm_row_checksum );
 							}
 
+							NULLFREE(work);
+							NULLFREE(ipiv);
+							DeallocateMatrix2D ( wfaulty, spare_proc_cols, CONTIGUOUS );
 							DeallocateMatrix2D ( tmpTlocal, myrows, CONTIGUOUS );
 						}
 					}
