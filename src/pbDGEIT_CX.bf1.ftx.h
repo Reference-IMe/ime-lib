@@ -12,7 +12,7 @@
 #ifndef __pbDGEIT_CX_BF1_FT_H__
 #define __pbDGEIT_CX_BF1_FT_H__
 
-void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* lastKc, int n, int cprocs,
+void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* lastKc, double** w, int n, int cprocs,
 				int sproccols,
 				MPI_Comm comm, int rank,
 				MPI_Comm comm_row, int rank_col_in_row,
@@ -225,23 +225,6 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 	}
 
 
-	int sprocrows = cprocrows;
-
-	/*
-	 *  matrix of weights
-	 *
-	 *  columns contain coefficients to be applied to the corresponding column of processes
-	 *
-	 *  each row of processes has the same coefficients
-	 *  row i of processes has weights w(j,k) where
-	 *  j is the calc process column in that row and
-	 *  k is the cheksum process column in that row
-	 *
-	 */
-    double** w;
-    w=AllocateMatrix2D(sproccols, sprocrows, CONTIGUOUS); //TODO: transpose to gain some cache hit in loops below
-    RandomMatrix2D(w, sproccols, sprocrows, 0);
-
     /*
      * check weights
      */
@@ -249,7 +232,7 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
     if (rank==0)
     {
     	printf("weights:\n");
-    	PrintMatrix2D(w,sproccols, sprocrows);
+    	PrintMatrix2D(w, cprocrows, sproccols );
     }
     */
     for (l=0; l<sproccols; l++)
@@ -262,7 +245,7 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 				for (j=0; j<mycols; j++)
 				{
 					//tmpTlocal[i][j]=(rank_row_in_col+1)*100+rank_col_in_row+1;
-					tmpTlocal[i][j]=Tlocal[i][j] * w[l][rank_col_in_row];
+					tmpTlocal[i][j]=Tlocal[i][j] * w[rank_col_in_row][l];
 				}
 			}
 			if ( unlikely(rank_col_in_row == rank_row_in_col) )
@@ -270,7 +253,7 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 				for (j=0; j<mycols; j++)
 				{
 					#pragma ivdep
-					tmpTlocal[j][j]=tmpTlocal[j][j] + w[l][rank_col_in_row];
+					tmpTlocal[j][j]=tmpTlocal[j][j] + w[rank_col_in_row][l];
 				}
 			}
 			MPI_Comm_split(comm_row, 1, rank, &comm_row_checksum);
@@ -312,7 +295,6 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
     }
 
     // cleanup
-	DeallocateMatrix2D(w,sproccols,CONTIGUOUS);
     DeallocateMatrix2D(tmpTlocal,myrows,CONTIGUOUS);
 }
 

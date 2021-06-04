@@ -145,10 +145,24 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 			h = AllocateVector ( myrows );
 
 	/*
+	 *  matrix of weights
+	 *
+	 *  columns contain coefficients to be applied to the corresponding column of processes
+	 *
+	 *  each row of processes has the same coefficients
+	 *  row i of processes has weights w(j,k) where
+	 *  j is the calc process column in that row and
+	 *  k is the cheksum process column in that row
+	 *
+	 */
+	double** w;
+	w = AllocateMatrix2D ( spare_proc_rows, spare_proc_cols, CONTIGUOUS );
+	RandomMatrix2D ( w, spare_proc_rows, spare_proc_cols, 0 );
+
+	/*
 	 * init inhibition table
 	 */
-	//TODO: pass also the weights
-	pbDGEIT_CX_bf1_ft ( A, Tlocal, lastKr, lastKc, n, calc_procs,
+	pbDGEIT_CX_bf1_ft ( A, Tlocal, lastKr, lastKc, w, n, calc_procs,
 			spare_proc_cols,
 			comm_calc, mpi_rank,
 			comm_row, mpi_rank_col_in_row,
@@ -157,11 +171,6 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 			mpi_status,
 			mpi_request
 			 );											// init inhibition table
-
-	//the checksum weights
-	double** w;
-	w = AllocateMatrix2D ( spare_proc_cols, spare_proc_rows, CONTIGUOUS ); //TODO: transpose to gain some cache hit in loops below
-	RandomMatrix2D ( w, spare_proc_cols, spare_proc_rows, 0 );
 
 
 	if ( mpi_rank_row_in_col == 0 && mpi_rank_col_in_row < calc_proc_cols ) 			// first row of calc procs
@@ -224,6 +233,17 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 				// all levels but last one (l=0)
 				for ( l=n-1; l > 0; l-- )
 				{
+					l_owner = PVMAP ( l, myrows );
+					l_row = PVLOCAL ( l, myrows );
+					l_col = l_row;
+
+					l_1_owner = PVMAP ( l-1, mycols );
+					l_1_col = PVLOCAL ( l-1, mycols );
+					l_1_row = l_1_col;
+
+					// last_row = myrows | l_row | 0
+					last_row = ( mpi_rank_row_in_col < l_owner ) * myrows + ( mpi_rank_row_in_col == l_owner ) * l_row;
+
 					if ( unlikely ( l == failing_level ) )		// inject failure if failing level has been reached
 																// (assuming only calc procs can be faulty)
 																// and then recover
@@ -259,8 +279,11 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 
 							if (recovery_enabled)
 							{
+								int rows_to_recover;
+								rows_to_recover = last_row;
+
 								double** tmpTlocal;
-										 tmpTlocal = AllocateMatrix2D ( myrows, mycols, CONTIGUOUS );
+										 tmpTlocal = AllocateMatrix2D ( rows_to_recover, mycols, CONTIGUOUS );
 
 								/*
 								 *  update sums
@@ -274,12 +297,12 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 									if ( !faulted ) // non-faulty procs prepare contributions to send to the checksum node
 									{
 										// TODO: last row to recover ?
-										for ( i=0; i < myrows; i++ )
+										for ( i=0; i < rows_to_recover; i++ )
 										{
 											#pragma ivdep
 											for ( j=0; j < mycols; j++ )
 											{
-												tmpTlocal[i][j] = -Tlocal[i][j] * w[fr][mpi_rank_col_in_row];
+												tmpTlocal[i][j] = -Tlocal[i][j] * w[mpi_rank_col_in_row][fr];
 											}
 										}
 										if ( unlikely ( mpi_rank_col_in_row == mpi_rank_row_in_col ) )
@@ -287,11 +310,11 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 											for ( j=0; j < mycols; j++ )
 											{
 												#pragma ivdep
-												tmpTlocal[j][j] = tmpTlocal[j][j] - w[fr][mpi_rank_col_in_row];
+												tmpTlocal[j][j] = tmpTlocal[j][j] - w[mpi_rank_col_in_row][fr];
 											}
 										}
 										MPI_Comm_split ( comm_row, 1, mpi_rank, &comm_row_checksum );
-										MPI_Reduce ( &tmpTlocal[0][0], NULL, myrows*mycols, MPI_DOUBLE, MPI_SUM, calc_proc_cols - spare_proc_cols, comm_row_checksum );
+										MPI_Reduce ( &tmpTlocal[0][0], NULL, rows_to_recover*mycols, MPI_DOUBLE, MPI_SUM, calc_proc_cols - spare_proc_cols, comm_row_checksum );
 									}
 									else // faulty procs do nothing
 									{
@@ -308,7 +331,7 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 								{
 									if ( unlikely ( mpi_rank == failing_rank_list[fr] ) ) // revived procs prepare to receive sums
 									{
-										for ( i=0; i < myrows; i++ )
+										for ( i=0; i < rows_to_recover; i++ )
 										{
 											#pragma ivdep
 											for ( j=0; j < mycols; j++ )
@@ -317,13 +340,13 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 											}
 										}
 										MPI_Comm_split ( comm_row, 1, mpi_rank, &comm_row_checksum );
-										MPI_Reduce ( &tmpTlocal[0][0], &Tlocal[0][0], myrows*mycols, MPI_DOUBLE, MPI_SUM, 0, comm_row_checksum );
+										MPI_Reduce ( &tmpTlocal[0][0], &Tlocal[0][0], rows_to_recover*mycols, MPI_DOUBLE, MPI_SUM, 0, comm_row_checksum );
 
 										// because diagonal elements on diagonal procs are added with one before checksumming
 										// once received the sums, those elements have to be decremented to reflect the actual values
 										if ( unlikely ( mpi_rank_col_in_row == mpi_rank_row_in_col ) )
 										{
-											for ( j=0; j < mycols; j++ )
+											for ( j=0; j < rows_to_recover; j++ )
 											{
 												#pragma ivdep
 												Tlocal[j][j] = Tlocal[j][j] - 1;
@@ -355,21 +378,11 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 								}
 								*/
 
-								DeallocateMatrix2D ( tmpTlocal, myrows, CONTIGUOUS );
+								DeallocateMatrix2D ( tmpTlocal, rows_to_recover, CONTIGUOUS );
 							}
 						}
 					}// failure management
 
-					l_owner = PVMAP ( l, myrows );
-					l_row = PVLOCAL ( l, myrows );
-					l_col = l_row;
-
-					l_1_owner = PVMAP ( l-1, mycols );
-					l_1_col = PVLOCAL ( l-1, mycols );
-					l_1_row = l_1_col;
-
-					// last_row = myrows | l_row | 0
-					last_row = ( mpi_rank_row_in_col < l_owner ) * myrows + ( mpi_rank_row_in_col == l_owner ) * l_row;
 
 					/*
 					 * update solutions
@@ -448,6 +461,17 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 				// all levels but last one (l=0)
 				for ( l=n-1; l > 0; l-- )
 				{
+					l_owner = PVMAP ( l, myrows );
+					l_row = PVLOCAL ( l, myrows );
+					l_col = l_row;
+
+					l_1_owner = PVMAP ( l-1, mycols );
+					l_1_col = PVLOCAL ( l-1, mycols );
+					l_1_row = l_1_col;
+
+					// last_row = myrows | l_row | 0
+					last_row = ( mpi_rank_row_in_col < l_owner ) * myrows + ( mpi_rank_row_in_col == l_owner ) * l_row;
+
 					if ( unlikely ( l == failing_level ) )
 					{
 						if ( mpi_rank_row_in_col == mpi_row_with_faults ) // only spare procs in a row with a fault have things to do
@@ -481,8 +505,11 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 
 							if (recovery_enabled)
 							{
+								int rows_to_recover;
+								rows_to_recover = last_row;
+
 								double** tmpTlocal;
-										 tmpTlocal = AllocateMatrix2D ( myrows, mycols, CONTIGUOUS );
+										 tmpTlocal = AllocateMatrix2D ( rows_to_recover, mycols, CONTIGUOUS );
 
 								/*
 								 *  update sums
@@ -495,24 +522,24 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 								{
 									if ( !faulted ) // non-faulty procs prepare contributions to send to the checksum node
 									{
-										for ( i=0; i < myrows; i++ )
+										for ( i=0; i < rows_to_recover; i++ )
 										{
 											#pragma ivdep
 											for ( j=0; j < mycols; j++ )
 											{
-												tmpTlocal[i][j] = -Tlocal[i][j] * w[fr][mpi_rank_col_in_row];
+												tmpTlocal[i][j] = -Tlocal[i][j] * w[mpi_rank_col_in_row][fr];
 											}
 										}
 										if ( unlikely ( mpi_rank_col_in_row == mpi_rank_row_in_col ) )
 										{
-											for ( j=0; j < mycols; j++ )
+											for ( j=0; j < rows_to_recover; j++ )
 											{
 												#pragma ivdep
-												tmpTlocal[j][j] = tmpTlocal[j][j] - w[fr][mpi_rank_col_in_row];
+												tmpTlocal[j][j] = tmpTlocal[j][j] - w[mpi_rank_col_in_row][fr];
 											}
 										}
 										MPI_Comm_split ( comm_row, 1, mpi_rank, &comm_row_checksum );
-										MPI_Reduce ( &tmpTlocal[0][0], NULL, myrows*mycols, MPI_DOUBLE, MPI_SUM, calc_proc_cols - spare_proc_cols, comm_row_checksum );
+										MPI_Reduce ( &tmpTlocal[0][0], NULL, rows_to_recover*mycols, MPI_DOUBLE, MPI_SUM, calc_proc_cols - spare_proc_cols, comm_row_checksum );
 									}
 									else // faulty procs do nothing
 									{
@@ -529,7 +556,7 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 								{
 									if ( unlikely ( mpi_rank == failing_rank_list[fr] ) ) // revived procs prepare to receive sums
 									{
-										for ( i=0; i < myrows; i++ )
+										for ( i=0; i < rows_to_recover; i++ )
 										{
 											#pragma ivdep
 											for ( j=0; j < mycols; j++ )
@@ -538,13 +565,13 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 											}
 										}
 										MPI_Comm_split ( comm_row, 1, mpi_rank, &comm_row_checksum );
-										MPI_Reduce ( &tmpTlocal[0][0], &Tlocal[0][0], myrows*mycols, MPI_DOUBLE, MPI_SUM, 0, comm_row_checksum );
+										MPI_Reduce ( &tmpTlocal[0][0], &Tlocal[0][0], rows_to_recover*mycols, MPI_DOUBLE, MPI_SUM, 0, comm_row_checksum );
 
 										// because diagonal elements on diagonal procs are added with one before checksumming
 										// once received the sums, those elements have to be decremented to reflect the actual values
 										if ( unlikely ( mpi_rank_col_in_row == mpi_rank_row_in_col ) )
 										{
-											for ( j=0; j < mycols; j++ )
+											for ( j=0; j < rows_to_recover; j++ )
 											{
 												#pragma ivdep
 												Tlocal[j][j] = Tlocal[j][j] - 1;
@@ -576,21 +603,11 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 								}
 								*/
 
-								DeallocateMatrix2D ( tmpTlocal, myrows, CONTIGUOUS );
+								DeallocateMatrix2D ( tmpTlocal, rows_to_recover, CONTIGUOUS );
 							}
 						}
 					}// failure management
 
-					l_owner = PVMAP ( l, myrows );
-					l_row = PVLOCAL ( l, myrows );
-					l_col = l_row;
-
-					l_1_owner = PVMAP ( l-1, mycols );
-					l_1_col = PVLOCAL ( l-1, mycols );
-					l_1_row = l_1_col;
-
-					// last_row = myrows | l_row | 0
-					last_row = ( mpi_rank_row_in_col < l_owner ) * myrows + ( mpi_rank_row_in_col == l_owner ) * l_row;
 
 					/*
 					 * update helpers
@@ -653,6 +670,17 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 			// all levels but last one (l=0)
 			for ( l=n-1; l > 0; l-- )
 			{
+				l_owner = PVMAP ( l, myrows );
+				l_row = PVLOCAL ( l, myrows );
+				l_col = l_row;
+
+				l_1_owner = PVMAP ( l-1, mycols );
+				l_1_col = PVLOCAL ( l-1, mycols );
+				l_1_row = l_1_col;
+
+				// last_row = myrows | l_row | 0
+				last_row = ( mpi_rank_row_in_col < l_owner ) * myrows + ( mpi_rank_row_in_col == l_owner ) * l_row;
+
 				if ( unlikely ( l == failing_level ) )			// inject failure
 																// fault is injected in calc procs (above)
 				{
@@ -660,8 +688,11 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 					{
 						if (recovery_enabled)
 						{
+							int rows_to_recover;
+							rows_to_recover = last_row;
+
 							double** tmpTlocal;
-									 tmpTlocal = AllocateMatrix2D ( myrows, mycols, CONTIGUOUS );
+									 tmpTlocal = AllocateMatrix2D ( rows_to_recover, mycols, CONTIGUOUS );
 
 							double** wfaulty;
 									 wfaulty = AllocateMatrix2D ( spare_proc_cols, spare_proc_cols, CONTIGUOUS );
@@ -672,17 +703,22 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 							{
 								for ( j=0; j < num_of_failing_ranks; j++ )
 								{
-									wfaulty[i][j] = w[i][failing_rank_list[0] - mpi_row_with_faults * calc_proc_cols + j];
+									wfaulty[i][j] = w[failing_rank_list[0] - mpi_row_with_faults * calc_proc_cols + i][j];
 								}
 							}
 
+							/*
+							 * check weights
+							 */
+							/*
 							if ( mpi_rank_col_in_row == calc_proc_cols ) // first spare proc in row
 							{
 								printf ( "\nweights:\n" );
-								PrintMatrix2D ( w, spare_proc_cols, spare_proc_rows );
+								PrintMatrix2D ( w, spare_proc_rows, spare_proc_cols  );
 								printf ( "faulty weights:\n" );
-								PrintMatrix2D ( wfaulty, spare_proc_cols, num_of_failing_ranks );
+								PrintMatrix2D ( wfaulty, spare_proc_cols, spare_proc_cols );
 							}
+							*/
 
 							int* ipiv = malloc ( num_of_failing_ranks*sizeof ( int ) );
 							int lwork = num_of_failing_ranks*num_of_failing_ranks;
@@ -691,11 +727,16 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 							dgetrf_ ( &num_of_failing_ranks, &num_of_failing_ranks, &wfaulty[0][0], &num_of_failing_ranks, ipiv, &info );
 							dgetri_ ( &num_of_failing_ranks, &wfaulty[0][0], &num_of_failing_ranks, ipiv, work, &lwork, &info );
 
+							/*
+							 * check recovery weights
+							 */
+							/*
 							if ( mpi_rank_col_in_row == calc_proc_cols )
 							{
 								printf ( "recovery weights:\n" );
-								PrintMatrix2D ( wfaulty, spare_proc_cols, num_of_failing_ranks );
+								PrintMatrix2D ( wfaulty, spare_proc_cols, spare_proc_cols );
 							}
+							*/
 
 							/*
 							 * update sums
@@ -707,7 +748,7 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 								if ( unlikely ( mpi_rank_col_in_row == ( calc_proc_cols+fr ) ) ) // receive the contributions
 								{
 									MPI_Comm_split ( comm_row, 1, mpi_rank, &comm_row_checksum );
-									MPI_Reduce ( &Tlocal[0][0], &tmpTlocal[0][0], myrows*mycols, MPI_DOUBLE, MPI_SUM, calc_proc_cols - spare_proc_cols, comm_row_checksum );
+									MPI_Reduce ( &Tlocal[0][0], &tmpTlocal[0][0], rows_to_recover*mycols, MPI_DOUBLE, MPI_SUM, calc_proc_cols - spare_proc_cols, comm_row_checksum );
 								}
 								else
 								{
@@ -722,16 +763,16 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 							 */
 							for ( fr=0; fr < num_of_failing_ranks; fr++ )
 							{
-								for ( i=0; i < myrows; i++ )
+								for ( i=0; i < rows_to_recover; i++ )
 								{
 									#pragma ivdep
 									for ( j=0; j < mycols; j++ )
 									{
-										Tlocal[i][j] = tmpTlocal[i][j] * wfaulty[fr][mpi_rank_col_in_row-calc_proc_cols];
+										Tlocal[i][j] = tmpTlocal[i][j] * wfaulty[mpi_rank_col_in_row-calc_proc_cols][fr];
 									}
 								}
 								MPI_Comm_split ( comm_row, 1, mpi_rank, &comm_row_checksum );
-								MPI_Reduce ( &Tlocal[0][0], NULL, myrows*mycols, MPI_DOUBLE, MPI_SUM, 0, comm_row_checksum );
+								MPI_Reduce ( &Tlocal[0][0], NULL, rows_to_recover*mycols, MPI_DOUBLE, MPI_SUM, 0, comm_row_checksum );
 
 								MPI_Comm_free ( &comm_row_checksum );
 							}
@@ -739,21 +780,11 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 							NULLFREE(work);
 							NULLFREE(ipiv);
 							DeallocateMatrix2D ( wfaulty, spare_proc_cols, CONTIGUOUS );
-							DeallocateMatrix2D ( tmpTlocal, myrows, CONTIGUOUS );
+							DeallocateMatrix2D ( tmpTlocal, rows_to_recover, CONTIGUOUS );
 						}
 					}
 				}
 
-				l_owner = PVMAP ( l, myrows );
-				l_row = PVLOCAL ( l, myrows );
-				l_col = l_row;
-
-				l_1_owner = PVMAP ( l-1, mycols );
-				l_1_col = PVLOCAL ( l-1, mycols );
-				l_1_row = l_1_col;
-
-				// last_row = myrows | l_row | 0
-				last_row = ( mpi_rank_row_in_col < l_owner ) * myrows + ( mpi_rank_row_in_col == l_owner ) * l_row;
 
 				/*
 				 * update helpers

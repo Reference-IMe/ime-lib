@@ -145,10 +145,24 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 			h = AllocateVector ( myrows );
 
 	/*
+	 *  matrix of weights
+	 *
+	 *  columns contain coefficients to be applied to the corresponding column of processes
+	 *
+	 *  each row of processes has the same coefficients
+	 *  row i of processes has weights w(j,k) where
+	 *  j is the calc process column in that row and
+	 *  k is the cheksum process column in that row
+	 *
+	 */
+	double** w;
+	w = AllocateMatrix2D ( spare_proc_rows, spare_proc_cols, CONTIGUOUS );
+	RandomMatrix2D ( w, spare_proc_rows, spare_proc_cols, 0 );
+
+	/*
 	 * init inhibition table
 	 */
-	//TODO: pass also the weights
-	pbDGEIT_CX_bf1_ft ( A, Tlocal, lastKr, lastKc, n, calc_procs,
+	pbDGEIT_CX_bf1_ft ( A, Tlocal, lastKr, lastKc, w, n, calc_procs,
 			spare_proc_cols,
 			comm_calc, mpi_rank,
 			comm_row, mpi_rank_col_in_row,
@@ -157,11 +171,6 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 			mpi_status,
 			mpi_request
 			 );											// init inhibition table
-
-	//the checksum weights
-	double** w;
-	w = AllocateMatrix2D ( spare_proc_cols, spare_proc_rows, CONTIGUOUS ); //TODO: transpose to gain some cache hit in loops below
-	RandomMatrix2D ( w, spare_proc_cols, spare_proc_rows, 0 );
 
 
 	if ( mpi_rank_row_in_col == 0 && mpi_rank_col_in_row < calc_proc_cols ) 			// first row of calc procs
@@ -207,13 +216,11 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 		int l_owner;				// proc rank hosting the l-th row (or col)
 		int l_row;					// local index of the l-th row
 		int l_col;					// local index of the l-th col
-
 		int fr;						// index for list of faulty ranks
 		int faulted = 0;			// flag for faulty (1) or healthy (0) rank
+		int mpi_row_with_faults;	// row rank where faults are located (all faults in a row)
 
-		int mpi_row_with_faults;
 		mpi_row_with_faults = failing_rank_list[0] / calc_proc_cols;
-
 
 
 		// for a better optimization, treat calc procs differently from spare procs
@@ -279,7 +286,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 											#pragma ivdep
 											for ( j=0; j < mycols; j++ )
 											{
-												tmpTlocal[i][j] = -Tlocal[i][j] * w[fr][mpi_rank_col_in_row];
+												tmpTlocal[i][j] = -Tlocal[i][j] * w[mpi_rank_col_in_row][fr];
 											}
 										}
 										if ( unlikely ( mpi_rank_col_in_row == mpi_rank_row_in_col ) )
@@ -287,7 +294,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 											for ( j=0; j < mycols; j++ )
 											{
 												#pragma ivdep
-												tmpTlocal[j][j] = tmpTlocal[j][j] - w[fr][mpi_rank_col_in_row];
+												tmpTlocal[j][j] = tmpTlocal[j][j] - w[mpi_rank_col_in_row][fr];
 											}
 										}
 										MPI_Comm_split ( comm_row, 1, mpi_rank, &comm_row_checksum );
@@ -500,7 +507,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 											#pragma ivdep
 											for ( j=0; j < mycols; j++ )
 											{
-												tmpTlocal[i][j] = -Tlocal[i][j] * w[fr][mpi_rank_col_in_row];
+												tmpTlocal[i][j] = -Tlocal[i][j] * w[mpi_rank_col_in_row][fr];
 											}
 										}
 										if ( unlikely ( mpi_rank_col_in_row == mpi_rank_row_in_col ) )
@@ -508,7 +515,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 											for ( j=0; j < mycols; j++ )
 											{
 												#pragma ivdep
-												tmpTlocal[j][j] = tmpTlocal[j][j] - w[fr][mpi_rank_col_in_row];
+												tmpTlocal[j][j] = tmpTlocal[j][j] - w[mpi_rank_col_in_row][fr];
 											}
 										}
 										MPI_Comm_split ( comm_row, 1, mpi_rank, &comm_row_checksum );
@@ -672,7 +679,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 							{
 								for ( j=0; j < num_of_failing_ranks; j++ )
 								{
-									wfaulty[i][j] = w[i][failing_rank_list[0] - mpi_row_with_faults * calc_proc_cols + j];
+									wfaulty[i][j] = w[failing_rank_list[0] - mpi_row_with_faults * calc_proc_cols + i][j];
 								}
 							}
 
@@ -690,11 +697,11 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 							if ( mpi_rank_col_in_row == calc_proc_cols )
 							{
 								printf ( "\nweights:\n" );
-								PrintMatrix2D ( w, spare_proc_cols, spare_proc_rows );
+								PrintMatrix2D ( w, spare_proc_rows, spare_proc_cols );
 								printf ( "faulty weights:\n" );
-								PrintMatrix2D ( wfaulty, spare_proc_cols, num_of_failing_ranks );
+								PrintMatrix2D ( wfaulty, spare_proc_cols, spare_proc_cols );
 								printf ( "recovery weights:\n" );
-								PrintMatrix2D ( wfaulty, spare_proc_cols, num_of_failing_ranks );
+								PrintMatrix2D ( wfaulty, spare_proc_cols, spare_proc_cols );
 							}
 							*/
 
@@ -728,7 +735,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 									#pragma ivdep
 									for ( j=0; j < mycols; j++ )
 									{
-										Tlocal[i][j] = tmpTlocal[i][j] * wfaulty[fr][mpi_rank_col_in_row-calc_proc_cols];
+										Tlocal[i][j] = tmpTlocal[i][j] * wfaulty[mpi_rank_col_in_row-calc_proc_cols][fr];
 									}
 								}
 								MPI_Comm_split ( comm_row, 1, mpi_rank, &comm_row_checksum );
@@ -874,7 +881,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 	MPI_Waitall ( 4, mpi_request, mpi_status );
 
 	// cleanup
-	DeallocateMatrix2D ( w, spare_proc_cols, CONTIGUOUS );
+	DeallocateMatrix2D ( w, spare_proc_rows, CONTIGUOUS );
 	DeallocateMatrix2D ( lastK, 2, CONTIGUOUS );
 	DeallocateVector   ( h );
 	DeallocateMatrix2D ( Tlocal, myrows, CONTIGUOUS );
