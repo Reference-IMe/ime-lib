@@ -285,24 +285,72 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 								double** tmpTlocal;
 										 tmpTlocal = AllocateMatrix2D ( rows_to_recover, mycols, CONTIGUOUS );
 
+								double** wfaulty;
+										 wfaulty = AllocateMatrix2D ( spare_proc_cols, spare_proc_cols, CONTIGUOUS );
+
+								// weights matrix of the faulty ones
+								// TODO: generalize column extraction for non consecutive ranks
+								for ( i=0; i < num_of_failing_ranks; i++ )
+								{
+									for ( j=0; j < num_of_failing_ranks; j++ )
+									{
+										wfaulty[i][j] = w[failing_rank_list[0] - mpi_row_with_faults * calc_proc_cols + i][j];
+									}
+								}
+
 								/*
-								 *  update sums
+								 * check weights
+								 */
+								/*
+								if ( mpi_rank_col_in_row == calc_proc_cols ) // first spare proc in row
+								{
+									printf ( "\nweights:\n" );
+									PrintMatrix2D ( w, spare_proc_rows, spare_proc_cols  );
+									printf ( "faulty weights:\n" );
+									PrintMatrix2D ( wfaulty, spare_proc_cols, spare_proc_cols );
+								}
+								*/
+
+								int* ipiv = malloc ( num_of_failing_ranks*sizeof ( int ) );
+								int lwork = num_of_failing_ranks*num_of_failing_ranks;
+								double* work = malloc ( lwork*sizeof ( double ) );
+								int info;
+								dgetrf_ ( &num_of_failing_ranks, &num_of_failing_ranks, &wfaulty[0][0], &num_of_failing_ranks, ipiv, &info );
+								dgetri_ ( &num_of_failing_ranks, &wfaulty[0][0], &num_of_failing_ranks, ipiv, work, &lwork, &info );
+
+								/*
+								 * check recovery weights
+								 */
+								/*
+								if ( mpi_rank_col_in_row == calc_proc_cols )
+								{
+									printf ( "recovery weights:\n" );
+									PrintMatrix2D ( wfaulty, spare_proc_cols, spare_proc_cols );
+								}
+								*/
+
+								/*
 								 *
-								 *  for every faulty proc in the row a checksum proc has to provide recovery data
-								 *  the basic recovery data is the weighted sum of the contribution of the faulty procs
-								 *  this can be calculated from the full weighted sum diminished by the contribution of the non-faulty procs
 								 */
+
+								int fri;
+								double coeff;
+
 								for ( fr=0; fr < num_of_failing_ranks; fr++ )
 								{
-									if ( !faulted ) // non-faulty procs prepare contributions to send to the checksum node
+									if ( !faulted ) // non-faulty procs prepare contributions to send to the recovered node
 									{
-										// TODO: last row to recover ?
+										coeff=0;
+										for ( fri=0; fri < num_of_failing_ranks; fri++ )
+										{
+											coeff=coeff + w[mpi_rank_col_in_row][fri]*wfaulty[fri][fr];
+										}
 										for ( i=0; i < rows_to_recover; i++ )
 										{
 											#pragma ivdep
 											for ( j=0; j < mycols; j++ )
 											{
-												tmpTlocal[i][j] = -Tlocal[i][j] * w[mpi_rank_col_in_row][fr];
+												tmpTlocal[i][j] = -Tlocal[i][j] * coeff;
 											}
 										}
 										if ( unlikely ( mpi_rank_col_in_row == mpi_rank_row_in_col ) )
@@ -310,57 +358,48 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 											for ( j=0; j < mycols; j++ )
 											{
 												#pragma ivdep
-												tmpTlocal[j][j] = tmpTlocal[j][j] - w[mpi_rank_col_in_row][fr];
+												tmpTlocal[j][j] = tmpTlocal[j][j] - coeff;
 											}
 										}
 										MPI_Comm_split ( comm_row, 1, mpi_rank, &comm_row_checksum );
-										MPI_Reduce ( &tmpTlocal[0][0], NULL, rows_to_recover*mycols, MPI_DOUBLE, MPI_SUM, calc_proc_cols - spare_proc_cols, comm_row_checksum );
+										MPI_Reduce ( &tmpTlocal[0][0], NULL, rows_to_recover*mycols, MPI_DOUBLE, MPI_SUM, failing_rank_list[0] - mpi_row_with_faults * calc_proc_cols, comm_row_checksum );
 									}
-									else // faulty procs do nothing
+									else // faulty procs (all but one) do nothing, one receives
 									{
-										MPI_Comm_split ( comm_row, 0, mpi_rank, &comm_row_checksum );
-										// does not participate in reduction
-									}
-									MPI_Comm_free ( &comm_row_checksum );
-								}
-
-								/*
-								 * without loss of generality, faulty procs are revived to be recovered
-								 */
-								for ( fr=0; fr < num_of_failing_ranks; fr++ )
-								{
-									if ( unlikely ( mpi_rank == failing_rank_list[fr] ) ) // revived procs prepare to receive sums
-									{
-										for ( i=0; i < rows_to_recover; i++ )
+										if ( unlikely ( mpi_rank == failing_rank_list[fr] ) ) // revived procs prepare to receive sums
 										{
-											#pragma ivdep
-											for ( j=0; j < mycols; j++ )
-											{
-												tmpTlocal[i][j] = 0;
-											}
-										}
-										MPI_Comm_split ( comm_row, 1, mpi_rank, &comm_row_checksum );
-										MPI_Reduce ( &tmpTlocal[0][0], &Tlocal[0][0], rows_to_recover*mycols, MPI_DOUBLE, MPI_SUM, 0, comm_row_checksum );
-
-										// because diagonal elements on diagonal procs are added with one before checksumming
-										// once received the sums, those elements have to be decremented to reflect the actual values
-										if ( unlikely ( mpi_rank_col_in_row == mpi_rank_row_in_col ) )
-										{
-											for ( j=0; j < rows_to_recover; j++ )
+											for ( i=0; i < rows_to_recover; i++ )
 											{
 												#pragma ivdep
-												Tlocal[j][j] = Tlocal[j][j] - 1;
+												for ( j=0; j < mycols; j++ )
+												{
+													tmpTlocal[i][j] = 0;
+												}
 											}
+											MPI_Comm_split ( comm_row, 1, mpi_rank, &comm_row_checksum );
+											MPI_Reduce ( &tmpTlocal[0][0], &Tlocal[0][0], rows_to_recover*mycols, MPI_DOUBLE, MPI_SUM, failing_rank_list[0] - mpi_row_with_faults * calc_proc_cols, comm_row_checksum );
+
+											// because diagonal elements on diagonal procs are added with one before checksumming
+											// once received the sums, those elements have to be decremented to reflect the actual values
+											if ( unlikely ( mpi_rank_col_in_row == mpi_rank_row_in_col ) )
+											{
+												for ( j=0; j < rows_to_recover; j++ )
+												{
+													#pragma ivdep
+													Tlocal[j][j] = Tlocal[j][j] - 1;
+												}
+											}
+											printf ( "## IMe: rank %d recovered at level %d\n", mpi_rank, l );
 										}
-										printf ( "## IMe: rank %d recovered at level %d\n", mpi_rank, l );
-									}
-									else
-									{
-										MPI_Comm_split ( comm_row, 0, mpi_rank, &comm_row_checksum );
-										// does not participate in reduction
+										else
+										{
+											MPI_Comm_split ( comm_row, 0, mpi_rank, &comm_row_checksum );
+											// does not participate in reduction
+										}
 									}
 									MPI_Comm_free ( &comm_row_checksum );
 								}
+
 								/*
 								 * check recovery
 								*/
@@ -511,81 +550,121 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 								double** tmpTlocal;
 										 tmpTlocal = AllocateMatrix2D ( rows_to_recover, mycols, CONTIGUOUS );
 
+								double** wfaulty;
+										 wfaulty = AllocateMatrix2D ( spare_proc_cols, spare_proc_cols, CONTIGUOUS );
+
+								// weights matrix of the faulty ones
+								// TODO: generalize column extraction for non consecutive ranks
+								for ( i=0; i < num_of_failing_ranks; i++ )
+								{
+									for ( j=0; j < num_of_failing_ranks; j++ )
+									{
+										wfaulty[i][j] = w[failing_rank_list[0] - mpi_row_with_faults * calc_proc_cols + i][j];
+									}
+								}
+
 								/*
-								 *  update sums
+								 * check weights
+								 */
+								/*
+								if ( mpi_rank_col_in_row == calc_proc_cols ) // first spare proc in row
+								{
+									printf ( "\nweights:\n" );
+									PrintMatrix2D ( w, spare_proc_rows, spare_proc_cols  );
+									printf ( "faulty weights:\n" );
+									PrintMatrix2D ( wfaulty, spare_proc_cols, spare_proc_cols );
+								}
+								*/
+
+								int* ipiv = malloc ( num_of_failing_ranks*sizeof ( int ) );
+								int lwork = num_of_failing_ranks*num_of_failing_ranks;
+								double* work = malloc ( lwork*sizeof ( double ) );
+								int info;
+								dgetrf_ ( &num_of_failing_ranks, &num_of_failing_ranks, &wfaulty[0][0], &num_of_failing_ranks, ipiv, &info );
+								dgetri_ ( &num_of_failing_ranks, &wfaulty[0][0], &num_of_failing_ranks, ipiv, work, &lwork, &info );
+
+								/*
+								 * check recovery weights
+								 */
+								/*
+								if ( mpi_rank_col_in_row == calc_proc_cols )
+								{
+									printf ( "recovery weights:\n" );
+									PrintMatrix2D ( wfaulty, spare_proc_cols, spare_proc_cols );
+								}
+								*/
+
+								/*
 								 *
-								 *  for every faulty proc in the row a checksum proc has to provide recovery data
-								 *  the basic recovery data is the weighted sum of the contribution of the faulty procs
-								 *  this can be calculated from the full weighted sum diminished by the contribution of the non-faulty procs
 								 */
+
+								int fri;
+								double coeff;
+
 								for ( fr=0; fr < num_of_failing_ranks; fr++ )
 								{
-									if ( !faulted ) // non-faulty procs prepare contributions to send to the checksum node
+									if ( !faulted ) // non-faulty procs prepare contributions to send to the recovered node
 									{
+										coeff=0;
+										for ( fri=0; fri < num_of_failing_ranks; fri++ )
+										{
+											coeff=coeff + w[mpi_rank_col_in_row][fri]*wfaulty[fri][fr];
+										}
 										for ( i=0; i < rows_to_recover; i++ )
 										{
 											#pragma ivdep
 											for ( j=0; j < mycols; j++ )
 											{
-												tmpTlocal[i][j] = -Tlocal[i][j] * w[mpi_rank_col_in_row][fr];
+												tmpTlocal[i][j] = -Tlocal[i][j] * coeff;
 											}
 										}
 										if ( unlikely ( mpi_rank_col_in_row == mpi_rank_row_in_col ) )
 										{
-											for ( j=0; j < rows_to_recover; j++ )
-											{
-												#pragma ivdep
-												tmpTlocal[j][j] = tmpTlocal[j][j] - w[mpi_rank_col_in_row][fr];
-											}
-										}
-										MPI_Comm_split ( comm_row, 1, mpi_rank, &comm_row_checksum );
-										MPI_Reduce ( &tmpTlocal[0][0], NULL, rows_to_recover*mycols, MPI_DOUBLE, MPI_SUM, calc_proc_cols - spare_proc_cols, comm_row_checksum );
-									}
-									else // faulty procs do nothing
-									{
-										MPI_Comm_split ( comm_row, 0, mpi_rank, &comm_row_checksum );
-										// does not participate in reduction
-									}
-									MPI_Comm_free ( &comm_row_checksum );
-								}
-
-								/*
-								 * without loss of generality, faulty procs are revived to be recovered
-								 */
-								for ( fr=0; fr < num_of_failing_ranks; fr++ )
-								{
-									if ( unlikely ( mpi_rank == failing_rank_list[fr] ) ) // revived procs prepare to receive sums
-									{
-										for ( i=0; i < rows_to_recover; i++ )
-										{
-											#pragma ivdep
 											for ( j=0; j < mycols; j++ )
 											{
-												tmpTlocal[i][j] = 0;
+												#pragma ivdep
+												tmpTlocal[j][j] = tmpTlocal[j][j] - coeff;
 											}
 										}
 										MPI_Comm_split ( comm_row, 1, mpi_rank, &comm_row_checksum );
-										MPI_Reduce ( &tmpTlocal[0][0], &Tlocal[0][0], rows_to_recover*mycols, MPI_DOUBLE, MPI_SUM, 0, comm_row_checksum );
-
-										// because diagonal elements on diagonal procs are added with one before checksumming
-										// once received the sums, those elements have to be decremented to reflect the actual values
-										if ( unlikely ( mpi_rank_col_in_row == mpi_rank_row_in_col ) )
+										MPI_Reduce ( &tmpTlocal[0][0], NULL, rows_to_recover*mycols, MPI_DOUBLE, MPI_SUM, failing_rank_list[0] - mpi_row_with_faults * calc_proc_cols, comm_row_checksum );
+									}
+									else // faulty procs (all but one) do nothing, one receives
+									{
+										if ( unlikely ( mpi_rank == failing_rank_list[fr] ) ) // revived procs prepare to receive sums
 										{
-											for ( j=0; j < rows_to_recover; j++ )
+											for ( i=0; i < rows_to_recover; i++ )
 											{
 												#pragma ivdep
-												Tlocal[j][j] = Tlocal[j][j] - 1;
+												for ( j=0; j < mycols; j++ )
+												{
+													tmpTlocal[i][j] = 0;
+												}
 											}
+											MPI_Comm_split ( comm_row, 1, mpi_rank, &comm_row_checksum );
+											MPI_Reduce ( &tmpTlocal[0][0], &Tlocal[0][0], rows_to_recover*mycols, MPI_DOUBLE, MPI_SUM, failing_rank_list[0] - mpi_row_with_faults * calc_proc_cols, comm_row_checksum );
+
+											// because diagonal elements on diagonal procs are added with one before checksumming
+											// once received the sums, those elements have to be decremented to reflect the actual values
+											if ( unlikely ( mpi_rank_col_in_row == mpi_rank_row_in_col ) )
+											{
+												for ( j=0; j < rows_to_recover; j++ )
+												{
+													#pragma ivdep
+													Tlocal[j][j] = Tlocal[j][j] - 1;
+												}
+											}
+											printf ( "## IMe: rank %d recovered at level %d\n", mpi_rank, l );
 										}
-										printf ( "## IMe: rank %d recovered at level %d\n", mpi_rank, l );
-									}
-									else
-									{
-										MPI_Comm_split ( comm_row, 0, mpi_rank, &comm_row_checksum );
-										// does not participate in reduction
+										else
+										{
+											MPI_Comm_split ( comm_row, 0, mpi_rank, &comm_row_checksum );
+											// does not participate in reduction
+										}
 									}
 									MPI_Comm_free ( &comm_row_checksum );
 								}
+
 								/*
 								 * check recovery
 								*/
@@ -739,26 +818,6 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 							*/
 
 							/*
-							 * update sums
-							 *
-							 * every checksum node have to diminish its sum by the weighted contribution of the non-faulty procs
-							 */
-							for ( fr=0; fr < spare_proc_cols; fr++ )
-							{
-								if ( unlikely ( mpi_rank_col_in_row == ( calc_proc_cols+fr ) ) ) // receive the contributions
-								{
-									MPI_Comm_split ( comm_row, 1, mpi_rank, &comm_row_checksum );
-									MPI_Reduce ( &Tlocal[0][0], &tmpTlocal[0][0], rows_to_recover*mycols, MPI_DOUBLE, MPI_SUM, calc_proc_cols - spare_proc_cols, comm_row_checksum );
-								}
-								else
-								{
-									MPI_Comm_split ( comm_row, 0, mpi_rank, &comm_row_checksum );
-									// does not participate in reduction
-								}
-								MPI_Comm_free ( &comm_row_checksum );
-							}
-
-							/*
 							 * send sums
 							 */
 							for ( fr=0; fr < num_of_failing_ranks; fr++ )
@@ -768,11 +827,11 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 									#pragma ivdep
 									for ( j=0; j < mycols; j++ )
 									{
-										Tlocal[i][j] = tmpTlocal[i][j] * wfaulty[mpi_rank_col_in_row-calc_proc_cols][fr];
+										tmpTlocal[i][j] = Tlocal[i][j] * wfaulty[mpi_rank_col_in_row-calc_proc_cols][fr];
 									}
 								}
 								MPI_Comm_split ( comm_row, 1, mpi_rank, &comm_row_checksum );
-								MPI_Reduce ( &Tlocal[0][0], NULL, rows_to_recover*mycols, MPI_DOUBLE, MPI_SUM, 0, comm_row_checksum );
+								MPI_Reduce ( &tmpTlocal[0][0], NULL, rows_to_recover*mycols, MPI_DOUBLE, MPI_SUM, failing_rank_list[0] - mpi_row_with_faults * calc_proc_cols, comm_row_checksum );
 
 								MPI_Comm_free ( &comm_row_checksum );
 							}
