@@ -20,7 +20,7 @@ __attribute__((always_inline)) inline void pbDGEUT_CO (	int mpi_rank_row_in_col,
 				hh  = lastKc[i]*h[i];
 
 				// before diagonal
-				#pragma ivdep
+				#pragma GCC ivdep
 				for (j=0; j < i; j++)
 				{
 					Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
@@ -30,7 +30,7 @@ __attribute__((always_inline)) inline void pbDGEUT_CO (	int mpi_rank_row_in_col,
 				Tlocal[i][j] = Tlocal[i][j]*h[i];
 
 				// after diagonal but before l-th
-				#pragma ivdep
+				#pragma GCC ivdep
 				for (j=i+1; j < l_col; j++)
 				{
 					Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
@@ -40,7 +40,7 @@ __attribute__((always_inline)) inline void pbDGEUT_CO (	int mpi_rank_row_in_col,
 				Tlocal[i][j] = - lastKr[j]*hh;
 
 				// after l-th
-				#pragma ivdep
+				#pragma GCC ivdep
 				for (j=l_col+1; j < mycols; j++)
 				{
 					Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
@@ -54,7 +54,7 @@ __attribute__((always_inline)) inline void pbDGEUT_CO (	int mpi_rank_row_in_col,
 				hh  = lastKc[i]*h[i];
 
 				// before l-th
-				#pragma ivdep
+				#pragma GCC ivdep
 				for (j=0; j < l_col; j++)
 				{
 					Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
@@ -64,7 +64,7 @@ __attribute__((always_inline)) inline void pbDGEUT_CO (	int mpi_rank_row_in_col,
 				Tlocal[i][j] = - lastKr[j]*hh;
 
 				// after l-th
-				#pragma ivdep
+				#pragma GCC ivdep
 				for (j=l_col+1; j < mycols; j++)
 				{
 					Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
@@ -79,7 +79,7 @@ __attribute__((always_inline)) inline void pbDGEUT_CO (	int mpi_rank_row_in_col,
 			hh  = lastKc[i]*h[i];
 
 			// before diagonal
-			#pragma ivdep
+			#pragma GCC ivdep
 			for (j=0; j < i; j++)
 			{
 				Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
@@ -89,7 +89,7 @@ __attribute__((always_inline)) inline void pbDGEUT_CO (	int mpi_rank_row_in_col,
 			Tlocal[i][j] = Tlocal[i][j]*h[i];
 
 			// after diagonal
-			#pragma ivdep
+			#pragma GCC ivdep
 			for (j=i+1; j < mycols; j++)
 			{
 				Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
@@ -102,7 +102,7 @@ __attribute__((always_inline)) inline void pbDGEUT_CO (	int mpi_rank_row_in_col,
 		{
 			hh  = lastKc[i]*h[i];
 
-			#pragma ivdep
+			#pragma GCC ivdep
 			for (j=0; j < mycols; j++)
 			{
 				Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;

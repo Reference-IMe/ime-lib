@@ -283,7 +283,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 										// TODO: last row to recover ?
 										for ( i=0; i < myrows; i++ )
 										{
-											#pragma ivdep
+											#pragma GCC ivdep
 											for ( j=0; j < mycols; j++ )
 											{
 												tmpTlocal[i][j] = -Tlocal[i][j] * w[mpi_rank_col_in_row][fr];
@@ -291,9 +291,9 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 										}
 										if ( unlikely ( mpi_rank_col_in_row == mpi_rank_row_in_col ) )
 										{
+											#pragma GCC ivdep
 											for ( j=0; j < mycols; j++ )
 											{
-												#pragma ivdep
 												tmpTlocal[j][j] = tmpTlocal[j][j] - w[mpi_rank_col_in_row][fr];
 											}
 										}
@@ -317,7 +317,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 									{
 										for ( i=0; i < myrows; i++ )
 										{
-											#pragma ivdep
+											#pragma GCC ivdep
 											for ( j=0; j < mycols; j++ )
 											{
 												tmpTlocal[i][j] = 0;
@@ -330,9 +330,9 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 										// once received the sums, those elements have to be decremented to reflect the actual values
 										if ( unlikely ( mpi_rank_col_in_row == mpi_rank_row_in_col ) )
 										{
+											#pragma GCC ivdep
 											for ( j=0; j < mycols; j++ )
 											{
-												#pragma ivdep
 												Tlocal[j][j] = Tlocal[j][j] - 1;
 											}
 										}
@@ -425,7 +425,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 						if ( mpi_rank_row_in_col == l_1_owner ) 			// procs row that holds the (l-1)-th row
 						{
 							/*
-							#pragma ivdep
+							#pragma GCC ivdep
 							for ( i=0; i < mycols; i++ ) 			// copy (l-1)-th row in buffer
 							{
 								lastKr[i]=Tlocal[l_1_row][i];
@@ -440,7 +440,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 						{
 							if ( mpi_rank_col_in_row == l_1_owner ) 	// proc in the row that has ( l-1 ) -th col
 							{
-								#pragma ivdep
+								#pragma GCC ivdep
 								for ( i=0; i < last_row; i++ ) 	// copy ( l-1 ) -th col in buffer
 								{
 									lastKc[i]=Tlocal[i][l_1_col];
@@ -504,7 +504,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 									{
 										for ( i=0; i < myrows; i++ )
 										{
-											#pragma ivdep
+											#pragma GCC ivdep
 											for ( j=0; j < mycols; j++ )
 											{
 												tmpTlocal[i][j] = -Tlocal[i][j] * w[mpi_rank_col_in_row][fr];
@@ -512,9 +512,9 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 										}
 										if ( unlikely ( mpi_rank_col_in_row == mpi_rank_row_in_col ) )
 										{
+											#pragma GCC ivdep
 											for ( j=0; j < mycols; j++ )
 											{
-												#pragma ivdep
 												tmpTlocal[j][j] = tmpTlocal[j][j] - w[mpi_rank_col_in_row][fr];
 											}
 										}
@@ -538,7 +538,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 									{
 										for ( i=0; i < myrows; i++ )
 										{
-											#pragma ivdep
+											#pragma GCC ivdep
 											for ( j=0; j < mycols; j++ )
 											{
 												tmpTlocal[i][j] = 0;
@@ -551,9 +551,9 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 										// once received the sums, those elements have to be decremented to reflect the actual values
 										if ( unlikely ( mpi_rank_col_in_row == mpi_rank_row_in_col ) )
 										{
+											#pragma GCC ivdep
 											for ( j=0; j < mycols; j++ )
 											{
-												#pragma ivdep
 												Tlocal[j][j] = Tlocal[j][j] - 1;
 											}
 										}
@@ -628,7 +628,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 						if ( mpi_rank_row_in_col == l_1_owner ) 			// procs row that holds the (l-1) -th row
 						{
 							/*
-							#pragma ivdep
+							#pragma GCC ivdep
 							for ( i=0; i < mycols; i++ ) 			// copy (l-1) -th row in buffer
 							{
 								lastKr[i]=Tlocal[l_1_row][i];
@@ -643,7 +643,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 						{
 							if ( mpi_rank_col_in_row == l_1_owner ) 	// proc in the row that has ( l-1 ) -th col
 							{
-								#pragma ivdep
+								#pragma GCC ivdep
 								for ( i=0; i < last_row; i++ ) 	// copy ( l-1 ) -th col in buffer
 								{
 									lastKc[i] = Tlocal[i][l_1_col];
@@ -732,7 +732,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 							{
 								for ( i=0; i < myrows; i++ )
 								{
-									#pragma ivdep
+									#pragma GCC ivdep
 									for ( j=0; j < mycols; j++ )
 									{
 										Tlocal[i][j] = tmpTlocal[i][j] * wfaulty[mpi_rank_col_in_row-calc_proc_cols][fr];
@@ -784,7 +784,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 					if ( mpi_rank_row_in_col == l_1_owner ) 			// procs row that holds the (l-1) -th row
 					{
 						/*
-						#pragma ivdep
+						#pragma GCC ivdep
 						for ( i=0; i < mycols; i++ ) 			// copy (l-1) -th row in buffer
 						{
 							lastKr[i]=Tlocal[l_1_row][i];
@@ -799,7 +799,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 					{
 						if ( mpi_rank_col_in_row == l_1_owner ) 	// proc in the row that has (l-1) -th col
 						{
-							#pragma ivdep
+							#pragma GCC ivdep
 							for ( i=0; i < last_row; i++ ) 	// copy (l-1) -th col in buffer
 							{
 								lastKc[i] = Tlocal[i][l_1_col];
@@ -819,7 +819,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 				// bb[0] must be here
 				MPI_Wait ( mpi_req_bb, mpi_st_bb );
 
-				#pragma ivdep
+				#pragma GCC ivdep
 				for ( i=0; i < myxxrows; i++ )
 				{
 					gi=PVGLOBAL ( i, mycols, mpi_rank_col_in_row );

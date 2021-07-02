@@ -14,7 +14,7 @@ __attribute__((always_inline)) inline void pbDGEUH_CO (	int mpi_rank_row_in_col,
 	// last_row = myrows | l_row | 0
 	// last_row = ( mpi_rank_row_in_col < l_owner )*myrows + ( mpi_rank_row_in_col == l_owner )*l_row;
 
-	#pragma ivdep
+	#pragma GCC ivdep
 	for (i=0; i<last_row; i++)
 	{
 		h[i]   = 1/(1-lastKc[i]*lastKr[i]);
