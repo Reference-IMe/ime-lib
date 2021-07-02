@@ -241,7 +241,7 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 		{
 			for (i=0; i<myrows; i++)
 			{
-				#pragma ivdep
+				#pragma GCC ivdep
 				for (j=0; j<mycols; j++)
 				{
 					//tmpTlocal[i][j]=(rank_row_in_col+1)*100+rank_col_in_row+1;
@@ -250,9 +250,9 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 			}
 			if ( unlikely(rank_col_in_row == rank_row_in_col) )
 			{
+				#pragma GCC ivdep
 				for (j=0; j<mycols; j++)
 				{
-					#pragma ivdep
 					tmpTlocal[j][j]=tmpTlocal[j][j] + w[rank_col_in_row][l];
 				}
 			}
@@ -266,7 +266,7 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 			{
 				for (i=0; i<myrows; i++)
 				{
-					#pragma ivdep
+					#pragma GCC ivdep
 					for (j=0; j<mycols; j++)
 					{
 						tmpTlocal[i][j]=0;
@@ -277,7 +277,7 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 
 				if ( rank_row_in_col == cprocrows-1 )
 				{
-					#pragma ivdep
+					#pragma GCC ivdep
 					for (j=0; j<mycols; j++)
 					{
 						lastKr[j]=Tlocal[myrows-1][j];

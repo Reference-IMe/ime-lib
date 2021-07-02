@@ -34,10 +34,10 @@ __attribute__((always_inline)) inline void pbDGEUX_CO (	int mpi_rank_row_in_col,
 
 		// update xx vector
 		// l .. n-1
-		#pragma ivdep
 		for (i=*myxxstart; i<myrows; i++)
 		{
 			gi=PVGLOBAL(i, mycols, mpi_rank_col_in_row);
+			#pragma GCC ivdep
 			for (rhs=0;rhs<m;rhs++)
 			{
 				xx[gi][rhs]=xx[gi][rhs]+lastKr[i]*bb[l][rhs];
