@@ -230,7 +230,7 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 
 
 		// for a better optimization, treat calc procs differently from spare procs
-		if ( mpi_rank_col_in_row < calc_proc_cols )											// calc. procs
+		if ( likely ( mpi_rank_col_in_row < calc_proc_cols ) )											// calc. procs
 		{
 			if ( mpi_rank_row_in_col == 0 ) 					// first row of calc procs
 			{
@@ -252,7 +252,7 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 																// (assuming only calc procs can be faulty)
 																// and then recover
 					{
-						if ( mpi_rank_row_in_col == mpi_row_with_faults )
+						if ( unlikely ( mpi_rank_row_in_col == mpi_row_with_faults ) )
 						{
 							// fault injection
 							for ( fr=0; fr < num_of_failing_ranks; fr++ )
@@ -281,11 +281,17 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 							}
 							*/
 
-							if (recovery_enabled)
+							if ( likely ( recovery_enabled ) )
 							{
-								if (mpi_rank_row_in_col > l_owner)	// fault doesn't affects computation
+								if ( unlikely ( mpi_rank_row_in_col > l_owner ) )	// fault doesn't affects computation
 								{
-									printf ( "## IMe: rank %d doesn't affect at level %d: no recovery needed\n", mpi_rank, l );
+									for ( fr=0; fr < num_of_failing_ranks; fr++ )
+									{
+										if ( unlikely ( mpi_rank == failing_rank_list[fr] ) )
+										{
+											printf ( "## IMe: rank %d doesn't affect at level %d: no recovery needed\n", mpi_rank, l );
+										}
+									}
 								}
 								else								// affects
 								{
@@ -552,11 +558,17 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 							}
 							*/
 
-							if (recovery_enabled)
+							if ( likely ( recovery_enabled ) )
 							{
-								if (mpi_rank_row_in_col > l_owner)	// fault doesn't affects computation
+								if ( unlikely ( mpi_rank_row_in_col > l_owner ) )	// fault doesn't affects computation
 								{
-									printf ( "## IMe: rank %d doesn't affect at level %d: no recovery needed\n", mpi_rank, l );
+									for ( fr=0; fr < num_of_failing_ranks; fr++ )
+									{
+										if ( unlikely ( mpi_rank == failing_rank_list[fr] ) )
+										{
+											printf ( "## IMe: rank %d doesn't affect at level %d: no recovery needed\n", mpi_rank, l );
+										}
+									}
 								}
 								else								// affects
 								{
@@ -780,11 +792,11 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 				if ( unlikely ( l == failing_level ) )			// inject failure
 																// fault is injected in calc procs (above)
 				{
-					if ( mpi_rank_row_in_col == mpi_row_with_faults ) // only spare procs in a row with a fault have things to do
+					if ( unlikely ( mpi_rank_row_in_col == mpi_row_with_faults ) ) // only spare procs in a row with a fault have things to do
 					{
-						if (recovery_enabled)
+						if ( likely ( recovery_enabled ) )
 						{
-							if (mpi_rank_row_in_col > l_owner)	// fault doesn't affects computation
+							if ( unlikely ( mpi_rank_row_in_col > l_owner ) )	// fault doesn't affects computation
 							{
 								printf ( "## IMe: spare rank %d doesn't affect at level %d: no recovery needed\n", mpi_rank, l );
 							}
