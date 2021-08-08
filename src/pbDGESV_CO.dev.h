@@ -26,8 +26,8 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 	 */
 	int n			=	input.n;
 	int nrhs		=	input.nrhs;
-	int calc_procs	=	input.calc_procs;
-	int spare_procs	=	input.spare_procs;
+	int calc_procs	=	env.calc_procs;
+	int spare_procs	=	env.spare_procs;
 	int mpi_rank	=	env.mpi_rank;
 
 	/*

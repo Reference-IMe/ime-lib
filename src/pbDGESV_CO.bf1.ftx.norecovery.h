@@ -38,13 +38,13 @@ test_output pbDGESV_CO_bf1_ftx(double** A, double** bb, double** xx, test_input 
     int mpi_row;
     int mpi_col;
 
-    cprocrows = sqrt(input.calc_procs);
+    cprocrows = sqrt(env.calc_procs);
     cproccols = cprocrows;
 
     sprocrows = cprocrows;
-    sproccols = input.spare_procs / sprocrows;
+    sproccols = env.spare_procs / sprocrows;
 
-	if ( likely(env.mpi_rank < input.calc_procs) )
+	if ( likely(env.mpi_rank < env.calc_procs) )
 	{
 		MPI_Comm_split(MPI_COMM_WORLD, 0, env.mpi_rank, &comm_calc);	// communicator for calc only nodes
 
@@ -55,8 +55,8 @@ test_output pbDGESV_CO_bf1_ftx(double** A, double** bb, double** xx, test_input 
 	{
 		MPI_Comm_split(MPI_COMM_WORLD, 1, env.mpi_rank, &comm_calc);	// communicator for spare only nodes
 
-	    mpi_row = (env.mpi_rank-input.calc_procs) / sproccols;
-	    mpi_col = cproccols + ((env.mpi_rank-input.calc_procs) % sproccols);
+	    mpi_row = (env.mpi_rank-env.calc_procs) / sproccols;
+	    mpi_col = cproccols + ((env.mpi_rank-env.calc_procs) % sproccols);
 	}
 	MPI_Comm_split(comm_calc, mpi_row, env.mpi_rank, &comm_row_calc);// communicator for a row of calc (or spare) only nodes
 	MPI_Comm_split(MPI_COMM_WORLD, mpi_row, env.mpi_rank, &comm_row); 		// communicator for a row
@@ -94,7 +94,7 @@ test_output pbDGESV_CO_bf1_ftx(double** A, double** bb, double** xx, test_input 
      * check grid
      */
     /*
-    for (i=0; i<input.calc_procs+input.spare_procs; i++)
+    for (i=0; i<env.calc_procs+env.spare_procs; i++)
 	{
 		MPI_Barrier(MPI_COMM_WORLD);
 		if (env.mpi_rank==i)
@@ -127,7 +127,7 @@ test_output pbDGESV_CO_bf1_ftx(double** A, double** bb, double** xx, test_input 
 	/*
 	 *  init inhibition table
 	 */
-	pbDGEIT_CX_bf1_ft(A, Tlocal, lastKr, lastKc, input.n, input.calc_procs,
+	pbDGEIT_CX_bf1_ft(A, Tlocal, lastKr, lastKc, input.n, env.calc_procs,
 			sproccols,
 			comm_calc, env.mpi_rank,
 			comm_row, mpi_rank_col_in_row,
@@ -149,7 +149,7 @@ test_output pbDGESV_CO_bf1_ftx(double** A, double** bb, double** xx, test_input 
 		/*
 		MPI_Waitall(4, mpi_request, mpi_status);
 
-		for (i=0; i<input.calc_procs+input.spare_procs; i++)
+		for (i=0; i<env.calc_procs+env.spare_procs; i++)
 		{
 			MPI_Barrier(MPI_COMM_WORLD);
 			if (env.mpi_rank==i)
