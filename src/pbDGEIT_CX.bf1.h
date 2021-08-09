@@ -205,6 +205,7 @@ void pbDGEIT_CX_bf1(double** A, double** Tlocal, double* lastKr, double* lastKc,
 		}
 	}
 
+	MPI_Wait( &mpi_request[0], &mpi_status[0]);
 	NULLFREE(diag);
 }
 

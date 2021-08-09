@@ -216,6 +216,7 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 			}
 		}
 
+		MPI_Wait( &mpi_request[0], &mpi_status[0]);
 		NULLFREE(diag);
 	}
 	else
