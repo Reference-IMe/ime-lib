@@ -12,7 +12,13 @@
 #include "pbDGEUH_CO.h"
 #include "pbDGEUB_CO.h"
 
-test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_input input, parallel_env env, int num_of_failing_ranks, int* failing_rank_list, int failing_level, int recovery_enabled )
+test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
+									test_input input,
+									parallel_env env,
+									int num_of_failing_ranks,
+									int* failing_rank_list,
+									int failing_level,
+									int recovery_enabled )
 {
 	/*
 	 * nb	NOT USED: blocking factor: number of adjacent column (block width)
@@ -242,7 +248,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 							{
 								if ( unlikely ( mpi_rank == failing_rank_list[fr] ) )
 								{
-									printf ( "## IMe: rank %d faulty at level %d\n", mpi_rank, l );
+									printf ( "## IMe-ft: rank %d faulty at level %d\n", mpi_rank, l );
 									SetMatrix2D ( -99, Tlocal, myrows, mycols );
 									faulted=1;
 								}
@@ -336,7 +342,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 												Tlocal[j][j] = Tlocal[j][j] - 1;
 											}
 										}
-										printf ( "## IMe: rank %d recovered at level %d\n", mpi_rank, l );
+										printf ( "## IMe-ft: rank %d recovered at level %d\n", mpi_rank, l );
 									}
 									else
 									{
@@ -464,7 +470,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 							{
 								if ( unlikely ( mpi_rank == failing_rank_list[fr] ) )
 								{
-									printf ( "## IMe: rank %d faulty at level %d\n", mpi_rank, l );
+									printf ( "## IMe-ft: rank %d faulty at level %d\n", mpi_rank, l );
 									SetMatrix2D ( -99, Tlocal, myrows, mycols );
 									faulted=1;
 								}
@@ -557,7 +563,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx, test_inpu
 												Tlocal[j][j] = Tlocal[j][j] - 1;
 											}
 										}
-										printf ( "## IMe: rank %d recovered at level %d\n", mpi_rank, l );
+										printf ( "## IMe-ft: rank %d recovered at level %d\n", mpi_rank, l );
 									}
 									else
 									{
