@@ -50,8 +50,13 @@
 
 #define IS_SQUARE(a) ( pow((int)sqrt(a),2)==a )
 
-#define DISPLAY_MSG(routine_name, text) printf("     %s %s\n", routine_name, text);
-#define DISPLAY_ERR(routine_name, text) printf("ERR: %s %s\n", routine_name, text);
-#define DISPLAY_WRN(routine_name, text) printf("WRN: %s %s\n", routine_name, text);
+#define TAG2LABEL(tag_string, label_string) label_string=sdscat(label_string,tag_string);	\
+											label=sdscat(label, ":");
+
+#define DISPLAY_MSG(routine_name, text) printf("   > %-31s%s\n", routine_name, text);
+#define DISPLAY_ERR(routine_name, text) printf("ERR> %-31s%s\n", routine_name, text);
+#define DISPLAY_ERR_GLB(text)           printf("ERR> %s\n", text);
+#define DISPLAY_WRN(routine_name, text) printf("WRN> %-31s%s\n", routine_name, text);
+#define DISPLAY_WRN_GLB(text)           printf("WRN> %s\n", text);
 
 #endif
