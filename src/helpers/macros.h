@@ -36,9 +36,9 @@
 									{											\
 										if (fp != NULL) fclose(fp);				\
 									}											\
-									DeallocateMatrix1D_double(A_ref);					\
-									DeallocateVector(b_ref);					\
-									DeallocateVector(x_ref);					\
+									DeallocateMatrix1D_double(A_ref);			\
+									DeallocateVector_double(b_ref);				\
+									DeallocateVector_double(x_ref);				\
 								}												\
 								sdsfree(test_output_file_name);
 

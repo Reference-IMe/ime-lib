@@ -12,17 +12,17 @@
 #ifndef __VECTOR_H__
 #define __VECTOR_H__
 
-double* AllocateVector(int rows)
+double* AllocateVector_double(int rows)
 {
 	return malloc(rows*sizeof(double));
 }
 
-void DeallocateVector(double* vec)
+void DeallocateVector_double(double* vec)
 {
 	NULLFREE(vec);
 }
 
-void PrintVector(double* const vec, int rows)
+void PrintVector_double(double* const vec, int rows)
 {
 	int r;
 	for(r=0;r<rows;r++)
@@ -30,7 +30,7 @@ void PrintVector(double* const vec, int rows)
 	//printf("\n");
 }
 
-void PrintVectorINT(int* const vec, int rows)
+void PrintVector_int(int* const vec, int rows)
 {
 	int r;
 	for(r=0;r<rows;r++)
@@ -38,7 +38,7 @@ void PrintVectorINT(int* const vec, int rows)
 	//printf("\n");
 }
 
-void FillVector(double* vec, int rows, double val)
+void FillVector_double(double* vec, int rows, double val)
 {
 	int r;
 	for(r=0;r<rows;r++)

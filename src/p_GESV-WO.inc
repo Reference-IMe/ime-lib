@@ -75,7 +75,7 @@ test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double
 
 	// helper vectors
     PRECISION* h;
-    		h=AllocateVector(myrows);
+    		h=AllocateVector_double(myrows);
     PRECISION hh;
 
 	/*
@@ -526,7 +526,7 @@ test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double
 
 	// cleanup
 	DeallocateMatrix2D_double(lastK,2,CONTIGUOUS);
-	DeallocateVector(h);
+	DeallocateVector_double(h);
 	DeallocateMatrix2D_double(Xlocal,myrows,CONTIGUOUS);
 	DeallocateMatrix2D_double(Klocal,myrows,CONTIGUOUS);
 

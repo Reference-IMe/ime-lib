@@ -84,7 +84,7 @@ test_output pDGESV_WO ( int nb, int n, double** A, int m, double** bb, double** 
 
 	// helper vectors
     double* h;
-    		h=AllocateVector(myrows);
+    		h=AllocateVector_double(myrows);
     double hh;
 
 	/*
@@ -535,7 +535,7 @@ test_output pDGESV_WO ( int nb, int n, double** A, int m, double** bb, double** 
 
 	// cleanup
 	DeallocateMatrix2D_double(lastK,2,CONTIGUOUS);
-	DeallocateVector(h);
+	DeallocateVector_double(h);
 	DeallocateMatrix2D_double(Xlocal,myrows,CONTIGUOUS);
 	DeallocateMatrix2D_double(Klocal,myrows,CONTIGUOUS);
 

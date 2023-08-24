@@ -136,7 +136,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 
 	// helper vectors
 	PRECISION* h;
-			h = AllocateVector ( myrows );
+			h = AllocateVector_double ( myrows );
 
 	/*
 	 *  matrix of weights
@@ -877,7 +877,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 	// cleanup
 	DeallocateMatrix2D_double ( w, spare_proc_rows, CONTIGUOUS );
 	DeallocateMatrix2D_double ( lastK, 2, CONTIGUOUS );
-	DeallocateVector   ( h );
+	DeallocateVector_double   ( h );
 	DeallocateMatrix2D_double ( Tlocal, myrows, CONTIGUOUS );
 
 	result.total_end_time = time ( NULL );

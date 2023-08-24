@@ -72,7 +72,7 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 
 	// helper vectors
     PRECISION* h;
-    		h=AllocateVector(myrows);
+    		h=AllocateVector_double(myrows);
     PRECISION hh;
 
 	/*
@@ -410,7 +410,7 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 
 	// cleanup
 	DeallocateMatrix2D_double(lastK,2,CONTIGUOUS);
-	DeallocateVector(h);
+	DeallocateVector_double(h);
 	DeallocateMatrix2D_double(Tlocal,myrows,CONTIGUOUS);
 
 	result.total_end_time = time(NULL);
