@@ -125,11 +125,11 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 	 * local storage for a part of the input matrix ( continuous columns, not interleaved )
 	 */
 	PRECISION** Tlocal;
-			 Tlocal = AllocateMatrix2D ( myrows, mycols, CONTIGUOUS );
+			 Tlocal = AllocateMatrix2D_double ( myrows, mycols, CONTIGUOUS );
 
 	// last row and col of K
 	PRECISION** lastK;
-			 lastK = AllocateMatrix2D ( 2, mycols, CONTIGUOUS );
+			 lastK = AllocateMatrix2D_double ( 2, mycols, CONTIGUOUS );
 	// aliases
 	PRECISION* lastKr = &lastK[0][0];
 	PRECISION* lastKc = &lastK[1][0];
@@ -150,8 +150,8 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 	 *
 	 */
 	PRECISION** w;
-	w = AllocateMatrix2D ( spare_proc_rows, spare_proc_cols, CONTIGUOUS );
-	RandomMatrix2D ( w, spare_proc_rows, spare_proc_cols, 0 );
+	w = AllocateMatrix2D_double ( spare_proc_rows, spare_proc_cols, CONTIGUOUS );
+	RandomMatrix2D_double ( w, spare_proc_rows, spare_proc_cols, 0 );
 
 	/*
 	 * init inhibition table
@@ -185,9 +185,9 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 			if ( mpi_rank == i )
 			{
 				printf ( "\n%d@ ( %d, %d ) \n", n, mpi_rank_row_in_col, mpi_rank_col_in_row );
-				PrintMatrix2D ( Tlocal, myrows, mycols );
+				PrintMatrix2D_double ( Tlocal, myrows, mycols );
 				printf ( "\n" );
-				PrintMatrix2D ( lastK, 2, mycols );
+				PrintMatrix2D_double ( lastK, 2, mycols );
 
 				fflush ( stdout );
 			}
@@ -237,7 +237,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 								if ( unlikely ( mpi_rank == failing_rank_list[fr] ) )
 								{
 									printf ( "## IMe-ft: rank %d faulty at level %d\n", mpi_rank, l );
-									SetMatrix2D ( -99, Tlocal, myrows, mycols );
+									SetMatrix2D_double ( -99, Tlocal, myrows, mycols );
 									faulted=1;
 								}
 							}
@@ -250,10 +250,10 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 								if ( mpi_rank == failing_rank_list[fr] )
 								{
 									printf ( " * before fault:\n" );
-									PrintMatrix2D ( Tlocal, myrows, mycols );
+									PrintMatrix2D_double ( Tlocal, myrows, mycols );
 
 									printf ( " * after fault:\n" );
-									PrintMatrix2D ( Tlocal, myrows, mycols );
+									PrintMatrix2D_double ( Tlocal, myrows, mycols );
 								}
 							}
 							*/
@@ -261,7 +261,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 							if (recovery_enabled)
 							{
 								PRECISION** tmpTlocal;
-										 tmpTlocal = AllocateMatrix2D ( myrows, mycols, CONTIGUOUS );
+										 tmpTlocal = AllocateMatrix2D_double ( myrows, mycols, CONTIGUOUS );
 
 								/*
 								 *  update sums
@@ -351,12 +351,12 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 										printf ( "\n * rank %d recovered *\n", mpi_rank, l );
 
 										printf ( " * with:\n" );
-										PrintMatrix2D ( Tlocal, myrows, mycols );
+										PrintMatrix2D_double ( Tlocal, myrows, mycols );
 									}
 								}
 								*/
 
-								DeallocateMatrix2D ( tmpTlocal, myrows, CONTIGUOUS );
+								DeallocateMatrix2D_double ( tmpTlocal, myrows, CONTIGUOUS );
 							}
 						}
 					}// failure management
@@ -459,7 +459,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 								if ( unlikely ( mpi_rank == failing_rank_list[fr] ) )
 								{
 									printf ( "## IMe-ft: rank %d faulty at level %d\n", mpi_rank, l );
-									SetMatrix2D ( -99, Tlocal, myrows, mycols );
+									SetMatrix2D_double ( -99, Tlocal, myrows, mycols );
 									faulted=1;
 								}
 							}
@@ -472,10 +472,10 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 								if ( mpi_rank == failing_rank_list[fr] )
 								{
 									printf ( " * before fault:\n" );
-									PrintMatrix2D ( Tlocal, myrows, mycols );
+									PrintMatrix2D_double ( Tlocal, myrows, mycols );
 
 									printf ( " * after fault:\n" );
-									PrintMatrix2D ( Tlocal, myrows, mycols );
+									PrintMatrix2D_double ( Tlocal, myrows, mycols );
 								}
 							}
 							*/
@@ -483,7 +483,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 							if (recovery_enabled)
 							{
 								PRECISION** tmpTlocal;
-										 tmpTlocal = AllocateMatrix2D ( myrows, mycols, CONTIGUOUS );
+										 tmpTlocal = AllocateMatrix2D_double ( myrows, mycols, CONTIGUOUS );
 
 								/*
 								 *  update sums
@@ -572,12 +572,12 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 										printf ( "\n * rank %d recovered *\n", mpi_rank, l );
 
 										printf ( " * with:\n" );
-										PrintMatrix2D ( Tlocal, myrows, mycols );
+										PrintMatrix2D_double ( Tlocal, myrows, mycols );
 									}
 								}
 								*/
 
-								DeallocateMatrix2D ( tmpTlocal, myrows, CONTIGUOUS );
+								DeallocateMatrix2D_double ( tmpTlocal, myrows, CONTIGUOUS );
 							}
 						}
 					}// failure management
@@ -662,10 +662,10 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 						if (recovery_enabled)
 						{
 							PRECISION** tmpTlocal;
-									 tmpTlocal = AllocateMatrix2D ( myrows, mycols, CONTIGUOUS );
+									 tmpTlocal = AllocateMatrix2D_double ( myrows, mycols, CONTIGUOUS );
 
 							PRECISION** wfaulty;
-									 wfaulty = AllocateMatrix2D ( spare_proc_cols, spare_proc_cols, CONTIGUOUS );
+									 wfaulty = AllocateMatrix2D_double ( spare_proc_cols, spare_proc_cols, CONTIGUOUS );
 
 							// weights matrix of the faulty ones
 							// TODO: generalize column extraction for non consecutive ranks
@@ -691,11 +691,11 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 							if ( mpi_rank_col_in_row == calc_proc_cols )
 							{
 								printf ( "\nweights:\n" );
-								PrintMatrix2D ( w, spare_proc_rows, spare_proc_cols );
+								PrintMatrix2D_double ( w, spare_proc_rows, spare_proc_cols );
 								printf ( "faulty weights:\n" );
-								PrintMatrix2D ( wfaulty, spare_proc_cols, spare_proc_cols );
+								PrintMatrix2D_double ( wfaulty, spare_proc_cols, spare_proc_cols );
 								printf ( "recovery weights:\n" );
-								PrintMatrix2D ( wfaulty, spare_proc_cols, spare_proc_cols );
+								PrintMatrix2D_double ( wfaulty, spare_proc_cols, spare_proc_cols );
 							}
 							*/
 
@@ -740,8 +740,8 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 
 							NULLFREE(work);
 							NULLFREE(ipiv);
-							DeallocateMatrix2D ( wfaulty, spare_proc_cols, CONTIGUOUS );
-							DeallocateMatrix2D ( tmpTlocal, myrows, CONTIGUOUS );
+							DeallocateMatrix2D_double ( wfaulty, spare_proc_cols, CONTIGUOUS );
+							DeallocateMatrix2D_double ( tmpTlocal, myrows, CONTIGUOUS );
 						}
 					}
 				}
@@ -860,7 +860,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 					if ( mpi_rank_col_in_row==i )
 					{
 						printf ( "\nl=0 @ ( %d, %d ) :\n", mpi_rank_row_in_col, mpi_rank_col_in_row );
-						PrintMatrix2D ( Tlocal, myrows, mycols );
+						PrintMatrix2D_double ( Tlocal, myrows, mycols );
 						printf ( "\n" );
 
 						fflush ( stdout );
@@ -875,10 +875,10 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 	MPI_Waitall ( 4, mpi_request, mpi_status );
 
 	// cleanup
-	DeallocateMatrix2D ( w, spare_proc_rows, CONTIGUOUS );
-	DeallocateMatrix2D ( lastK, 2, CONTIGUOUS );
+	DeallocateMatrix2D_double ( w, spare_proc_rows, CONTIGUOUS );
+	DeallocateMatrix2D_double ( lastK, 2, CONTIGUOUS );
 	DeallocateVector   ( h );
-	DeallocateMatrix2D ( Tlocal, myrows, CONTIGUOUS );
+	DeallocateMatrix2D_double ( Tlocal, myrows, CONTIGUOUS );
 
 	result.total_end_time = time ( NULL );
 

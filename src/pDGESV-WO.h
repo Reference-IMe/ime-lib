@@ -70,14 +70,14 @@ test_output pDGESV_WO ( int nb, int n, double** A, int m, double** bb, double** 
      * local storage for a part of the input matrix (continuous columns, not interleaved)
      */
     double** Klocal;
-			 Klocal=AllocateMatrix2D(myrows, mycols, CONTIGUOUS);
+			 Klocal=AllocateMatrix2D_double(myrows, mycols, CONTIGUOUS);
 
 	double** Xlocal;
-			 Xlocal=AllocateMatrix2D(myrows, mycols, CONTIGUOUS);
+			 Xlocal=AllocateMatrix2D_double(myrows, mycols, CONTIGUOUS);
 
 	// last rows and cols of K
 	double** lastK;
-			 lastK=AllocateMatrix2D(2*bf, mycols, CONTIGUOUS);	// last rows [0 - (bf-1)] and cols [ bf - (2bf -1)] of K
+			 lastK=AllocateMatrix2D_double(2*bf, mycols, CONTIGUOUS);	// last rows [0 - (bf-1)] and cols [ bf - (2bf -1)] of K
 	// aliases
 	double*  lastKr=&lastK[0][0];
 	double*  lastKc=&lastK[1][0];
@@ -163,11 +163,11 @@ test_output pDGESV_WO ( int nb, int n, double** A, int m, double** bb, double** 
 			if (mpi_rank==i)
 			{
 				printf("%d@(%d,%d)\n",n,mpi_rank_row_in_col,mpi_rank_col_in_row);
-				PrintMatrix2D(Xlocal, myrows, mycols);
+				PrintMatrix2D_double(Xlocal, myrows, mycols);
 				printf("\n");
-				PrintMatrix2D(Klocal, myrows, mycols);
+				PrintMatrix2D_double(Klocal, myrows, mycols);
 				printf("\n");
-				PrintMatrix2D(lastK, 2, mycols);
+				PrintMatrix2D_double(lastK, 2, mycols);
 
 				fflush(stdout);
 			}
@@ -534,10 +534,10 @@ test_output pDGESV_WO ( int nb, int n, double** A, int m, double** bb, double** 
 	MPI_Waitall(4, mpi_request, mpi_status);
 
 	// cleanup
-	DeallocateMatrix2D(lastK,2,CONTIGUOUS);
+	DeallocateMatrix2D_double(lastK,2,CONTIGUOUS);
 	DeallocateVector(h);
-	DeallocateMatrix2D(Xlocal,myrows,CONTIGUOUS);
-	DeallocateMatrix2D(Klocal,myrows,CONTIGUOUS);
+	DeallocateMatrix2D_double(Xlocal,myrows,CONTIGUOUS);
+	DeallocateMatrix2D_double(Klocal,myrows,CONTIGUOUS);
 
 	result.total_end_time = time(NULL);
 

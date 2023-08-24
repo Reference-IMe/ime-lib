@@ -36,7 +36,7 @@
 									{											\
 										if (fp != NULL) fclose(fp);				\
 									}											\
-									DeallocateMatrix1D(A_ref);					\
+									DeallocateMatrix1D_double(A_ref);					\
 									DeallocateVector(b_ref);					\
 									DeallocateVector(x_ref);					\
 								}												\

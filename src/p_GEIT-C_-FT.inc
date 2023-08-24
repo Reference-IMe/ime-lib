@@ -27,7 +27,7 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 			//diag=malloc(mycols*sizeof(PRECISION*));
 
 	PRECISION** tmpTlocal;
-			 tmpTlocal=AllocateMatrix2D(myrows, mycols, CONTIGUOUS);
+			 tmpTlocal=AllocateMatrix2D_double(myrows, mycols, CONTIGUOUS);
 
 	MPI_Comm comm_row_checksum;
 
@@ -228,7 +228,7 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
     if (rank==0)
     {
     	printf("weights:\n");
-    	PrintMatrix2D(w, cprocrows, sproccols );
+    	PrintMatrix2D_double(w, cprocrows, sproccols );
     }
     */
     for (l=0; l<sproccols; l++)
@@ -291,5 +291,5 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
     }
 
     // cleanup
-    DeallocateMatrix2D(tmpTlocal,myrows,CONTIGUOUS);
+    DeallocateMatrix2D_double(tmpTlocal,myrows,CONTIGUOUS);
 }

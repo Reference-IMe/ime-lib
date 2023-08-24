@@ -20,7 +20,11 @@
 
 //// 2D matrices
 
-double** AllocateMatrix2D(int rows, int cols, int allocation_type)
+#define FUNCTIONNAME(basename, suffix) basename##suffix
+
+//
+
+double** AllocateMatrix2D_double(int rows, int cols, int allocation_type)
 {
 	double** mat;
 	int r;
@@ -42,7 +46,7 @@ double** AllocateMatrix2D(int rows, int cols, int allocation_type)
 }
 
 //#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
-void DeallocateMatrix2D(double** mat, int rows, int allocation_type)
+void DeallocateMatrix2D_double(double** mat, int rows, int allocation_type)
 {
 	int r;
 
@@ -62,7 +66,7 @@ void DeallocateMatrix2D(double** mat, int rows, int allocation_type)
 	}
 }
 
-void PrintMatrix2D(double** const mat, int rows, int cols)
+void PrintMatrix2D_double(double** const mat, int rows, int cols)
 {
 	int r,c;
 
@@ -77,7 +81,7 @@ void PrintMatrix2D(double** const mat, int rows, int cols)
 	//printf("\n");
 }
 
-void FillMatrix2D(double** mat, int rows, int cols)
+void FillMatrix2D_double(double** mat, int rows, int cols)
 {
 	int r,c;
 
@@ -97,7 +101,7 @@ void FillMatrix2D(double** mat, int rows, int cols)
 	mat[0][cols-1]=-1.;
 }
 
-void SetMatrix2D(double setval, double** mat, int rows, int cols)
+void SetMatrix2D_double(double setval, double** mat, int rows, int cols)
 {
 	int r,c;
 
@@ -110,12 +114,12 @@ void SetMatrix2D(double setval, double** mat, int rows, int cols)
 	}
 }
 
-void OneMatrix2D(double** mat, int rows, int cols)
+void OneMatrix2D_double(double** mat, int rows, int cols)
 {
-	SetMatrix2D(1, mat, rows, cols);
+	SetMatrix2D_double(1, mat, rows, cols);
 }
 
-void ReferenceMatrix2D(double** mat, int rows, int cols)
+void ReferenceMatrix2D_double(double** mat, int rows, int cols)
 {
 	int r,c;
 
@@ -128,7 +132,7 @@ void ReferenceMatrix2D(double** mat, int rows, int cols)
 	}
 }
 
-void RandomMatrix2D(double** mat, int rows, int cols, int seed)
+void RandomMatrix2D_double(double** mat, int rows, int cols, int seed)
 {
 	// random generation in a given interval: https://stackoverflow.com/questions/13408990/how-to-generate-random-float-number-in-c
 
@@ -147,17 +151,17 @@ void RandomMatrix2D(double** mat, int rows, int cols, int seed)
 
 //// 1D matrices
 
-double* AllocateMatrix1D(int rows, int cols)
+double* AllocateMatrix1D_double(int rows, int cols)
 {
 	return(malloc(rows*cols*sizeof(double)));
 }
 
-void DeallocateMatrix1D(double* mat)
+void DeallocateMatrix1D_double(double* mat)
 {
 	NULLFREE(mat);
 }
 
-void PrintMatrix1D(double* const mat, int rows, int cols)
+void PrintMatrix1D_double(double* const mat, int rows, int cols)
 {
 	int r,c;
 
@@ -172,7 +176,7 @@ void PrintMatrix1D(double* const mat, int rows, int cols)
 	//printf("\n");
 }
 
-void FillMatrix1D(double* mat, int rows, int cols)
+void FillMatrix1D_double(double* mat, int rows, int cols)
 {
 	int r,c;
 
@@ -194,7 +198,7 @@ void FillMatrix1D(double* mat, int rows, int cols)
 	mat[0+cols-1]=-1.;
 }
 
-void FillMatrixT1D(double* mat, int rows, int cols) // Transposed
+void FillMatrixT1D_double(double* mat, int rows, int cols) // Transposed
 {
 	int r,c;
 
@@ -215,7 +219,7 @@ void FillMatrixT1D(double* mat, int rows, int cols) // Transposed
 }
 
 
-void SetMatrix1D(double setval, double* mat, int rows, int cols)
+void SetMatrix1D_double(double setval, double* mat, int rows, int cols)
 {
 	int r,c;
 
@@ -228,18 +232,18 @@ void SetMatrix1D(double setval, double* mat, int rows, int cols)
 	}
 }
 
-void OneMatrix1D(double* mat, int rows, int cols)
+void OneMatrix1D_double(double* mat, int rows, int cols)
 {
-	SetMatrix1D(1, mat, rows, cols);
+	SetMatrix1D_double(1, mat, rows, cols);
 }
 
-void DiagonalMatrix1D(double diagval, double offdiagval, double* mat, int rows, int cols)
+void DiagonalMatrix1D_double(double diagval, double offdiagval, double* mat, int rows, int cols)
 {
 	int i,imin;
 
 	imin = MIN(rows, cols);
 
-	SetMatrix1D(offdiagval, mat, rows, cols);
+	SetMatrix1D_double(offdiagval, mat, rows, cols);
 
 	for(i=0;i<imin;i++)
 	{
@@ -247,7 +251,7 @@ void DiagonalMatrix1D(double diagval, double offdiagval, double* mat, int rows, 
 	}
 }
 
-void ReferenceMatrix1D(double* mat, int rows, int cols)
+void ReferenceMatrix1D_double(double* mat, int rows, int cols)
 {
 	int r,c;
 
@@ -260,7 +264,7 @@ void ReferenceMatrix1D(double* mat, int rows, int cols)
 	}
 }
 
-void RandomMatrix1D(double* mat, int rows, int cols, int seed)
+void RandomMatrix1D_double(double* mat, int rows, int cols, int seed)
 {
 	// random generation in a given interval: https://stackoverflow.com/questions/13408990/how-to-generate-random-float-number-in-c
 
@@ -277,7 +281,7 @@ void RandomMatrix1D(double* mat, int rows, int cols, int seed)
 	}
 }
 
-void CopyMatrix1D (double* srcmat, double* destmat, int rows, int cols)
+void CopyMatrix1D_double (double* srcmat, double* destmat, int rows, int cols)
 {
   memcpy(destmat, srcmat, rows*cols*sizeof(double));
 }
