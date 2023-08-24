@@ -156,7 +156,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 	/*
 	 * init inhibition table
 	 */
-	pbDGEIT_CX_bf1_ft ( A, Tlocal, lastKr, lastKc, w, n, calc_procs,
+	pDGEIT_C_FT ( A, Tlocal, lastKr, lastKc, w, n, calc_procs,
 			spare_proc_cols,
 			comm_calc, mpi_rank,
 			comm_row, mpi_rank_col_in_row,
@@ -376,7 +376,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 					 * update solutions
 					 */
 					MPI_Waitall ( 2, mpi_request, mpi_status );	// wait for lastKr and bb
-					pbDGEUX_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+					pDGEUX_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 									l, l_owner, l_1_owner, l_row, l_col,
 									&myxxstart,
 									lastKr, xx, bb );
@@ -387,7 +387,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 					if ( mpi_rank_row_in_col == mpi_rank_col_in_row )
 					{
 						MPI_Waitall ( 3, mpi_req_row, mpi_st_row ); // wait for lastKr and lastKc
-						pbDGEUH_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+						pDGEUH_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 										l, l_owner, l_1_owner, l_row, l_col,
 										last_row,
 										lastKr, lastKc, h );
@@ -397,7 +397,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 					/*
 					 * update auxiliary causes
 					 */
-					pbDGEUB_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+					pDGEUB_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 									l, l_owner, l_1_owner, l_row, l_col,
 									l_1_col,
 									lastKr, bb );
@@ -407,7 +407,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 					 * update table
 					 */
 					MPI_Waitall ( 3, mpi_req_row, mpi_st_row ); // wait for lastKr, lastKc and h
-					pbDGEUT_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+					pDGEUT_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 									l, l_owner, l_1_owner, l_row, l_col,
 									last_row,
 									lastKr, lastKc, h, Tlocal );
@@ -599,7 +599,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 					if ( mpi_rank_row_in_col == mpi_rank_col_in_row )
 					{
 						MPI_Waitall ( 3, mpi_req_row, mpi_st_row ); // wait for lastKr and lastKc
-						pbDGEUH_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+						pDGEUH_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 										l, l_owner, l_1_owner, l_row, l_col,
 										last_row,
 										lastKr, lastKc, h );
@@ -610,7 +610,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 					 * update table
 					 */
 					MPI_Waitall ( 3, mpi_req_row, mpi_st_row ); // wait for lastKr, lastKc and h
-					pbDGEUT_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+					pDGEUT_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 									l, l_owner, l_1_owner, l_row, l_col,
 									last_row,
 									lastKr, lastKc, h, Tlocal );
@@ -766,7 +766,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 				 * update table
 				 */
 				MPI_Waitall ( 3, mpi_req_row, mpi_st_row ); // wait for lastKr, lastKc and h
-				pbDGEUT_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+				pDGEUT_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 								l, l_owner, l_1_owner, l_row, l_col,
 								last_row,
 								lastKr, lastKc, h, Tlocal );

@@ -12,7 +12,7 @@
 #ifndef __pbDGEIT_CX_BF1_H__
 #define __pbDGEIT_CX_BF1_H__
 
-void pbDGEIT_CX_bf1(double** A, double** Tlocal, double* lastKr, double* lastKc, int n, int cprocs,
+void pDGEIT_C (	double** A, double** Tlocal, double* lastKr, double* lastKc, int n, int cprocs,
 				MPI_Comm comm, int rank,
 				MPI_Comm comm_row, int rank_col_in_row,
 				MPI_Comm comm_col, int rank_row_in_col,
