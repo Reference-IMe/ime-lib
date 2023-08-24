@@ -6,11 +6,11 @@
 #include "helpers/vector.h"
 #include "testers/tester_structures.h"
 #include "DGEZR.h"
-#include "pbDGEIT_CX.ftx.h"
-#include "pbDGEUT_CO.h"
-#include "pbDGEUX_CO.h"
-#include "pbDGEUH_CO.h"
-#include "pbDGEUB_CO.h"
+#include "pbDGEIT-C_-FT.h"
+#include "pbDGEUB-CO.h"
+#include "pbDGEUH-CO.h"
+#include "pbDGEUT-CO.h"
+#include "pbDGEUX-CO.h"
 
 test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 									test_input input,
