@@ -1,4 +1,4 @@
-#include "DGEIT_WX.h"
+#include "DGEIT-W_.h"
 #include "helpers/matrix.h"
 #include "DGEZR.h"
 

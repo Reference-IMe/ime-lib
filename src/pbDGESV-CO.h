@@ -6,10 +6,10 @@
 #include "helpers/vector.h"
 #include "testers/tester_structures.h"
 #include "DGEZR.h"
-#include "pbDGEIT_CX.h"
+#include "pbDGEIT-C_.h"
 
 
-test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
 	/*
 	 * nb	NOT USED: blocking factor: number of adjacent column (block width)
@@ -69,11 +69,8 @@ test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double
     /*
      * local storage for a part of the input matrix (continuous columns, not interleaved)
      */
-    double** Klocal;
-			 Klocal=AllocateMatrix2D(myrows, mycols, CONTIGUOUS);
-
-	double** Xlocal;
-			 Xlocal=AllocateMatrix2D(myrows, mycols, CONTIGUOUS);
+    double** Tlocal;
+			 Tlocal=AllocateMatrix2D(myrows, mycols, CONTIGUOUS);
 
 	// last rows and cols of K
 	double** lastK;
@@ -91,65 +88,13 @@ test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double
 	 *  init inhibition table
 	 */
 	DGEZR(xx, n, m);											// init (zero) solution vectors
-	pbDGEIT_CX_bf1(A, Klocal, lastKr, lastKc, n, cprocs,		// uses compact table for initialization
+	pbDGEIT_CX_bf1(A, Tlocal, lastKr, lastKc, n, cprocs,
 			comm, mpi_rank, comm_row,
 			mpi_rank_col_in_row, comm_col,
 			mpi_rank_row_in_col,
 			mpi_status,
 			mpi_request
-			);
-
-	MPI_Waitall(4, mpi_request, mpi_status);					// wait for compact table ready
-
-	if (mpi_rank_row_in_col==mpi_rank_col_in_row) 				// and then extract diagonal elements for the X table
-	{
-		for (i=0; i<myrows; i++)
-		{
-			for (j=0; j<i; j++)
-			{
-				Xlocal[i][j]=0;
-			}
-
-			Xlocal[i][i]=Klocal[i][i];
-
-			for (j=i+1; j<mycols; j++)
-			{
-				Xlocal[i][j]=0;
-			}
-		}
-	}
-	/* don't need to zero off-diagonal elements, because different per-case formulae assume it already
-	 * could be a strategy to be tested: zero all, use una formula and vectorize
-	 */
-	/*
-	{
-		for (i=0; i<myrows; i++)
-		{
-			for (j=0; j<i; j++)
-			{
-				Xlocal[i][j]=0;
-			}
-
-			Xlocal[i][i]=Klocal[i][i];
-
-			for (j=i+1; j<mycols; j++)
-			{
-				Xlocal[i][j]=0;
-			}
-		}
-	}
-	else
-	{
-		for (i=0; i<myrows; i++)
-		{
-			for (j=0; j<mycols; j++)
-			{
-				Xlocal[i][j]=0;
-			}
-		}
-	}
-	*/
-
+			);											// init inhibition table
 
 	/*
 	 * check initialization
@@ -163,9 +108,7 @@ test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double
 			if (mpi_rank==i)
 			{
 				printf("%d@(%d,%d)\n",n,mpi_rank_row_in_col,mpi_rank_col_in_row);
-				PrintMatrix2D(Xlocal, myrows, mycols);
-				printf("\n");
-				PrintMatrix2D(Klocal, myrows, mycols);
+				PrintMatrix2D(Tlocal, myrows, mycols);
 				printf("\n");
 				PrintMatrix2D(lastK, 2, mycols);
 
@@ -175,7 +118,7 @@ test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double
 		}
 		*/
 
-	if (mpi_rank_row_in_col==0) 											// first row of procs
+	if (mpi_rank_row_in_col==0) 								// first row of procs
 	{
 		MPI_Ibcast (&bb[0][0], n*m, MPI_DOUBLE, 0, comm_row, mpi_req_bb);	// send all r.h.s
 	}
@@ -273,7 +216,7 @@ test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double
 				}
 				else if ( mpi_rank_col_in_row == l_1_owner ) 		// proc holding col l-1
 				{
-					for (i=0; i<=l_1_col; i++)					// cols till l-1
+					for (i=0; i<=l_1_col; i++)				// cols till l-1
 					{
 						gi=PVGLOBAL(i, mycols, mpi_rank_col_in_row);
 						for (rhs=0;rhs<m;rhs++)
@@ -282,7 +225,7 @@ test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double
 						}
 					}
 				}
-				//else	{do nothing}								// procs after col l-1
+				//else	{do nothing}							// procs after col l-1
 
 				// send l-1 values to other procs for next iteration
 				MPI_Ibcast (&bb[l-1][0], m, MPI_DOUBLE, l_1_owner, comm_row, mpi_req_bb);
@@ -297,9 +240,9 @@ test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double
 
 			MPI_Waitall(3, mpi_req_row, mpi_st_row); // wait for lastKr, lastKc and h
 
-			if (mpi_rank_col_in_row == l_owner)						// proc holding the l-th col AND ..
+			if (mpi_rank_col_in_row == l_owner)
 			{
-				if (mpi_rank_col_in_row == mpi_rank_row_in_col)		// proc holding the l-th col AND ON the diagonal
+				if (mpi_rank_col_in_row == mpi_rank_row_in_col)		// proc holding l-th col AND ON the diagonal
 				{
 					for (i=0; i < last_row; i++)
 					{
@@ -309,31 +252,31 @@ test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double
 						#pragma GCC ivdep
 						for (j=0; j < i; j++)
 						{
-							Klocal[i][j] = Klocal[i][j]*h[i] - lastKr[j]*hh;
+							Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
 						}
 
 						// on diagonal
-						Xlocal[i][j] = Xlocal[i][j]*h[i];
+						Tlocal[i][j] = Tlocal[i][j]*h[i];
 
 						// after diagonal but before l-th
 						#pragma GCC ivdep
 						for (j=i+1; j < l_col; j++)
 						{
-							Klocal[i][j] = Klocal[i][j]*h[i] - lastKr[j]*hh;
+							Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
 						}
 
 						// on l-th
-						Xlocal[i][j] = - lastKr[j]*hh;
+						Tlocal[i][j] = - lastKr[j]*hh;
 
 						// after l-th
 						#pragma GCC ivdep
 						for (j=l_col+1; j < mycols; j++)
 						{
-							Xlocal[i][j] = Xlocal[i][j]*h[i] - lastKr[j]*hh;
+							Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
 						}
 					}
 				}
-				else												// proc holding the l-th col AND OFF the diagonal
+				else												// procs holding l-th col AND OFF the diagonal
 				{
 					for (i=0; i < last_row; i++)
 					{
@@ -343,90 +286,56 @@ test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double
 						#pragma GCC ivdep
 						for (j=0; j < l_col; j++)
 						{
-							Klocal[i][j] = Klocal[i][j]*h[i] - lastKr[j]*hh;
+							Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
 						}
 
 						// on l-th
-						Xlocal[i][j] = - lastKr[j]*hh;
+						Tlocal[i][j] = - lastKr[j]*hh;
 
 						// after l-th
 						#pragma GCC ivdep
 						for (j=l_col+1; j < mycols; j++)
 						{
-							Xlocal[i][j] = Xlocal[i][j]*h[i] - lastKr[j]*hh;
+							Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
 						}
 					}
 				}
 			}
-			else												// proc NOT holding the l-th col AND ..
+			else if (mpi_rank_col_in_row == mpi_rank_row_in_col)	// procs ON the diagonal but NOT holding the l-th col
 			{
-				if (mpi_rank_col_in_row == mpi_rank_row_in_col)	// proc NOT holding the l-th col AND ON the diagonal
+				for (i=0; i < last_row; i++)
 				{
-					for (i=0; i < last_row; i++)
+					hh  = lastKc[i]*h[i];
+
+					// before diagonal
+					#pragma GCC ivdep
+					for (j=0; j < i; j++)
 					{
-						hh  = lastKc[i]*h[i];
+						Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
+					}
 
-						// before diagonal
-						#pragma GCC ivdep
-						for (j=0; j < i; j++)
-						{
-							Klocal[i][j] = Klocal[i][j]*h[i] - lastKr[j]*hh;
-						}
+					// on diagonal
+					Tlocal[i][j] = Tlocal[i][j]*h[i];
 
-						// on diagonal
-						Xlocal[i][j] = Xlocal[i][j]*h[i];
-
-						// after diagonal
-						#pragma GCC ivdep
-						for (j=i+1; j < mycols; j++)
-						{
-							Klocal[i][j] = Klocal[i][j]*h[i] - lastKr[j]*hh;
-						}
+					// after diagonal
+					#pragma GCC ivdep
+					for (j=i+1; j < mycols; j++)
+					{
+						Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
 					}
 				}
-				else if (mpi_rank_col_in_row < mpi_rank_row_in_col)	// proc NOT holding the l-th col AND OFF AND BEFORE the diagonal
+			}
+			else													// procs OFF the diagonal but NOT holding the l-th col
+			{
+				for (i=0; i < last_row; i++)
 				{
+					hh  = lastKc[i]*h[i];
 
-					for (i=0; i < last_row; i++)
+					#pragma GCC ivdep
+					for (j=0; j < mycols; j++)
 					{
-						hh  = lastKc[i]*h[i];
-
-						#pragma GCC ivdep
-						for (j=0; j < mycols; j++)
-						{
-							Klocal[i][j] = Klocal[i][j]*h[i] - lastKr[j]*hh;
-						}
+						Tlocal[i][j] = Tlocal[i][j]*h[i] - lastKr[j]*hh;
 					}
-				}
-				else												// proc NOT holding the l-th col AND OFF AND AFTER the diagonal
-				{
-					if (mpi_rank_col_in_row < l_owner)
-					{
-						for (i=0; i < last_row; i++)
-						{
-							hh  = lastKc[i]*h[i];
-
-							#pragma GCC ivdep
-							for (j=0; j < mycols; j++)
-							{
-								Klocal[i][j] = Klocal[i][j]*h[i] - lastKr[j]*hh;
-							}
-						}
-					}
-					else
-					{
-						for (i=0; i < last_row; i++)
-						{
-							hh  = lastKc[i]*h[i];
-
-							#pragma GCC ivdep
-							for (j=0; j < mycols; j++)
-							{
-								Xlocal[i][j] = Xlocal[i][j]*h[i] - lastKr[j]*hh;
-							}
-						}
-					}
-
 				}
 			}
 
@@ -435,38 +344,13 @@ test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double
 		 * sync future last (l-1) row and col
 		 */
 			// sync last row
-			if (mpi_rank_row_in_col == l_1_owner)				// procs row that holds the (l-1)-th row AND ..
+			if (mpi_rank_row_in_col == l_1_owner)			// procs row that holds the (l-1)-th row
 			{
-				if (mpi_rank_col_in_row < mpi_rank_row_in_col)	// procs row that holds the (l-1)-th row AND BEFORE the diagonal				{
+				#pragma GCC ivdep
+				for (i=0; i < mycols; i++)			// copy (l-1)-th row in buffer
 				{
-					#pragma GCC ivdep
-					for (i=0; i < mycols; i++)			// copy (l-1)-th row in buffer
-					{
-						lastKr[i]=Klocal[l_1_row][i];
-					}
+					lastKr[i]=Tlocal[l_1_row][i];
 				}
-				else if (mpi_rank_col_in_row > mpi_rank_row_in_col) // procs row that holds the (l-1)-th row AND AFTER the diagonal
-				{
-					#pragma GCC ivdep
-					for (i=0; i < mycols; i++)			// copy (l-1)-th row in buffer
-					{
-						lastKr[i]=Xlocal[l_1_row][i];
-					}
-				}
-				else												// procs row that holds the (l-1)-th row AND ON the diagonal
-				{
-					#pragma GCC ivdep
-					for (i=0; i < l_1_col; i++)			// copy (l-1)-th row in buffer
-					{
-						lastKr[i]=Klocal[l_1_row][i];
-					}
-					#pragma GCC ivdep
-					for (i=l_1_col; i < mycols; i++)			// copy (l-1)-th row in buffer
-					{
-						lastKr[i]=Xlocal[l_1_row][i];
-					}
-				}
-
 			}
 			MPI_Ibcast ( &lastKr[0], mycols, MPI_DOUBLE, l_1_owner, comm_col, mpi_req_row);
 
@@ -478,7 +362,7 @@ test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double
 					#pragma GCC ivdep
 					for (i=0; i < last_row; i++)	// copy (l-1)-th col in buffer
 					{
-						lastKc[i]=Klocal[i][l_1_col];
+						lastKc[i]=Tlocal[i][l_1_col];
 					}
 				}
 				MPI_Ibcast ( &lastKc[0], last_row, MPI_DOUBLE, l_1_owner, comm_row, mpi_req_col);
@@ -501,7 +385,7 @@ test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double
 				gi=PVGLOBAL(i, mycols, mpi_rank_col_in_row);
 				for(rhs=0;rhs<m;rhs++)
 				{
-					xx[gi][rhs]=xx[gi][rhs]+Xlocal[0][i]*bb[0][rhs];
+					xx[gi][rhs]=xx[gi][rhs]+Tlocal[0][i]*bb[0][rhs];
 				}
 			}
 
@@ -536,8 +420,7 @@ test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double
 	// cleanup
 	DeallocateMatrix2D(lastK,2,CONTIGUOUS);
 	DeallocateVector(h);
-	DeallocateMatrix2D(Xlocal,myrows,CONTIGUOUS);
-	DeallocateMatrix2D(Klocal,myrows,CONTIGUOUS);
+	DeallocateMatrix2D(Tlocal,myrows,CONTIGUOUS);
 
 	result.total_end_time = time(NULL);
 

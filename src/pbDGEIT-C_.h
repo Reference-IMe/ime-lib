@@ -1,6 +1,6 @@
 #include <mpi.h>
 #include "helpers/macros.h"
-#include "pbDGEIT_CX.macros.h"
+#include "pbDGEIT-C_.macros.h"
 
 /*
  * 	distributed
