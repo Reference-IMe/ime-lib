@@ -82,7 +82,7 @@ test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double
 	 *  init inhibition table
 	 */
 	DGEZR(xx, n, m);											// init (zero) solution vectors
-	pbDGEIT_CX_bf1(A, Klocal, lastKr, lastKc, n, cprocs,		// uses compact table for initialization
+	pDGEIT_C(A, Klocal, lastKr, lastKc, n, cprocs,		// uses compact table for initialization
 			comm, mpi_rank, comm_row,
 			mpi_rank_col_in_row, comm_col,
 			mpi_rank_row_in_col,

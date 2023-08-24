@@ -9,7 +9,7 @@
 #include "pDGEIT-C_.h"
 
 
-test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+test_output pDGESV_CO ( int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 {
 	/*
 	 * nb	NOT USED: blocking factor: number of adjacent column (block width)
