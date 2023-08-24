@@ -6,7 +6,7 @@
 #include "helpers/vector.h"
 #include "testers/tester_structures.h"
 #include "DGEZR.h"
-#include "pbDGEIT_CX.bf1.h"
+#include "pbDGEIT_CX.h"
 
 
 test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
