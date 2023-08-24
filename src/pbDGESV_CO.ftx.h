@@ -6,13 +6,19 @@
 #include "helpers/vector.h"
 #include "testers/tester_structures.h"
 #include "DGEZR.h"
-#include "pbDGEIT_CX.bf1.ftx.h"
-#include "pbDGEUT_CO.dev.h"
+#include "pbDGEIT_CX.ftx.h"
+#include "pbDGEUT_CO.h"
 #include "pbDGEUX_CO.h"
-#include "pbDGEUH_CO.dev.h"
+#include "pbDGEUH_CO.h"
 #include "pbDGEUB_CO.h"
 
-test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input input, parallel_env env, int num_of_failing_ranks, int* failing_rank_list, int failing_level, int recovery_enabled )
+test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
+									test_input input,
+									parallel_env env,
+									int num_of_failing_ranks,
+									int* failing_rank_list,
+									int failing_level,
+									int recovery_enabled )
 {
 	/*
 	 * nb	NOT USED: blocking factor: number of adjacent column (block width)
@@ -242,7 +248,7 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 							{
 								if ( unlikely ( mpi_rank == failing_rank_list[fr] ) )
 								{
-									printf ( "## IMe: rank %d faulty at level %d\n", mpi_rank, l );
+									printf ( "## IMe-ft: rank %d faulty at level %d\n", mpi_rank, l );
 									SetMatrix2D ( -99, Tlocal, myrows, mycols );
 									faulted=1;
 								}
@@ -336,7 +342,7 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 												Tlocal[j][j] = Tlocal[j][j] - 1;
 											}
 										}
-										printf ( "## IMe: rank %d recovered at level %d\n", mpi_rank, l );
+										printf ( "## IMe-ft: rank %d recovered at level %d\n", mpi_rank, l );
 									}
 									else
 									{
@@ -393,7 +399,7 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 					if ( mpi_rank_row_in_col == mpi_rank_col_in_row )
 					{
 						MPI_Waitall ( 3, mpi_req_row, mpi_st_row ); // wait for lastKr and lastKc
-						pbDGEUH_CO_dev ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+						pbDGEUH_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 										l, l_owner, l_1_owner, l_row, l_col,
 										last_row,
 										lastKr, lastKc, h );
@@ -413,7 +419,7 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 					 * update table
 					 */
 					MPI_Waitall ( 3, mpi_req_row, mpi_st_row ); // wait for lastKr, lastKc and h
-					pbDGEUT_CO_dev ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+					pbDGEUT_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 									l, l_owner, l_1_owner, l_row, l_col,
 									last_row,
 									lastKr, lastKc, h, Tlocal );
@@ -464,7 +470,7 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 							{
 								if ( unlikely ( mpi_rank == failing_rank_list[fr] ) )
 								{
-									printf ( "## IMe: rank %d faulty at level %d\n", mpi_rank, l );
+									printf ( "## IMe-ft: rank %d faulty at level %d\n", mpi_rank, l );
 									SetMatrix2D ( -99, Tlocal, myrows, mycols );
 									faulted=1;
 								}
@@ -557,7 +563,7 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 												Tlocal[j][j] = Tlocal[j][j] - 1;
 											}
 										}
-										printf ( "## IMe: rank %d recovered at level %d\n", mpi_rank, l );
+										printf ( "## IMe-ft: rank %d recovered at level %d\n", mpi_rank, l );
 									}
 									else
 									{
@@ -605,7 +611,7 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 					if ( mpi_rank_row_in_col == mpi_rank_col_in_row )
 					{
 						MPI_Waitall ( 3, mpi_req_row, mpi_st_row ); // wait for lastKr and lastKc
-						pbDGEUH_CO_dev ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+						pbDGEUH_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 										l, l_owner, l_1_owner, l_row, l_col,
 										last_row,
 										lastKr, lastKc, h );
@@ -616,7 +622,7 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 					 * update table
 					 */
 					MPI_Waitall ( 3, mpi_req_row, mpi_st_row ); // wait for lastKr, lastKc and h
-					pbDGEUT_CO_dev ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+					pbDGEUT_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 									l, l_owner, l_1_owner, l_row, l_col,
 									last_row,
 									lastKr, lastKc, h, Tlocal );
@@ -772,7 +778,7 @@ test_output pbDGESV_CO_dev ( double** A, double** bb, double** xx, test_input in
 				 * update table
 				 */
 				MPI_Waitall ( 3, mpi_req_row, mpi_st_row ); // wait for lastKr, lastKc and h
-				pbDGEUT_CO_dev ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+				pbDGEUT_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 								l, l_owner, l_1_owner, l_row, l_col,
 								last_row,
 								lastKr, lastKc, h, Tlocal );
