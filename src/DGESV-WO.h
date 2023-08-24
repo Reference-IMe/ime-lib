@@ -20,7 +20,7 @@ void DGESV_WO(int n, double** A, int m, double** bb, double** xx)
     //double denAii;
     double** T;
 
-    T=AllocateMatrix2D(n,d,CONTIGUOUS);	// allocate table
+    T=AllocateMatrix2D_double(n,d,CONTIGUOUS);	// allocate table
 
     DGEIT_W(A, T, n);		// init inhibition table
     DGEZR(xx, n, m);		// init solution vectors
@@ -50,5 +50,5 @@ void DGESV_WO(int n, double** A, int m, double** bb, double** xx)
 			}
 		}
 	}
-	DeallocateMatrix2D(T,n,CONTIGUOUS);
+	DeallocateMatrix2D_double(T,n,CONTIGUOUS);
 }
