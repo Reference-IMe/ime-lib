@@ -12,10 +12,14 @@
 #define likely(x)	 __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
+#define CONCAT(a, b) a##b
+#define FUNCNAME(a, b) CONCAT(a, b)
+
 #define MAX(a, b) (((a) > (b)) ? (a) : (b)) 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b)) 
 
 #define NULLFREE(x) if (x!=NULL) {free(x); x = NULL;}
+
 /*
  * calc process run time from start/end time
  * get maximum run time as process team run time
@@ -30,15 +34,29 @@
 														MPI_Barrier(MPI_COMM_WORLD);\
 														return team_info;
 
+/*
+ * silence fread warning: https://stackoverflow.com/questions/7271939/warning-ignoring-return-value-of-scanf-declared-with-attribute-warn-unused-r
+ */
+#define FREAD(ptr, size, n, stream) if(fread(ptr, size, n, stream)){}
+
 #define MAIN_CLEANUP(mpi_rank)	if (mpi_rank==0)								\
 								{												\
 									if (output_to_file || input_from_file)		\
 									{											\
 										if (fp != NULL) fclose(fp);				\
 									}											\
-									DeallocateMatrix1D_double(A_ref);			\
-									DeallocateVector_double(b_ref);				\
-									DeallocateVector_double(x_ref);				\
+									if (type==real_double)						\
+									{											\
+										DeallocateMatrix1D_double(A_ref_d);		\
+										DeallocateVector_double(b_ref_d);		\
+										DeallocateVector_double(x_ref_d);		\
+									}											\
+									if (type==real_single)						\
+									{											\
+										DeallocateMatrix1D_float(A_ref_s);		\
+										DeallocateVector_float(b_ref_s);		\
+										DeallocateVector_float(x_ref_s);		\
+									}											\
 								}												\
 								sdsfree(test_output_file_name);
 

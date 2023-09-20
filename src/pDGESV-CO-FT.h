@@ -2,10 +2,10 @@
 #include <omp.h>
 #include <time.h>
 #include "helpers/macros.h"
-#include "helpers/matrix.h"
 #include "helpers/vector.h"
 #include "testers/tester_structures.h"
 #include "DGEZR.h"
+#include "helpers/matrix_basic.h"
 #include "pDGEIT-C_-FT.h"
 #include "pDGEUB-CO.h"
 #include "pDGEUH-CO.h"
