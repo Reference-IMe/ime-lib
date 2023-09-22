@@ -2,11 +2,13 @@
 #if TYPE == REAL_DOUBLE
 	#define PRECISION double
 	#define MPI_PRECISION MPI_DOUBLE
+	#define TYPE_SHORT D
 #endif
 
 #if TYPE == REAL_SINGLE
 	#define PRECISION float
 	#define MPI_PRECISION MPI_FLOAT
+	#define TYPE_SHORT S
 #endif
 
 // #pragma message "building " __FILE__ " for type '" TOSTR( PRECISION ) "'"
@@ -91,26 +93,16 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 	/*
 	 *  init inhibition table
 	 */
-#if TYPE == REAL_DOUBLE
-	DGEZR(xx, n, m);											// init (zero) solution vectors
-	pDGEIT_C(A, Tlocal, lastKr, lastKc, n, cprocs,
+
+    FUNCNAME(TYPE_SHORT, GEZR)(xx, n, m);											// init (zero) solution vectors
+    FUNCNAME(FUNCNAME(p, TYPE_SHORT), GEIT_C)(A, Tlocal, lastKr, lastKc, n, cprocs,
 			comm, mpi_rank, comm_row,
 			mpi_rank_col_in_row, comm_col,
 			mpi_rank_row_in_col,
 			mpi_status,
 			mpi_request
 			);											// init inhibition table
-#endif
-#if TYPE == REAL_SINGLE
-	SGEZR(xx, n, m);											// init (zero) solution vectors
-	pSGEIT_C(A, Tlocal, lastKr, lastKc, n, cprocs,
-			comm, mpi_rank, comm_row,
-			mpi_rank_col_in_row, comm_col,
-			mpi_rank_row_in_col,
-			mpi_status,
-			mpi_request
-			);											// init inhibition table
-#endif
+
 	/*
 	 * check initialization
 	 */
@@ -449,3 +441,4 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 
 #undef PRECISION
 #undef MPI_PRECISION
+#undef TYPE_SHORT
