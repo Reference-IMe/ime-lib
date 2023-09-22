@@ -8,7 +8,8 @@ __attribute__((always_inline)) inline void pDGEUT_CO (	int mpi_rank_row_in_col, 
 														int last_row,
 														double* lastKr, double* lastKc, double* h, double** Tlocal)
 {
-	#define PRECISION double
+	#define TYPE REAL_DOUBLE
 	#include "p_GEUT-CO.inc"
+	#undef TYPE
 }
 #endif

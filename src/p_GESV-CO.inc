@@ -1,3 +1,16 @@
+
+#if TYPE == REAL_DOUBLE
+	#define PRECISION double
+	#define MPI_PRECISION MPI_DOUBLE
+#endif
+
+#if TYPE == REAL_SINGLE
+	#define PRECISION float
+	#define MPI_PRECISION MPI_FLOAT
+#endif
+
+// #pragma message "building " __FILE__ " for type '" TOSTR( PRECISION ) "'"
+
 /*
 test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 */
@@ -61,23 +74,24 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
      * local storage for a part of the input matrix (continuous columns, not interleaved)
      */
     PRECISION** Tlocal;
-			 Tlocal=AllocateMatrix2D_double(myrows, mycols, CONTIGUOUS);
+			 Tlocal=FUNCNAME(AllocateMatrix2D_, PRECISION)(myrows, mycols, CONTIGUOUS);
 
 	// last rows and cols of K
 	PRECISION** lastK;
-			 lastK=AllocateMatrix2D_double(2*bf, mycols, CONTIGUOUS);	// last rows [0 - (bf-1)] and cols [ bf - (2bf -1)] of K
+			 lastK=FUNCNAME(AllocateMatrix2D_, PRECISION)(2*bf, mycols, CONTIGUOUS);	// last rows [0 - (bf-1)] and cols [ bf - (2bf -1)] of K
 	// aliases
 	PRECISION*  lastKr=&lastK[0][0];
 	PRECISION*  lastKc=&lastK[1][0];
 
 	// helper vectors
     PRECISION* h;
-    		h=AllocateVector_double(myrows);
+    		h=FUNCNAME(AllocateVector_, PRECISION)(myrows);
     PRECISION hh;
 
 	/*
 	 *  init inhibition table
 	 */
+#if TYPE == REAL_DOUBLE
 	DGEZR(xx, n, m);											// init (zero) solution vectors
 	pDGEIT_C(A, Tlocal, lastKr, lastKc, n, cprocs,
 			comm, mpi_rank, comm_row,
@@ -86,7 +100,17 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 			mpi_status,
 			mpi_request
 			);											// init inhibition table
-
+#endif
+#if TYPE == REAL_SINGLE
+	SGEZR(xx, n, m);											// init (zero) solution vectors
+	pSGEIT_C(A, Tlocal, lastKr, lastKc, n, cprocs,
+			comm, mpi_rank, comm_row,
+			mpi_rank_col_in_row, comm_col,
+			mpi_rank_row_in_col,
+			mpi_status,
+			mpi_request
+			);											// init inhibition table
+#endif
 	/*
 	 * check initialization
 	 */
@@ -409,11 +433,19 @@ test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double
 	MPI_Waitall(4, mpi_request, mpi_status);
 
 	// cleanup
+	/*
 	DeallocateMatrix2D_double(lastK,2,CONTIGUOUS);
 	DeallocateVector_double(h);
 	DeallocateMatrix2D_double(Tlocal,myrows,CONTIGUOUS);
+	*/
+	FUNCNAME(DeallocateMatrix2D_, PRECISION)(lastK,2,CONTIGUOUS);
+	FUNCNAME(DeallocateVector_, PRECISION)(h);
+	FUNCNAME(DeallocateMatrix2D_, PRECISION)(Tlocal,myrows,CONTIGUOUS);
 
 	result.total_end_time = time(NULL);
 
 	return result;
 }
+
+#undef PRECISION
+#undef MPI_PRECISION

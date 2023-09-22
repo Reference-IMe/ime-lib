@@ -21,9 +21,9 @@ void pDGEIT_C_FT (	double** A, double** Tlocal, double* lastKr, double* lastKc, 
 					MPI_Status* mpi_status,
 					MPI_Request* mpi_request)
 {
-	#define PRECISION double
-	#define MPI_PRECISION MPI_DOUBLE
+	#define TYPE REAL_DOUBLE
 	#include "p_GEIT-C_-FT.inc"
-}
+	#undef TYPE
+	}
 
 #endif

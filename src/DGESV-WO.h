@@ -1,5 +1,5 @@
+#include "_GEZR.h"
 #include "DGEIT-W_.h"
-#include "DGEZR.h"
 #include "helpers/matrix_basic.h"
 
 /*

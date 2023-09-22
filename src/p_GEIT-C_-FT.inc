@@ -1,3 +1,15 @@
+
+#if TYPE == REAL_DOUBLE
+	#define PRECISION double
+	#define MPI_PRECISION MPI_DOUBLE
+#endif
+
+#if TYPE == REAL_SINGLE
+	#define PRECISION float
+	#define MPI_PRECISION MPI_FLOAT
+#endif
+
+// #pragma message "building " __FILE__ " for type '" TOSTR( PRECISION ) "'"
 /*
  * 	distributed
  *	init (IT) inhibition table T
@@ -293,3 +305,6 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
     // cleanup
     DeallocateMatrix2D_double(tmpTlocal,myrows,CONTIGUOUS);
 }
+
+#undef PRECISION
+#undef MPI_PRECISION
