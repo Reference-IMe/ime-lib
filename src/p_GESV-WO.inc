@@ -1,3 +1,14 @@
+
+#if TYPE == REAL_DOUBLE
+	#define PRECISION double
+	#define MPI_PRECISION MPI_DOUBLE
+#endif
+
+#if TYPE == REAL_SINGLE
+	#define PRECISION float
+	#define MPI_PRECISION MPI_FLOAT
+#endif
+
 /*
 test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
 */
@@ -61,21 +72,21 @@ test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double
      * local storage for a part of the input matrix (continuous columns, not interleaved)
      */
     PRECISION** Klocal;
-			 Klocal=AllocateMatrix2D_double(myrows, mycols, CONTIGUOUS);
+			 Klocal=FUNCNAME(AllocateMatrix2D_, PRECISION)(myrows, mycols, CONTIGUOUS);
 
 	PRECISION** Xlocal;
-			 Xlocal=AllocateMatrix2D_double(myrows, mycols, CONTIGUOUS);
+			 Xlocal=FUNCNAME(AllocateMatrix2D_, PRECISION)(myrows, mycols, CONTIGUOUS);
 
 	// last rows and cols of K
 	PRECISION** lastK;
-			 lastK=AllocateMatrix2D_double(2*bf, mycols, CONTIGUOUS);	// last rows [0 - (bf-1)] and cols [ bf - (2bf -1)] of K
+			 lastK=FUNCNAME(AllocateMatrix2D_, PRECISION)(2*bf, mycols, CONTIGUOUS);	// last rows [0 - (bf-1)] and cols [ bf - (2bf -1)] of K
 	// aliases
 	PRECISION*  lastKr=&lastK[0][0];
 	PRECISION*  lastKc=&lastK[1][0];
 
 	// helper vectors
     PRECISION* h;
-    		h=AllocateVector_double(myrows);
+    		h=FUNCNAME(AllocateVector_, PRECISION)(myrows);
     PRECISION hh;
 
 	/*
@@ -525,12 +536,16 @@ test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double
 	MPI_Waitall(4, mpi_request, mpi_status);
 
 	// cleanup
-	DeallocateMatrix2D_double(lastK,2,CONTIGUOUS);
-	DeallocateVector_double(h);
-	DeallocateMatrix2D_double(Xlocal,myrows,CONTIGUOUS);
-	DeallocateMatrix2D_double(Klocal,myrows,CONTIGUOUS);
+	FUNCNAME(DeallocateMatrix2D_, PRECISION)(lastK,2,CONTIGUOUS);
+	FUNCNAME(DeallocateVector_, PRECISION)(h);
+	FUNCNAME(DeallocateMatrix2D_, PRECISION)(Xlocal,myrows,CONTIGUOUS);
+	FUNCNAME(DeallocateMatrix2D_, PRECISION)(Klocal,myrows,CONTIGUOUS);
 
 	result.total_end_time = time(NULL);
 
 	return result;
 }
+
+#undef PRECISION
+#undef MPI_PRECISION
+
