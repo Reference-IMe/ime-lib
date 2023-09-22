@@ -2,11 +2,13 @@
 #if TYPE == REAL_DOUBLE
 	#define PRECISION double
 	#define MPI_PRECISION MPI_DOUBLE
+	#define TYPE_SHORT D
 #endif
 
 #if TYPE == REAL_SINGLE
 	#define PRECISION float
 	#define MPI_PRECISION MPI_FLOAT
+	#define TYPE_SHORT S
 #endif
 
 /*
@@ -92,8 +94,8 @@ test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double
 	/*
 	 *  init inhibition table
 	 */
-	DGEZR(xx, n, m);											// init (zero) solution vectors
-	pDGEIT_C(A, Klocal, lastKr, lastKc, n, cprocs,		// uses compact table for initialization
+    FUNCNAME(TYPE_SHORT, GEZR)(xx, n, m);											// init (zero) solution vectors
+    FUNCNAME(FUNCNAME(p, TYPE_SHORT), GEIT_C)(A, Klocal, lastKr, lastKc, n, cprocs,		// uses compact table for initialization
 			comm, mpi_rank, comm_row,
 			mpi_rank_col_in_row, comm_col,
 			mpi_rank_row_in_col,
@@ -548,4 +550,4 @@ test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double
 
 #undef PRECISION
 #undef MPI_PRECISION
-
+#undef TYPE_SHORT
