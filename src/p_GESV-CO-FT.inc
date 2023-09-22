@@ -1,3 +1,16 @@
+
+#if TYPE == REAL_DOUBLE
+	#define PRECISION double
+	#define MPI_PRECISION MPI_DOUBLE
+#endif
+
+#if TYPE == REAL_SINGLE
+	#define PRECISION float
+	#define MPI_PRECISION MPI_FLOAT
+#endif
+
+// #pragma message "building " __FILE__ " for type '" TOSTR( PRECISION ) "'"
+
 /*
 test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 									test_input input,
@@ -884,3 +897,6 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 
 	return result;
 }
+
+#undef PRECISION
+#undef MPI_PRECISION

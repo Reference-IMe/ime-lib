@@ -12,6 +12,9 @@
 #define likely(x)	 __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
+#define STR(x) #x
+#define TOSTR(x) STR(x)
+
 #define CONCAT(a, b) a##b
 #define FUNCNAME(a, b) CONCAT(a, b)
 

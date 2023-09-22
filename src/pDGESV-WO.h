@@ -1,10 +1,11 @@
 #include <mpi.h>
 #include <omp.h>
 #include <time.h>
+
+#include "_GEZR.h"
 #include "helpers/macros.h"
 #include "helpers/vector.h"
 #include "testers/tester_structures.h"
-#include "DGEZR.h"
 #include "helpers/matrix_basic.h"
 #include "pDGEIT-C_.h"
 

@@ -1,10 +1,11 @@
 #include <mpi.h>
 #include <omp.h>
 #include <time.h>
+
+#include "_GEZR.h"
 #include "helpers/macros.h"
 #include "helpers/vector.h"
 #include "testers/tester_structures.h"
-#include "DGEZR.h"
 #include "helpers/matrix_basic.h"
 #include "pDGEIT-C_-FT.h"
 #include "pDGEUB-CO.h"
@@ -26,7 +27,7 @@ test_output pDGESV_CO_FT (	double** A, double** bb, double** xx,
 	 * m	number of right-hand-sides number of columns) in bb
 	 *
 	 */
-	#define PRECISION double
-	#define MPI_PRECISION MPI_DOUBLE
+	#define TYPE REAL_DOUBLE
 	#include "p_GESV-CO-FT.inc"
+	#undef TYPE
 }

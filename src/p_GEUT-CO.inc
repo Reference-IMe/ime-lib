@@ -1,3 +1,16 @@
+
+#if TYPE == REAL_DOUBLE
+	#define PRECISION double
+	#define MPI_PRECISION MPI_DOUBLE
+#endif
+
+#if TYPE == REAL_SINGLE
+	#define PRECISION float
+	#define MPI_PRECISION MPI_FLOAT
+#endif
+
+// #pragma message "building " __FILE__ " for type '" TOSTR( PRECISION ) "'"
+
 /*
 __attribute__((always_inline)) inline void pbDGEUT_CO (	int mpi_rank_row_in_col, int mpi_rank_col_in_row, int myrows, int mycols, int m,
 														int l, int l_owner, int l_1_owner, int l_row, int l_col,
@@ -107,3 +120,6 @@ __attribute__((always_inline)) inline void pbDGEUT_CO (	int mpi_rank_row_in_col,
 		}
 	}
 }
+
+#undef PRECISION
+#undef MPI_PRECISION
