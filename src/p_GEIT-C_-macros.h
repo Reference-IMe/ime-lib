@@ -1,12 +1,12 @@
 /*
- * pbDGEIT_CX.macros.h
+ * p_GEIT_C_-macros.h
  *
  *  Created on: Feb 14, 2021
  *      Author: marcello
  */
 
-#ifndef __PBDGEIT_CX_MACROS_H__
-#define __PBDGEIT_CX_MACROS_H__
+#ifndef __PB_GEIT_CX_MACROS_H__
+#define __PB_GEIT_CX_MACROS_H__
 
 // "hash" parameter has to be # (without quotes) when calling
 // (preprocessor directive are not allowed in #defines

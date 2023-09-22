@@ -4,14 +4,14 @@
 /*
  * 	distributed
  *	init (IT) inhibition table T
- *	from general (GE) system matrix A of doubles (D)
+ *	from general (GE) system matrix A of floats (D)
  *
  */
 
-#ifndef __pbDGEIT_CX_BF1_FT_H__
-#define __pbDGEIT_CX_BF1_FT_H__
+#ifndef __pbSGEIT_CX_BF1_FT_H__
+#define __pbSGEIT_CX_BF1_FT_H__
 
-void pDGEIT_C_FT (	double** A, double** Tlocal, double* lastKr, double* lastKc, double** w, int n, int cprocs,
+void pSGEIT_C_FT (	float** A, float** Tlocal, float* lastKr, float* lastKc, float** w, int n, int cprocs,
 					int sproccols,
 					MPI_Comm comm, int rank,
 					MPI_Comm comm_row, int rank_col_in_row,
@@ -20,7 +20,7 @@ void pDGEIT_C_FT (	double** A, double** Tlocal, double* lastKr, double* lastKc, 
 					MPI_Status* mpi_status,
 					MPI_Request* mpi_request)
 {
-	#define TYPE REAL_DOUBLE
+	#define TYPE REAL_SINGLE
 	#include "p_GEIT-C_-FT.inc"
 	#undef TYPE
 	}

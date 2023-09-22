@@ -1,6 +1,5 @@
 #include <mpi.h>
 #include "helpers/macros.h"
-#include "p_GEIT-C_.macros"
 
 /*
  * 	distributed

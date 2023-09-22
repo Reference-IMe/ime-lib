@@ -1,3 +1,5 @@
+#include "p_GEIT-C_-macros.h"
+
 #if TYPE == REAL_DOUBLE
 	#define PRECISION double
 	#define MPI_PRECISION MPI_DOUBLE
