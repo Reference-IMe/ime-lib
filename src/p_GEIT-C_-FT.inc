@@ -1,3 +1,4 @@
+#include "p_GEIT-C_-macros.h"
 
 #if TYPE == REAL_DOUBLE
 	#define PRECISION double
@@ -39,7 +40,7 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
 			//diag=malloc(mycols*sizeof(PRECISION*));
 
 	PRECISION** tmpTlocal;
-			 tmpTlocal=AllocateMatrix2D_double(myrows, mycols, CONTIGUOUS);
+			 tmpTlocal=FUNCNAME(AllocateMatrix2D_, PRECISION) (myrows, mycols, CONTIGUOUS);
 
 	MPI_Comm comm_row_checksum;
 
@@ -303,7 +304,7 @@ void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* last
     }
 
     // cleanup
-    DeallocateMatrix2D_double(tmpTlocal,myrows,CONTIGUOUS);
+    FUNCNAME(DeallocateMatrix2D_, PRECISION)(tmpTlocal,myrows,CONTIGUOUS);
 }
 
 #undef PRECISION

@@ -2,11 +2,13 @@
 #if TYPE == REAL_DOUBLE
 	#define PRECISION double
 	#define MPI_PRECISION MPI_DOUBLE
+	#define TYPE_SHORT D
 #endif
 
 #if TYPE == REAL_SINGLE
 	#define PRECISION float
 	#define MPI_PRECISION MPI_FLOAT
+	#define TYPE_SHORT S
 #endif
 
 // #pragma message "building " __FILE__ " for type '" TOSTR( PRECISION ) "'"
@@ -138,18 +140,18 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 	 * local storage for a part of the input matrix ( continuous columns, not interleaved )
 	 */
 	PRECISION** Tlocal;
-			 Tlocal = AllocateMatrix2D_double ( myrows, mycols, CONTIGUOUS );
+			 Tlocal = FUNCNAME(AllocateMatrix2D_, PRECISION) ( myrows, mycols, CONTIGUOUS );
 
 	// last row and col of K
 	PRECISION** lastK;
-			 lastK = AllocateMatrix2D_double ( 2, mycols, CONTIGUOUS );
+			 lastK = FUNCNAME(AllocateMatrix2D_, PRECISION) ( 2, mycols, CONTIGUOUS );
 	// aliases
 	PRECISION* lastKr = &lastK[0][0];
 	PRECISION* lastKc = &lastK[1][0];
 
 	// helper vectors
 	PRECISION* h;
-			h = AllocateVector_double ( myrows );
+			h = FUNCNAME(AllocateVector_, PRECISION) ( myrows );
 
 	/*
 	 *  matrix of weights
@@ -163,13 +165,13 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 	 *
 	 */
 	PRECISION** w;
-	w = AllocateMatrix2D_double ( spare_proc_rows, spare_proc_cols, CONTIGUOUS );
-	RandomMatrix2D_double ( w, spare_proc_rows, spare_proc_cols, 0 );
+	w = FUNCNAME(AllocateMatrix2D_, PRECISION) ( spare_proc_rows, spare_proc_cols, CONTIGUOUS );
+	FUNCNAME(RandomMatrix2D_, PRECISION) ( w, spare_proc_rows, spare_proc_cols, 0 );
 
 	/*
 	 * init inhibition table
 	 */
-	pDGEIT_C_FT ( A, Tlocal, lastKr, lastKc, w, n, calc_procs,
+	FUNCNAME(FUNCNAME(p, TYPE_SHORT), GEIT_C_FT) ( A, Tlocal, lastKr, lastKc, w, n, calc_procs,
 			spare_proc_cols,
 			comm_calc, mpi_rank,
 			comm_row, mpi_rank_col_in_row,
@@ -177,13 +179,13 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 			comm_row_calc,
 			mpi_status,
 			mpi_request
-			 );											// init inhibition table
+			 ); 	// init inhibition table
 
 
 	if ( mpi_rank_row_in_col == 0 && mpi_rank_col_in_row < calc_proc_cols ) 			// first row of calc procs
 	{
 		MPI_Ibcast ( &bb[0][0], n*nrhs, MPI_PRECISION, 0, comm_row_calc, mpi_req_bb );	// send all r.h.s
-		DGEZR ( xx, n, nrhs );															// init ( zero ) solution vectors
+		FUNCNAME(TYPE_SHORT, GEZR) ( xx, n, nrhs );															// init ( zero ) solution vectors
 	}
 
 		/*
@@ -250,7 +252,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 								if ( unlikely ( mpi_rank == failing_rank_list[fr] ) )
 								{
 									printf ( "## IMe-ft: rank %d faulty at level %d\n", mpi_rank, l );
-									SetMatrix2D_double ( -99, Tlocal, myrows, mycols );
+									FUNCNAME(SetMatrix2D_, PRECISION) ( -99, Tlocal, myrows, mycols );
 									faulted=1;
 								}
 							}
@@ -274,7 +276,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 							if (recovery_enabled)
 							{
 								PRECISION** tmpTlocal;
-										 tmpTlocal = AllocateMatrix2D_double ( myrows, mycols, CONTIGUOUS );
+										 tmpTlocal = FUNCNAME(AllocateMatrix2D_, PRECISION) ( myrows, mycols, CONTIGUOUS );
 
 								/*
 								 *  update sums
@@ -369,7 +371,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 								}
 								*/
 
-								DeallocateMatrix2D_double ( tmpTlocal, myrows, CONTIGUOUS );
+								FUNCNAME(DeallocateMatrix2D_, PRECISION) ( tmpTlocal, myrows, CONTIGUOUS );
 							}
 						}
 					}// failure management
@@ -389,7 +391,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 					 * update solutions
 					 */
 					MPI_Waitall ( 2, mpi_request, mpi_status );	// wait for lastKr and bb
-					pDGEUX_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+					FUNCNAME(FUNCNAME(p, TYPE_SHORT), GEUX_CO) ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 									l, l_owner, l_1_owner, l_row, l_col,
 									&myxxstart,
 									lastKr, xx, bb );
@@ -400,7 +402,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 					if ( mpi_rank_row_in_col == mpi_rank_col_in_row )
 					{
 						MPI_Waitall ( 3, mpi_req_row, mpi_st_row ); // wait for lastKr and lastKc
-						pDGEUH_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+						FUNCNAME(FUNCNAME(p, TYPE_SHORT), GEUH_CO) ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 										l, l_owner, l_1_owner, l_row, l_col,
 										last_row,
 										lastKr, lastKc, h );
@@ -410,7 +412,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 					/*
 					 * update auxiliary causes
 					 */
-					pDGEUB_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+					FUNCNAME(FUNCNAME(p, TYPE_SHORT), GEUB_CO) ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 									l, l_owner, l_1_owner, l_row, l_col,
 									l_1_col,
 									lastKr, bb );
@@ -420,7 +422,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 					 * update table
 					 */
 					MPI_Waitall ( 3, mpi_req_row, mpi_st_row ); // wait for lastKr, lastKc and h
-					pDGEUT_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+					FUNCNAME(FUNCNAME(p, TYPE_SHORT), GEUT_CO) ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 									l, l_owner, l_1_owner, l_row, l_col,
 									last_row,
 									lastKr, lastKc, h, Tlocal );
@@ -472,7 +474,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 								if ( unlikely ( mpi_rank == failing_rank_list[fr] ) )
 								{
 									printf ( "## IMe-ft: rank %d faulty at level %d\n", mpi_rank, l );
-									SetMatrix2D_double ( -99, Tlocal, myrows, mycols );
+									FUNCNAME(SetMatrix2D_, PRECISION) ( -99, Tlocal, myrows, mycols );
 									faulted=1;
 								}
 							}
@@ -496,7 +498,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 							if (recovery_enabled)
 							{
 								PRECISION** tmpTlocal;
-										 tmpTlocal = AllocateMatrix2D_double ( myrows, mycols, CONTIGUOUS );
+										 tmpTlocal = FUNCNAME(AllocateMatrix2D_, PRECISION) ( myrows, mycols, CONTIGUOUS );
 
 								/*
 								 *  update sums
@@ -590,7 +592,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 								}
 								*/
 
-								DeallocateMatrix2D_double ( tmpTlocal, myrows, CONTIGUOUS );
+								FUNCNAME(DeallocateMatrix2D_, PRECISION) ( tmpTlocal, myrows, CONTIGUOUS );
 							}
 						}
 					}// failure management
@@ -612,7 +614,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 					if ( mpi_rank_row_in_col == mpi_rank_col_in_row )
 					{
 						MPI_Waitall ( 3, mpi_req_row, mpi_st_row ); // wait for lastKr and lastKc
-						pDGEUH_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+						FUNCNAME(FUNCNAME(p, TYPE_SHORT), GEUH_CO) ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 										l, l_owner, l_1_owner, l_row, l_col,
 										last_row,
 										lastKr, lastKc, h );
@@ -623,7 +625,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 					 * update table
 					 */
 					MPI_Waitall ( 3, mpi_req_row, mpi_st_row ); // wait for lastKr, lastKc and h
-					pDGEUT_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+					FUNCNAME(FUNCNAME(p, TYPE_SHORT), GEUT_CO) ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 									l, l_owner, l_1_owner, l_row, l_col,
 									last_row,
 									lastKr, lastKc, h, Tlocal );
@@ -675,10 +677,10 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 						if (recovery_enabled)
 						{
 							PRECISION** tmpTlocal;
-									 tmpTlocal = AllocateMatrix2D_double ( myrows, mycols, CONTIGUOUS );
+									 tmpTlocal = FUNCNAME(AllocateMatrix2D_, PRECISION) ( myrows, mycols, CONTIGUOUS );
 
 							PRECISION** wfaulty;
-									 wfaulty = AllocateMatrix2D_double ( spare_proc_cols, spare_proc_cols, CONTIGUOUS );
+									 wfaulty = FUNCNAME(AllocateMatrix2D_, PRECISION) ( spare_proc_cols, spare_proc_cols, CONTIGUOUS );
 
 							// weights matrix of the faulty ones
 							// TODO: generalize column extraction for non consecutive ranks
@@ -694,9 +696,16 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 							int lwork = num_of_failing_ranks*num_of_failing_ranks;
 							PRECISION* work = malloc ( lwork*sizeof ( PRECISION ) );
 							int info;
-							dgetrf_ ( &num_of_failing_ranks, &num_of_failing_ranks, &wfaulty[0][0], &num_of_failing_ranks, ipiv, &info );
-							dgetri_ ( &num_of_failing_ranks, &wfaulty[0][0], &num_of_failing_ranks, ipiv, work, &lwork, &info );
 
+							#if TYPE == REAL_DOUBLE
+								dgetrf_ ( &num_of_failing_ranks, &num_of_failing_ranks, &wfaulty[0][0], &num_of_failing_ranks, ipiv, &info );
+								dgetri_ ( &num_of_failing_ranks, &wfaulty[0][0], &num_of_failing_ranks, ipiv, work, &lwork, &info );
+							#endif
+
+							#if TYPE == REAL_SINGLE
+								sgetrf_ ( &num_of_failing_ranks, &num_of_failing_ranks, &wfaulty[0][0], &num_of_failing_ranks, ipiv, &info );
+								sgetri_ ( &num_of_failing_ranks, &wfaulty[0][0], &num_of_failing_ranks, ipiv, work, &lwork, &info );
+							#endif
 							/*
 							 * check weights
 							 */
@@ -753,8 +762,8 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 
 							NULLFREE(work);
 							NULLFREE(ipiv);
-							DeallocateMatrix2D_double ( wfaulty, spare_proc_cols, CONTIGUOUS );
-							DeallocateMatrix2D_double ( tmpTlocal, myrows, CONTIGUOUS );
+							FUNCNAME(DeallocateMatrix2D_, PRECISION) ( wfaulty, spare_proc_cols, CONTIGUOUS );
+							FUNCNAME(DeallocateMatrix2D_, PRECISION) ( tmpTlocal, myrows, CONTIGUOUS );
 						}
 					}
 				}
@@ -779,7 +788,7 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 				 * update table
 				 */
 				MPI_Waitall ( 3, mpi_req_row, mpi_st_row ); // wait for lastKr, lastKc and h
-				pDGEUT_CO ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+				FUNCNAME(FUNCNAME(p, TYPE_SHORT), GEUT_CO) ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 								l, l_owner, l_1_owner, l_row, l_col,
 								last_row,
 								lastKr, lastKc, h, Tlocal );
@@ -888,10 +897,10 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 	MPI_Waitall ( 4, mpi_request, mpi_status );
 
 	// cleanup
-	DeallocateMatrix2D_double ( w, spare_proc_rows, CONTIGUOUS );
-	DeallocateMatrix2D_double ( lastK, 2, CONTIGUOUS );
-	DeallocateVector_double   ( h );
-	DeallocateMatrix2D_double ( Tlocal, myrows, CONTIGUOUS );
+	FUNCNAME(DeallocateMatrix2D_, PRECISION) ( w, spare_proc_rows, CONTIGUOUS );
+	FUNCNAME(DeallocateMatrix2D_, PRECISION) ( lastK, 2, CONTIGUOUS );
+	FUNCNAME(DeallocateVector_, PRECISION)   ( h );
+	FUNCNAME(DeallocateMatrix2D_, PRECISION) ( Tlocal, myrows, CONTIGUOUS );
 
 	result.total_end_time = time ( NULL );
 
@@ -900,3 +909,4 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 
 #undef PRECISION
 #undef MPI_PRECISION
+#undef TYPE_SHORT
