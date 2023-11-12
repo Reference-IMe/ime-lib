@@ -231,6 +231,10 @@ test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
 
 		mpi_row_with_faults = failing_rank_list[0] / calc_proc_cols;
 
+		if ( num_of_failing_ranks < 1 )
+		{
+			failing_level = -1;
+		}
 
 		// for a better optimization, treat calc procs differently from spare procs
 		if ( mpi_rank_col_in_row < calc_proc_cols )											// calc. procs
