@@ -21,7 +21,7 @@ void pSGEIT_C_FT (	float** A, float** Tlocal, float* lastKr, float* lastKc, floa
 					MPI_Request* mpi_request)
 {
 	#define TYPE REAL_SINGLE
-	#include "p_GEIT-C_-FT.inc"
+	#include "p_geit-c_-ft.inc"
 	#undef TYPE
 	}
 

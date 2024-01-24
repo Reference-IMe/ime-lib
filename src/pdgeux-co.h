@@ -8,6 +8,6 @@ __attribute__((always_inline)) inline void pDGEUX_CO (	int mpi_rank_row_in_col, 
 														int* myxxstart,
 														double* lastKr, double** xx, double** bb)
 {
-	#include "p_GEUX-CO.inc"
+	#include "p_geux-co.inc"
 }
 #endif

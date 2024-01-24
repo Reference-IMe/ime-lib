@@ -7,6 +7,6 @@ __attribute__((always_inline)) inline void pSGEUH_CO (	int mpi_rank_row_in_col, 
 														int last_row,
 														float* lastKr, float* lastKc, float* h)
 {
-	#include "p_GEUH-CO.inc"
+	#include "p_geuh-co.inc"
 }
 #endif

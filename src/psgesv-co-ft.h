@@ -2,18 +2,18 @@
 #include <omp.h>
 #include <time.h>
 
-#include "_GEZR.h"
 #include "helpers/macros.h"
 #include "helpers/vector.h"
-#include "testers/tester_structures.h"
+#include "../../../../testers/tester_structures.h"
+#include "_gezr.h"
 #include "helpers/matrix_basic.h"
-#include "pDGEIT-C_-FT.h"
-#include "pDGEUB-CO.h"
-#include "pDGEUH-CO.h"
-#include "pDGEUT-CO.h"
-#include "pDGEUX-CO.h"
+#include "psgeit-c_-ft.h"
+#include "psgeub-co.h"
+#include "psgeuh-co.h"
+#include "psgeut-co.h"
+#include "psgeux-co.h"
 
-test_output pDGESV_CO_FT (	double** A, double** bb, double** xx,
+test_output pSGESV_CO_FT (	float** A, float** bb, float** xx,
 							test_input input,
 							parallel_env env,
 							int num_of_failing_ranks,
@@ -27,7 +27,7 @@ test_output pDGESV_CO_FT (	double** A, double** bb, double** xx,
 	 * m	number of right-hand-sides number of columns) in bb
 	 *
 	 */
-	#define TYPE REAL_DOUBLE
-	#include "p_GESV-CO-FT.inc"
+	#define TYPE REAL_SINGLE
+	#include "p_gesv-co-ft.inc"
 	#undef TYPE
 }

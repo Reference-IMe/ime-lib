@@ -19,7 +19,7 @@ void pDGEIT_C (	double** A, double** Tlocal, double* lastKr, double* lastKc, int
 				MPI_Request* mpi_request)
 {
 	#define TYPE REAL_DOUBLE
-	#include "p_GEIT-C_.inc"
+	#include "p_geit-c_.inc"
 	#undef TYPE
 }
 

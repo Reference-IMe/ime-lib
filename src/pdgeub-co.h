@@ -9,6 +9,6 @@ __attribute__((always_inline)) inline void pDGEUB_CO (	int mpi_rank_row_in_col, 
 														int l_1_col,
 														double* lastKr, double** bb)
 {
-	#include "p_GEUB-CO.inc"
+	#include "p_geub-co.inc"
 }
 #endif

@@ -9,7 +9,7 @@ __attribute__((always_inline)) inline void pDGEUT_CO (	int mpi_rank_row_in_col, 
 														double* lastKr, double* lastKc, double* h, double** Tlocal)
 {
 	#define TYPE REAL_DOUBLE
-	#include "p_GEUT-CO.inc"
+	#include "p_geut-co.inc"
 	#undef TYPE
 }
 #endif

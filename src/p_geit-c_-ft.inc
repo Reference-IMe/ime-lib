@@ -1,4 +1,4 @@
-#include "p_GEIT-C_-macros.h"
+#include "p_geit-c_.macros.h"
 
 #if TYPE == REAL_DOUBLE
 	#define PRECISION double

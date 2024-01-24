@@ -9,7 +9,7 @@ __attribute__((always_inline)) inline void pSGEUT_CO (	int mpi_rank_row_in_col, 
 														float* lastKr, float* lastKc, float* h, float** Tlocal)
 {
 	#define TYPE REAL_SINGLE
-	#include "p_GEUT-CO.inc"
+	#include "p_geut-co.inc"
 	#undef TYPE
 }
 #endif

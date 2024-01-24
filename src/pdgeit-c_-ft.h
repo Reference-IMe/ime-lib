@@ -21,7 +21,7 @@ void pDGEIT_C_FT (	double** A, double** Tlocal, double* lastKr, double* lastKc, 
 					MPI_Request* mpi_request)
 {
 	#define TYPE REAL_DOUBLE
-	#include "p_GEIT-C_-FT.inc"
+	#include "p_geit-c_-ft.inc"
 	#undef TYPE
 	}
 

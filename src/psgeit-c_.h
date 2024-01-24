@@ -19,7 +19,7 @@ void pSGEIT_C (	float** A, float** Tlocal, float* lastKr, float* lastKc, int n, 
 				MPI_Request* mpi_request)
 {
 	#define TYPE REAL_SINGLE
-	#include "p_GEIT-C_.inc"
+	#include "p_geit-c_.inc"
 	#undef TYPE
 }
 
