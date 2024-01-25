@@ -11,22 +11,33 @@
 #endif
 
 // #pragma message "building " __FILE__ " for type '" TOSTR( PRECISION ) "'"
+
 /*
  * 	distributed
  *	init (IT) inhibition table T
  *	from general (GE) system matrix A of types PRECISION
+ *	with fault tolerance
  *
  */
 
 /*
-void pbDGEIT_CX_bf1_ft(double** A, double** Tlocal, double* lastKr, double* lastKc, double** w, int n, int cprocs,
-				int sproccols,
-				MPI_Comm comm, int rank,
-				MPI_Comm comm_row, int rank_col_in_row,
-				MPI_Comm comm_col, int rank_row_in_col,
-				MPI_Comm comm_row_calc,
-				MPI_Status* mpi_status,
-				MPI_Request* mpi_request)
+void p?geit_c?_ft (	PRECISION** A,
+					PRECISION** Tlocal,
+					PRECISION* lastKr,
+					PRECISION* lastKc,
+					PRECISION** w,
+					int n,
+					int cprocs,
+					int sproccols,
+					MPI_Comm comm,
+					int rank,
+					MPI_Comm comm_row,
+					int rank_col_in_row,
+					MPI_Comm comm_col,
+					int rank_row_in_col,
+					MPI_Comm comm_row_calc,
+					MPI_Status* mpi_status,
+					MPI_Request* mpi_request	)
 */
 {
 	int i,j,l;

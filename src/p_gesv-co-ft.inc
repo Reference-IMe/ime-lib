@@ -14,13 +14,15 @@
 // #pragma message "building " __FILE__ " for type '" TOSTR( PRECISION ) "'"
 
 /*
-test_output pbDGESV_CO_bf1_ftx ( double** A, double** bb, double** xx,
-									test_input input,
-									parallel_env env,
-									int num_of_failing_ranks,
-									int* failing_rank_list,
-									int failing_level,
-									int recovery_enabled )
+test_output p?gesv_co_ft (	PRECISION** A,
+							PRECISION** bb,
+							PRECISION** xx,
+							test_input input,
+							parallel_env env,
+							int num_of_failing_ranks,
+							int* failing_rank_list,
+							int failing_level,
+							int recovery_enabled		)
 */
 {
 	/*

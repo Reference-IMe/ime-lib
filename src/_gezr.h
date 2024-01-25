@@ -1,12 +1,14 @@
+#ifndef __GEZR_H__
+#define __GEZR_H__
+
 /*
  *	zero (ZR) general (GE) matrix mat of rows x cols
  *
  */
 
-#ifndef __GEZR_H__
-#define __GEZR_H__
-
-void DGEZR(double** mat, int rows, int cols)
+void dgezr (	double** mat,
+				int rows,
+				int cols	)
 {
     int i,j;
 
@@ -19,7 +21,9 @@ void DGEZR(double** mat, int rows, int cols)
 	}
 }
 
-void SGEZR(float** mat, int rows, int cols)
+void sgezr (	float** mat,
+				int rows,
+				int cols	)
 {
     int i,j;
 
@@ -31,4 +35,5 @@ void SGEZR(float** mat, int rows, int cols)
 		}
 	}
 }
+
 #endif

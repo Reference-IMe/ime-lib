@@ -1,3 +1,6 @@
+#ifndef __DGESV_WO_H__
+#define __DGESV_WO_H__
+
 #include "_gezr.h"
 #include "dgeit-w_.h"
 #include "helpers/matrix_basic.h"
@@ -10,20 +13,23 @@
  *
  */
 
-void DGESV_WO(int n, double** A, int m, double** bb, double** xx)
+void dgesv_wo (	int n,
+				double** A,
+				int m,
+				double** bb,
+				double** xx		)
 {
     int i,j,l,rhs;
     int d=2*n;
 
     double h;
     double hh;
-    //double denAii;
     double** T;
 
-    T=AllocateMatrix2D_double(n,d,CONTIGUOUS);	// allocate table
+    T=AllocateMatrix2D_double (n, d, CONTIGUOUS);	// allocate table
 
-    DGEIT_W(A, T, n);		// init inhibition table
-    DGEZR(xx, n, m);		// init solution vectors
+    dgeit_w (A, T, n);		// init inhibition table
+    dgezr (xx, n, m);		// init solution vectors
 
 	for (l=n-1; l>=0; l--)
 	{
@@ -50,5 +56,5 @@ void DGESV_WO(int n, double** A, int m, double** bb, double** xx)
 			}
 		}
 	}
-	DeallocateMatrix2D_double(T,n,CONTIGUOUS);
+	DeallocateMatrix2D_double (T, n, CONTIGUOUS);
 }

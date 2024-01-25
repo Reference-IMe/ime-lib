@@ -1,8 +1,18 @@
 /*
-__attribute__((always_inline)) inline void pbDGEUH_CO (	int mpi_rank_row_in_col, int mpi_rank_col_in_row, int myrows, int mycols, int m,
-														int l, int l_owner, int l_1_owner, int l_row, int l_col,
+__attribute__((always_inline)) inline void p?geuh_co (	int mpi_rank_row_in_col,
+														int mpi_rank_col_in_row,
+														int myrows,
+														int mycols,
+														int m,
+														int l,
+														int l_owner,
+														int l_1_owner,
+														int l_row,
+														int l_col,
 														int last_row,
-														double* lastKr, double* lastKc, double* h)
+														PRECISION* lastKr,
+														PRECISION* lastKc,
+														PRECISION* h					)
 */
 {
 	int i;

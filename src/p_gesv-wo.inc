@@ -12,7 +12,13 @@
 #endif
 
 /*
-test_output pbDGESV_WO_bf1(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+test_output p?gesv_wo (	int nb,
+						int n,
+						double** A,
+						int m,
+						double** bb,
+						double** xx,
+						MPI_Comm comm	)
 */
 {
 	/*

@@ -14,7 +14,13 @@
 // #pragma message "building " __FILE__ " for type '" TOSTR( PRECISION ) "'"
 
 /*
-test_output pbDGESV_CO_bf1(int nb, int n, double** A, int m, double** bb, double** xx, MPI_Comm comm)
+test_output p?gesv_co (	int nb,
+						int n,
+						PRECISION** A,
+						int m,
+						PRECISION** bb,
+						PRECISION** xx,
+						MPI_Comm comm	)
 */
 {
 	/*

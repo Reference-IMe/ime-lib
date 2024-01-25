@@ -1,8 +1,18 @@
 /*
-__attribute__((always_inline)) inline void pbDGEUX_CO (	int mpi_rank_row_in_col, int mpi_rank_col_in_row, int myrows, int mycols, int m,
-														int l, int l_owner, int l_1_owner, int l_row, int l_col,
+__attribute__((always_inline)) inline void p?geux_co (	int mpi_rank_row_in_col,
+														int mpi_rank_col_in_row,
+														int myrows,
+														int mycols,
+														int m,
+														int l,
+														int l_owner,
+														int l_1_owner,
+														int l_row,
+														int l_col,
 														int* myxxstart,
-														double* lastKr, double** xx, double** bb)
+														PRECISION* lastKr,
+														PRECISION** xx,
+														PRECISION** bb				)
 */
 {
 	int i,gi,rhs;						// general indexes

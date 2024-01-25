@@ -1,3 +1,6 @@
+#ifndef __PDGESV_CO_FT_H__
+#define __PDGESV_CO_FT_H__
+
 #include <mpi.h>
 #include <omp.h>
 #include <time.h>
@@ -13,13 +16,24 @@
 #include "pdgeut-co.h"
 #include "pdgeux-co.h"
 
-test_output pDGESV_CO_FT (	double** A, double** bb, double** xx,
+/*
+ *	parallel (P) solve (SV) system with general (GE) matrix A of doubles (D)
+ *	of order n and with m r.h.s in matrix bb and solutions in xx
+ *	with compact overwrite (CO) memory model
+ *	with optimized initialization
+ *	with fault tolerance (FT)
+ *
+ */
+
+test_output pdgesv_co_ft (	double** A,
+							double** bb,
+							double** xx,
 							test_input input,
 							parallel_env env,
 							int num_of_failing_ranks,
 							int* failing_rank_list,
 							int failing_level,
-							int recovery_enabled )
+							int recovery_enabled		)
 {
 	/*
 	 * nb	NOT USED: blocking factor: number of adjacent column (block width)

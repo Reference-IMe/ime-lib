@@ -19,14 +19,21 @@
  *
  */
 
-
 /*
-void pbDGEIT_CX_bf1(double** A, double** Tlocal, double* lastKr, double* lastKc, int n, int cprocs,
-				MPI_Comm comm, int rank,
-				MPI_Comm comm_row, int rank_col_in_row,
-				MPI_Comm comm_col, int rank_row_in_col,
-				MPI_Status* mpi_status,
-				MPI_Request* mpi_request)
+void p?geit_c? (	PRECISION** A,
+					PRECISION** Tlocal,
+					PRECISION* lastKr,
+					PRECISION* lastKc,
+					int n,
+					int cprocs,
+					MPI_Comm comm,
+					int rank,
+					MPI_Comm comm_row,
+					int rank_col_in_row,
+					MPI_Comm comm_col,
+					int rank_row_in_col,
+					MPI_Status* mpi_status,
+					MPI_Request* mpi_request	)
 */
 {
 	int i,j;
