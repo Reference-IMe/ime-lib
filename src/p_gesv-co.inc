@@ -2,13 +2,13 @@
 #if TYPE == REAL_DOUBLE
 	#define PRECISION double
 	#define MPI_PRECISION MPI_DOUBLE
-	#define TYPE_SHORT D
+	#define TYPE_SHORT d
 #endif
 
 #if TYPE == REAL_SINGLE
 	#define PRECISION float
 	#define MPI_PRECISION MPI_FLOAT
-	#define TYPE_SHORT S
+	#define TYPE_SHORT s
 #endif
 
 // #pragma message "building " __FILE__ " for type '" TOSTR( PRECISION ) "'"
@@ -100,8 +100,8 @@ test_output p?gesv_co (	int nb,
 	 *  init inhibition table
 	 */
 
-    FUNCNAME(TYPE_SHORT, GEZR)(xx, n, m);											// init (zero) solution vectors
-    FUNCNAME(FUNCNAME(p, TYPE_SHORT), GEIT_C)(A, Tlocal, lastKr, lastKc, n, cprocs,
+    FUNCNAME(TYPE_SHORT, gezr)(xx, n, m);											// init (zero) solution vectors
+    FUNCNAME(FUNCNAME(p, TYPE_SHORT), geit_c)(A, Tlocal, lastKr, lastKc, n, cprocs,
 			comm, mpi_rank, comm_row,
 			mpi_rank_col_in_row, comm_col,
 			mpi_rank_row_in_col,

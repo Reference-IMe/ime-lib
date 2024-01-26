@@ -2,13 +2,13 @@
 #if TYPE == REAL_DOUBLE
 	#define PRECISION double
 	#define MPI_PRECISION MPI_DOUBLE
-	#define TYPE_SHORT D
+	#define TYPE_SHORT d
 #endif
 
 #if TYPE == REAL_SINGLE
 	#define PRECISION float
 	#define MPI_PRECISION MPI_FLOAT
-	#define TYPE_SHORT S
+	#define TYPE_SHORT s
 #endif
 
 // #pragma message "building " __FILE__ " for type '" TOSTR( PRECISION ) "'"
@@ -173,7 +173,7 @@ test_output p?gesv_co_ft (	PRECISION** A,
 	/*
 	 * init inhibition table
 	 */
-	FUNCNAME(FUNCNAME(p, TYPE_SHORT), GEIT_C_FT) ( A, Tlocal, lastKr, lastKc, w, n, calc_procs,
+	FUNCNAME(FUNCNAME(p, TYPE_SHORT), geit_c_ft) ( A, Tlocal, lastKr, lastKc, w, n, calc_procs,
 			spare_proc_cols,
 			comm_calc, mpi_rank,
 			comm_row, mpi_rank_col_in_row,
@@ -187,7 +187,7 @@ test_output p?gesv_co_ft (	PRECISION** A,
 	if ( mpi_rank_row_in_col == 0 && mpi_rank_col_in_row < calc_proc_cols ) 			// first row of calc procs
 	{
 		MPI_Ibcast ( &bb[0][0], n*nrhs, MPI_PRECISION, 0, comm_row_calc, mpi_req_bb );	// send all r.h.s
-		FUNCNAME(TYPE_SHORT, GEZR) ( xx, n, nrhs );															// init ( zero ) solution vectors
+		FUNCNAME(TYPE_SHORT, gezr) ( xx, n, nrhs );															// init ( zero ) solution vectors
 	}
 
 		/*
@@ -397,7 +397,7 @@ test_output p?gesv_co_ft (	PRECISION** A,
 					 * update solutions
 					 */
 					MPI_Waitall ( 2, mpi_request, mpi_status );	// wait for lastKr and bb
-					FUNCNAME(FUNCNAME(p, TYPE_SHORT), GEUX_CO) ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+					FUNCNAME(FUNCNAME(p, TYPE_SHORT), geux_co) ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 									l, l_owner, l_1_owner, l_row, l_col,
 									&myxxstart,
 									lastKr, xx, bb );
@@ -408,7 +408,7 @@ test_output p?gesv_co_ft (	PRECISION** A,
 					if ( mpi_rank_row_in_col == mpi_rank_col_in_row )
 					{
 						MPI_Waitall ( 3, mpi_req_row, mpi_st_row ); // wait for lastKr and lastKc
-						FUNCNAME(FUNCNAME(p, TYPE_SHORT), GEUH_CO) ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+						FUNCNAME(FUNCNAME(p, TYPE_SHORT), geuh_co) ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 										l, l_owner, l_1_owner, l_row, l_col,
 										last_row,
 										lastKr, lastKc, h );
@@ -418,7 +418,7 @@ test_output p?gesv_co_ft (	PRECISION** A,
 					/*
 					 * update auxiliary causes
 					 */
-					FUNCNAME(FUNCNAME(p, TYPE_SHORT), GEUB_CO) ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+					FUNCNAME(FUNCNAME(p, TYPE_SHORT), geub_co) ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 									l, l_owner, l_1_owner, l_row, l_col,
 									l_1_col,
 									lastKr, bb );
@@ -428,7 +428,7 @@ test_output p?gesv_co_ft (	PRECISION** A,
 					 * update table
 					 */
 					MPI_Waitall ( 3, mpi_req_row, mpi_st_row ); // wait for lastKr, lastKc and h
-					FUNCNAME(FUNCNAME(p, TYPE_SHORT), GEUT_CO) ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+					FUNCNAME(FUNCNAME(p, TYPE_SHORT), geut_co) ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 									l, l_owner, l_1_owner, l_row, l_col,
 									last_row,
 									lastKr, lastKc, h, Tlocal );
@@ -620,7 +620,7 @@ test_output p?gesv_co_ft (	PRECISION** A,
 					if ( mpi_rank_row_in_col == mpi_rank_col_in_row )
 					{
 						MPI_Waitall ( 3, mpi_req_row, mpi_st_row ); // wait for lastKr and lastKc
-						FUNCNAME(FUNCNAME(p, TYPE_SHORT), GEUH_CO) ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+						FUNCNAME(FUNCNAME(p, TYPE_SHORT), geuh_co) ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 										l, l_owner, l_1_owner, l_row, l_col,
 										last_row,
 										lastKr, lastKc, h );
@@ -631,7 +631,7 @@ test_output p?gesv_co_ft (	PRECISION** A,
 					 * update table
 					 */
 					MPI_Waitall ( 3, mpi_req_row, mpi_st_row ); // wait for lastKr, lastKc and h
-					FUNCNAME(FUNCNAME(p, TYPE_SHORT), GEUT_CO) ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+					FUNCNAME(FUNCNAME(p, TYPE_SHORT), geut_co) ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 									l, l_owner, l_1_owner, l_row, l_col,
 									last_row,
 									lastKr, lastKc, h, Tlocal );
@@ -794,7 +794,7 @@ test_output p?gesv_co_ft (	PRECISION** A,
 				 * update table
 				 */
 				MPI_Waitall ( 3, mpi_req_row, mpi_st_row ); // wait for lastKr, lastKc and h
-				FUNCNAME(FUNCNAME(p, TYPE_SHORT), GEUT_CO) ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
+				FUNCNAME(FUNCNAME(p, TYPE_SHORT), geut_co) ( 	mpi_rank_row_in_col, mpi_rank_col_in_row, myrows, mycols, nrhs,
 								l, l_owner, l_1_owner, l_row, l_col,
 								last_row,
 								lastKr, lastKc, h, Tlocal );
