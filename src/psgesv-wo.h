@@ -7,7 +7,7 @@
 
 #include "helpers/macros.h"
 #include "helpers/vector.h"
-#include "../../../../testers/tester_structures.h"
+#include "helpers/types.h"
 #include "_gezr.h"
 #include "helpers/matrix_basic.h"
 #include "psgeit-c_.h"
@@ -20,7 +20,7 @@
  *
  */
 
-test_output psgesv_wo ( int nb,
+exit_status psgesv_wo ( int nb,
 						int n,
 						float** A,
 						int m,

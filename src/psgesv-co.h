@@ -21,7 +21,7 @@
  *
  */
 
-test_output psgesv_co (	int nb,
+exit_status psgesv_co (	int nb,
 						int n,
 						float** A,
 						int m,

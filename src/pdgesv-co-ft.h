@@ -25,7 +25,7 @@
  *
  */
 
-test_output pdgesv_co_ft (	double** A,
+exit_status pdgesv_co_ft (	double** A,
 							double** bb,
 							double** xx,
 							test_input input,

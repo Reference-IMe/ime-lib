@@ -25,7 +25,7 @@
  *
  */
 
-test_output psgesv_co_ft (	float** A,
+exit_status psgesv_co_ft (	float** A,
 							float** bb,
 							float** xx,
 							test_input input,

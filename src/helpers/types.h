@@ -5,10 +5,16 @@
  *      Author: marcello
  */
 
-#ifndef __TYPES_H__
-#define __TYPES_H__
+#ifndef __IME_TYPES_H__
+#define __IME_TYPES_H__
 
-typedef const unsigned int cui;
-typedef unsigned int ui;
+typedef struct exit_status
+{
+	time_t total_start_time;
+	time_t total_end_time;
+	time_t core_start_time;
+	time_t core_end_time;
+	char   exit_code;
+} exit_status;
 
 #endif

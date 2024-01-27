@@ -20,7 +20,7 @@
  *
  */
 
-test_output pdgesv_wo (	int nb,
+exit_status pdgesv_wo (	int nb,
 						int n,
 						double** A,
 						int m,

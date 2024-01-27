@@ -12,7 +12,7 @@
 #endif
 
 /*
-test_output p?gesv_wo (	int nb,
+exit_status p?gesv_wo (	int nb,
 						int n,
 						double** A,
 						int m,
@@ -28,7 +28,7 @@ test_output p?gesv_wo (	int nb,
 	 *
 	 */
 
-	test_output result;
+	exit_status result;
 
 	result.total_start_time = time(NULL);
 

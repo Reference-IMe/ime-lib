@@ -14,7 +14,7 @@
 // #pragma message "building " __FILE__ " for type '" TOSTR( PRECISION ) "'"
 
 /*
-test_output p?gesv_co (	int nb,
+exit_status p?gesv_co (	int nb,
 						int n,
 						PRECISION** A,
 						int m,
@@ -30,7 +30,7 @@ test_output p?gesv_co (	int nb,
 	 *
 	 */
 
-	test_output result;
+	exit_status result;
 
 	result.total_start_time = time(NULL);
 

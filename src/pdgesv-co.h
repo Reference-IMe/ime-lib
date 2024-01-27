@@ -21,7 +21,7 @@
  *
  */
 
-test_output pdgesv_co (	int nb,
+exit_status pdgesv_co (	int nb,
 						int n,
 						double** A,
 						int m,
