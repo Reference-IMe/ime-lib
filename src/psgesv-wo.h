@@ -5,11 +5,11 @@
 #include <omp.h>
 #include <time.h>
 
-#include "helpers/macros.h"
-#include "helpers/vector.h"
-#include "helpers/types.h"
 #include "_gezr.h"
+#include "helpers/macros.h"
 #include "helpers/matrix_basic.h"
+#include "helpers/types.h"
+#include "helpers/vector_basic.h"
 #include "psgeit-c_.h"
 
 /*

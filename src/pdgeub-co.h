@@ -2,6 +2,7 @@
 #define __PDGEUB_CO_H__
 
 #include <mpi.h>
+
 #include "helpers/macros.h"
 
 __attribute__((always_inline)) inline void pdgeub_co (	int mpi_rank_row_in_col,

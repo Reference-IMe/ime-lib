@@ -1,9 +1,3 @@
-/*
- * vector.h
- *
- *  Created on: Aug 27, 2015
- *      Author: marcello
- */
 
 PRECISIONTYPE* FUNCNAME(AllocateVector_, PRECISIONTYPE) (int rows)
 {

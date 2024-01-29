@@ -2,6 +2,7 @@
 #define __PDGEIT_C_H__
 
 #include <mpi.h>
+
 #include "helpers/macros.h"
 
 /*

@@ -2,6 +2,7 @@
 #define __PSGEIT_C_H__
 
 #include <mpi.h>
+
 #include "helpers/macros.h"
 
 /*

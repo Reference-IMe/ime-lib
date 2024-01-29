@@ -1,16 +1,16 @@
 /*
- * vector.h
+ * vector_basic.h
  *
  *  Created on: Aug 27, 2015
  *      Author: marcello
  */
 
+#ifndef __VECTOR_BASIC_H__
+#define __VECTOR_BASIC_H__
+
 #include <stdio.h>
 #include <stdlib.h>
 #include "macros.h"
-
-#ifndef __VECTOR_H__
-#define __VECTOR_H__
 
 #define PRECISIONTYPE double
 #include "vector_generic_precision.inc"
