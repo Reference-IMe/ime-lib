@@ -5,16 +5,17 @@
 #include <omp.h>
 #include <time.h>
 
-#include "../../../../testers/tester_structures.h"
-#include "_gezr.h"
+#include "helpers/types.h"
 #include "helpers/macros.h"
 #include "helpers/matrix_basic.h"
 #include "helpers/vector_basic.h"
+#include "_gezr.h"
 #include "psgeit-c_-ft.h"
 #include "psgeub-co.h"
 #include "psgeuh-co.h"
 #include "psgeut-co.h"
 #include "psgeux-co.h"
+
 
 /*
  *	parallel (P) solve (SV) system with general (GE) matrix A of floats (S)

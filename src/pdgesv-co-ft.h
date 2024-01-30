@@ -5,11 +5,11 @@
 #include <omp.h>
 #include <time.h>
 
-#include "../../../../testers/tester_structures.h"
-#include "_gezr.h"
+#include "helpers/types.h"
 #include "helpers/macros.h"
 #include "helpers/matrix_basic.h"
 #include "helpers/vector_basic.h"
+#include "_gezr.h"
 #include "pdgeit-c_-ft.h"
 #include "pdgeub-co.h"
 #include "pdgeuh-co.h"

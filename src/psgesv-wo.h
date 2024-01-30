@@ -5,12 +5,13 @@
 #include <omp.h>
 #include <time.h>
 
-#include "_gezr.h"
+#include "helpers/types.h"
 #include "helpers/macros.h"
 #include "helpers/matrix_basic.h"
-#include "helpers/types.h"
 #include "helpers/vector_basic.h"
+#include "_gezr.h"
 #include "psgeit-c_.h"
+
 
 /*
  *	parallel (P) solve (SV) system with general (GE) matrix A of floats (S)
